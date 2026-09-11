@@ -44,12 +44,14 @@ const SHEET_HEADERS = {
   //   recurringId 若這筆是由「固定項目」自動產生的，記錄來源範本 id，用來判斷某個月是否已經加過
   // 注意：新增欄位一律加在陣列「最後面」，不要插在中間，
   // 這樣舊表格用 ensureHeaders_ 自動補欄位時，既有資料的欄位對應才不會跑掉。
-  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId'],
+  // subcategory  子類別（選填，配合前端「主類別/子類別」管理，新增於陣列最後面）
+  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId', 'subcategory'],
   // 固定項目範本（房租、健保費、訂閱費用...）：
   //   type       'expense' | 'income'
   //   dayOfMonth 每月幾號要繳（1-28，僅供提醒顯示用，不會自動觸發）
   //   active     是否啟用，停用的範本不會出現在「本月待加入」清單
-  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt']
+  //   subcategory 子類別（選填，新增於陣列最後面）
+  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory']
 };
 
 function getSheet_(key) {
@@ -268,6 +270,7 @@ function runRecurringTemplates_(month, ids) {
       date: date,
       type: tpl.type || 'expense',
       category: tpl.category || tpl.name,
+      subcategory: tpl.subcategory || '',
       amount: Number(tpl.amount) || 0,
       accountId: tpl.accountId || '',
       note: tpl.note || tpl.name,
