@@ -27,7 +27,8 @@ const SHEET_NAMES = {
   accounts: 'Accounts',
   liabilities: 'Liabilities',
   interest: 'InterestRecords',
-  transactions: 'Transactions'
+  transactions: 'Transactions',
+  recurring: 'RecurringTemplates'
 };
 
 const SHEET_HEADERS = {
@@ -40,9 +41,15 @@ const SHEET_HEADERS = {
   //   payer      共同帳本用：'me'（我）| 'partner'（對方）先付款
   //   splitMode  共同帳本用：'personal'（個人，不分攤）| 'split'（平分50/50）| 'advance'（全額代墊算對方的）
   //   settled    共同帳本用：是否已經結算轉帳完成
+  //   recurringId 若這筆是由「固定項目」自動產生的，記錄來源範本 id，用來判斷某個月是否已經加過
   // 注意：新增欄位一律加在陣列「最後面」，不要插在中間，
   // 這樣舊表格用 ensureHeaders_ 自動補欄位時，既有資料的欄位對應才不會跑掉。
-  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled']
+  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId'],
+  // 固定項目範本（房租、健保費、訂閱費用...）：
+  //   type       'expense' | 'income'
+  //   dayOfMonth 每月幾號要繳（1-28，僅供提醒顯示用，不會自動觸發）
+  //   active     是否啟用，停用的範本不會出現在「本月待加入」清單
+  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt']
 };
 
 function getSheet_(key) {
@@ -232,6 +239,49 @@ function settleLedger_(ids, settlementData) {
   return { updated: updated, settlement: settlement };
 }
 
+// ---------- 固定項目（房租/健保費/訂閱費用...）自動加入本月記帳 ----------
+// 每次呼叫都是「檢查 + 補上」：對每個啟用中的範本，檢查該月份的 Transactions
+// 是否已經有 recurringId = 範本id 的紀錄，沒有的話才新增一筆（同時走
+// addTransactionTx_ 複合流程，連帳戶餘額一起更新）。這樣不管使用者是自己按
+// 按鈕、或用時間驅動觸發器自動呼叫，都不會重複新增。
+function pendingRecurringTemplates_(month) {
+  const templates = readAll_('recurring').filter(t => String(t.active) === 'true' || t.active === true);
+  const monthTx = readAll_('transactions').filter(t => (t.date || '').slice(0, 7) === month);
+  const doneIds = {};
+  monthTx.forEach(t => { if (t.recurringId) doneIds[String(t.recurringId)] = true; });
+  return templates.filter(t => !doneIds[String(t.id)]);
+}
+
+function runRecurringTemplates_(month, ids) {
+  if (!month) throw new Error('缺少月份參數');
+  const pending = pendingRecurringTemplates_(month);
+  const idSet = ids && ids.length ? {} : null;
+  if (idSet) ids.forEach(id => (idSet[String(id)] = true));
+  const toRun = idSet ? pending.filter(t => idSet[String(t.id)]) : pending;
+
+  const created = [];
+  const accountsTouched = [];
+  toRun.forEach(tpl => {
+    const day = Math.min(Math.max(parseInt(tpl.dayOfMonth, 10) || 1, 1), 28);
+    const date = month + '-' + String(day).padStart(2, '0');
+    const result = addTransactionTx_({
+      date: date,
+      type: tpl.type || 'expense',
+      category: tpl.category || tpl.name,
+      amount: Number(tpl.amount) || 0,
+      accountId: tpl.accountId || '',
+      note: tpl.note || tpl.name,
+      payer: 'me',
+      splitMode: 'personal',
+      settled: false,
+      recurringId: tpl.id
+    });
+    created.push(result.transaction);
+    if (result.account) accountsTouched.push(result.account);
+  });
+  return { created: created, accounts: accountsTouched, skipped: pending.length - toRun.length };
+}
+
 function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
@@ -252,7 +302,8 @@ function doGet(e) {
           accounts: readAll_('accounts'),
           liabilities: readAll_('liabilities'),
           interest: readAll_('interest'),
-          transactions: readAll_('transactions')
+          transactions: readAll_('transactions'),
+          recurring: readAll_('recurring')
         }
       });
     }
@@ -279,6 +330,7 @@ function doPost(e) {
     if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });
     if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
     if (action === 'settleLedger') return jsonOut_({ ok: true, data: settleLedger_((body.data && body.data.ids) || [], body.data && body.data.settlement) });
+    if (action === 'runRecurringTemplates') return jsonOut_({ ok: true, data: runRecurringTemplates_(body.data && body.data.month, (body.data && body.data.ids) || null) });
 
     const sheetKey = body.sheet;
     if (!SHEET_NAMES[sheetKey]) return jsonOut_({ ok: false, error: '未知的資料表' });

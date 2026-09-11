@@ -283,7 +283,7 @@
   .bottom-nav .tab.active{ background:transparent; color:var(--gold-soft); opacity:1; }
 
   /* ---- Segmented sub-nav (記帳: 紀錄/統計、統計: 月/年) ---- */
-  .segmented{ display:flex; gap:6px; margin-bottom:14px; }
+  .segmented{ display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
   .segmented button{ flex:1; min-height:38px; padding:8px 10px; font-size:13px; border-radius:999px; }
   .segmented button.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600; }
 
@@ -339,6 +339,32 @@
   .ledger-hero .hint2{font-size:12px; color:#cdd7ef; margin-top:8px; line-height:1.6;}
 
   .import-steps{ display:flex; flex-direction:column; gap:14px; }
+
+  /* ---- 固定項目提醒 banner ---- */
+  .recurring-banner{
+    background:var(--gold-soft); border:1px solid var(--gold); color:#5a4413;
+    border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:16px;
+    font-size:13px; line-height:1.6; display:flex; flex-direction:column; gap:8px;
+  }
+  .recurring-banner b{ font-family:'Roboto Slab', serif; }
+  .recurring-pending-item{ display:flex; align-items:center; gap:8px; font-size:13px; }
+  .recurring-pending-item label{ display:flex; align-items:center; gap:6px; flex:1; }
+  .recurring-pending-item input[type="checkbox"]{ min-height:auto; width:16px; height:16px; padding:0; }
+
+  /* ---- 類別管理 ---- */
+  .category-manage{ display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--paper-line);
+    border-radius:999px; padding:6px 8px 6px 13px; font-size:12.5px; color:var(--ink);
+  }
+  .chip button{
+    min-height:auto; width:20px; height:20px; padding:0; border:none; border-radius:50%;
+    background:var(--red-bg); color:var(--red); font-size:13px; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .cat-add-row{ display:flex; gap:8px; }
+  .cat-add-row input{ flex:1; }
+  .cat-add-row button{ flex:none; }
   .map-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
   .map-grid label{ display:flex; flex-direction:column; font-size:12px; color:var(--ink-soft); gap:5px; font-weight:500; }
   .csv-preview-wrap{ overflow-x:auto; border:1px solid var(--paper-line); border-radius:var(--radius-sm); }
@@ -483,12 +509,15 @@
       <div class="segmented" id="trSubNav">
         <button type="button" class="active" data-sub="records">紀錄</button>
         <button type="button" data-sub="ledger">共同帳本</button>
+        <button type="button" data-sub="recurring">固定項目</button>
         <button type="button" data-sub="stats">統計分析</button>
         <button type="button" data-sub="import">匯入CSV</button>
+        <button type="button" data-sub="categories">類別設定</button>
       </div>
 
       <!-- 記帳：紀錄 -->
       <div id="trSub-records">
+        <div id="recurringBanner"></div>
         <details class="entry-wrap" id="trDetails">
           <summary><span class="plus">＋</span>新增 / 編輯記帳</summary>
           <form class="entry" id="trForm">
@@ -563,6 +592,54 @@
         <div class="item-list" id="ledgerList"></div>
       </div>
 
+      <!-- 記帳：固定項目 -->
+      <div id="trSub-recurring" style="display:none;">
+        <p class="hint">設定每個月都要繳的房租、健保費、訂閱費用等固定項目。之後每個月只要打開「記帳」，就會看到本月尚未加入的固定項目，一鍵就能加進記帳紀錄（不會重複加入）。</p>
+        <details class="entry-wrap" id="recDetails">
+          <summary><span class="plus">＋</span>新增 / 編輯固定項目</summary>
+          <form class="entry" id="recForm">
+            <input type="hidden" id="recId">
+            <div class="full type-toggle">
+              <button type="button" class="expense active" data-rectype="expense">支出</button>
+              <button type="button" class="income" data-rectype="income">收入</button>
+            </div>
+            <input type="hidden" id="recType" value="expense">
+            <label>名稱
+              <input type="text" id="recName" placeholder="例如：房租、健保費、Netflix 訂閱" required>
+            </label>
+            <label>品項 / 類別
+              <select id="recCategory"></select>
+            </label>
+            <label>金額
+              <input type="number" id="recAmount" step="0.01" min="0" required>
+            </label>
+            <label>帳戶（選填，加入時會自動增減餘額）
+              <select id="recAccount">
+                <option value="">不指定</option>
+              </select>
+            </label>
+            <label>每月幾號繳（僅供提醒顯示）
+              <input type="number" id="recDay" min="1" max="28" placeholder="例如 5">
+            </label>
+            <label class="full">備註
+              <input type="text" id="recNote" placeholder="選填">
+            </label>
+            <div class="full checkbox-row">
+              <input type="checkbox" id="recActive" checked>
+              <label for="recActive" style="margin:0;">啟用（會出現在每月待加入清單）</label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary">儲存固定項目</button>
+              <button type="button" id="recCancel">清空表單</button>
+            </div>
+          </form>
+        </details>
+        <h2 style="font-size:15px;">本月待加入</h2>
+        <div id="recurringPendingList"></div>
+        <h2 style="font-size:15px;">所有固定項目</h2>
+        <div class="item-list" id="recurringList"></div>
+      </div>
+
       <!-- 記帳：統計分析 -->
       <div id="trSub-stats" style="display:none;">
         <div class="segmented" id="statsModeNav">
@@ -627,6 +704,27 @@
               <button type="button" id="csvCancelBtn">取消</button>
             </div>
             <div class="status" id="csvStatus" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 記帳：類別設定 -->
+      <div id="trSub-categories" style="display:none;">
+        <p class="hint">新增或刪除記帳的「品項 / 類別」選項，支出跟收入的類別是分開管理的。刪除類別不會影響已經記過的舊資料，只是選單裡不會再出現。這些設定只存在這台裝置的瀏覽器裡。</p>
+        <div class="category-manage">
+          <h2 style="font-size:15px;">支出類別</h2>
+          <div class="chip-row" id="catChipsExpense"></div>
+          <div class="cat-add-row">
+            <input type="text" id="catAddExpense" placeholder="新增支出類別，例如：寵物">
+            <button type="button" class="primary" id="catAddExpenseBtn">新增</button>
+          </div>
+        </div>
+        <div class="category-manage">
+          <h2 style="font-size:15px;">收入類別</h2>
+          <div class="chip-row" id="catChipsIncome"></div>
+          <div class="cat-add-row">
+            <input type="text" id="catAddIncome" placeholder="新增收入類別，例如：租金收入">
+            <button type="button" class="primary" id="catAddIncomeBtn">新增</button>
           </div>
         </div>
       </div>
@@ -718,12 +816,44 @@ const cfg = {
   token: localStorage.getItem('fin_token') || ''
 };
 
-let state = { accounts: [], liabilities: [], interest: [], transactions: [] };
+let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [] };
 
-// 記帳品項（依收入/支出分開）
-const CATEGORIES = {
+// 記帳品項（依收入/支出分開）。使用者可以在「類別設定」子分頁新增/刪除，
+// 存放在 localStorage，跟預設類別合併使用（不會影響已經記過的舊資料）。
+const DEFAULT_CATEGORIES = {
   expense: ['餐飲','交通','購物','娛樂','醫療','教育','居家','保險','旅遊','其他'],
   income: ['薪資','獎金','投資收益','兼職','其他']
+};
+function loadCustomCategories(type){
+  try{
+    const raw = localStorage.getItem('fin_categories_' + type);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveCustomCategories(type, arr){
+  localStorage.setItem('fin_categories_' + type, JSON.stringify(arr));
+}
+function getCategories(type){
+  const custom = loadCustomCategories(type).filter(c => !DEFAULT_CATEGORIES[type].includes(c));
+  return [...DEFAULT_CATEGORIES[type], ...custom];
+}
+function addCategory(type, name){
+  name = String(name || '').trim();
+  if(!name) return false;
+  const custom = loadCustomCategories(type);
+  if(getCategories(type).includes(name)) return false;
+  custom.push(name);
+  saveCustomCategories(type, custom);
+  return true;
+}
+function removeCategory(type, name){
+  const custom = loadCustomCategories(type).filter(c => c !== name);
+  saveCustomCategories(type, custom);
+}
+// 為了相容既有程式碼，保留 CATEGORIES 這個名字（動態取值，不是固定物件）
+const CATEGORIES = {
+  get expense(){ return getCategories('expense'); },
+  get income(){ return getCategories('income'); }
 };
 
 // ---------- API ----------
@@ -759,6 +889,7 @@ async function loadAll(){
       state.liabilities = all.liabilities;
       state.interest = all.interest;
       state.transactions = all.transactions;
+      state.recurring = all.recurring || [];
       renderAll();
     }, '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
@@ -793,7 +924,9 @@ function renderAll(){
   renderLiabilities();
   renderTransactions();
   renderLedger();
+  renderRecurring();
   renderStats();
+  renderCategories();
 }
 
 function renderDashboard(){
@@ -822,7 +955,8 @@ function renderDashboard(){
   if(!state.accounts.length){
     list.innerHTML = `<div class="empty">尚無帳戶，請到「帳戶」新增。</div>`;
   } else {
-    list.innerHTML = state.accounts.map(a => `
+    const sortedAccounts = [...state.accounts].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
+    list.innerHTML = sortedAccounts.map(a => `
       <div class="item-card">
         <div class="item-top">
           <div><div class="item-name">${a.name}</div><span class="badge">${a.type}</span></div>
@@ -837,7 +971,8 @@ function renderAccounts(){
   if(!state.accounts.length){
     list.innerHTML = `<div class="empty">尚無帳戶。</div>`;
   } else {
-    list.innerHTML = state.accounts.map(a => {
+    const sortedAccounts = [...state.accounts].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
+    list.innerHTML = sortedAccounts.map(a => {
       const rate = a.interestRate ? Number(a.interestRate) : 0;
       const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
       return `<div class="item-card">
@@ -869,6 +1004,12 @@ function renderAccounts(){
   trSel.innerHTML = `<option value="">不指定</option>` +
     state.accounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
   trSel.value = keepVal;
+
+  const recSel = $('#recAccount');
+  const keepRecVal = recSel.value;
+  recSel.innerHTML = `<option value="">不指定</option>` +
+    state.accounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+  recSel.value = keepRecVal;
 }
 
 function renderInterest(){
@@ -1068,8 +1209,8 @@ function renderStats(){
   }
 }
 
-// 記帳頁：紀錄 / 共同帳本 / 統計分析 / 匯入 子分頁切換
-const TR_SUBS = ['records','ledger','stats','import'];
+// 記帳頁：紀錄 / 共同帳本 / 固定項目 / 統計分析 / 匯入 / 類別設定 子分頁切換
+const TR_SUBS = ['records','ledger','recurring','stats','import','categories'];
 $('#trSubNav').addEventListener('click', e => {
   const btn = e.target.closest('button[data-sub]');
   if(!btn) return;
@@ -1077,7 +1218,13 @@ $('#trSubNav').addEventListener('click', e => {
   TR_SUBS.forEach(sub => { $('#trSub-' + sub).style.display = (sub === btn.dataset.sub) ? '' : 'none'; });
   if(btn.dataset.sub === 'stats') renderStats();
   if(btn.dataset.sub === 'ledger') renderLedger();
+  if(btn.dataset.sub === 'recurring') renderRecurring();
+  if(btn.dataset.sub === 'categories') renderCategories();
 });
+window.goToRecurringTab = function(){
+  const btn = $('#trSubNav button[data-sub="recurring"]');
+  if(btn) btn.click();
+};
 
 // 統計：月/年 模式切換
 $('#statsModeNav').addEventListener('click', e => {
@@ -1324,6 +1471,212 @@ window.deleteTransaction = async id => {
   }catch(err){ alert('刪除失敗：' + err.message); }
 };
 
+// ---------- 固定項目（房租/健保費/訂閱費用...每月自動填寫） ----------
+function currentMonthStr(){
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+function populateRecCategories(type, selected){
+  const sel = $('#recCategory');
+  sel.innerHTML = CATEGORIES[type].map(c => `<option value="${c}">${c}</option>`).join('');
+  if(selected && CATEGORIES[type].includes(selected)) sel.value = selected;
+}
+function setRecType(type, selectedCategory){
+  $('#recType').value = type;
+  $$('#recForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.rectype === type));
+  populateRecCategories(type, selectedCategory);
+}
+$$('#recForm .type-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => setRecType(btn.dataset.rectype));
+});
+(function initRecDefaults(){ populateRecCategories('expense'); })();
+
+// 找出目前這個月，啟用中但還沒被加入記帳的固定項目
+function pendingRecurringForMonth(month){
+  const doneIds = new Set(
+    state.transactions.filter(t => (t.date||'').slice(0,7) === month && t.recurringId).map(t => String(t.recurringId))
+  );
+  return state.recurring.filter(t => String(t.active) !== 'false' && !doneIds.has(String(t.id)));
+}
+
+function renderRecurringBanner(){
+  const el = $('#recurringBanner');
+  const month = currentMonthStr();
+  const pending = pendingRecurringForMonth(month);
+  if(!pending.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="recurring-banner">
+    <div><b>本月（${month}）有 ${pending.length} 筆固定項目還沒加入記帳：</b>${pending.map(t=>t.name).join('、')}</div>
+    <div class="form-actions">
+      <button type="button" class="primary small" onclick="goToRecurringTab()">前往「固定項目」加入</button>
+    </div>
+  </div>`;
+}
+
+function renderRecurringPending(){
+  const wrap = $('#recurringPendingList');
+  const month = currentMonthStr();
+  const pending = pendingRecurringForMonth(month);
+  if(!state.recurring.length){
+    wrap.innerHTML = `<div class="empty">尚未設定任何固定項目。</div>`;
+    return;
+  }
+  if(!pending.length){
+    wrap.innerHTML = `<div class="empty">本月（${month}）的固定項目都已經加入記帳了。</div>`;
+    return;
+  }
+  wrap.innerHTML = pending.map(t => `
+    <div class="recurring-pending-item">
+      <label><input type="checkbox" class="recPendingCheck" value="${t.id}" checked>
+        ${t.name}（${t.category || ''}）$${fmt(t.amount)}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}
+      </label>
+    </div>`).join('') +
+    `<div class="form-actions" style="margin-top:10px;">
+      <button type="button" class="primary" id="recRunSelectedBtn">把勾選的加入本月記帳</button>
+    </div>`;
+  $('#recRunSelectedBtn').addEventListener('click', runSelectedRecurring);
+}
+
+async function runSelectedRecurring(){
+  const ids = $$('.recPendingCheck:checked').map(cb => cb.value);
+  if(!ids.length){ alert('請先勾選要加入的固定項目。'); return; }
+  const month = currentMonthStr();
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('runRecurringTemplates','transactions',{ month, ids });
+      (result.created || []).forEach(tx => upsertLocal('transactions', tx));
+      (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      renderAll();
+    }, '加入記帳中…');
+  }catch(err){ alert('加入失敗：' + err.message); }
+}
+
+function renderRecurring(){
+  renderRecurringBanner();
+  renderRecurringPending();
+  const list = $('#recurringList');
+  if(!state.recurring.length){
+    list.innerHTML = `<div class="empty">尚未設定固定項目，點上方「＋新增／編輯固定項目」開始設定。</div>`;
+    return;
+  }
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  list.innerHTML = state.recurring.map(t => {
+    const active = String(t.active) !== 'false';
+    const isExpense = t.type !== 'income';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${t.name}</div>
+          <span class="badge ${active ? 'paid' : 'unpaid'}">${active ? '啟用中' : '已停用'}</span>
+          <div class="item-note">${t.category || ''}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}${t.accountId ? ' · ' + (byId[t.accountId] || '（帳戶已刪除）') : ''}${t.note ? ' · ' + t.note : ''}</div>
+        </div>
+        <div class="item-value ${isExpense ? 'expense' : 'income'}">${isExpense ? '-' : '+'}$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="small" onclick="editRecurring('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteRecurring('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+$('#recForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = {
+    id: $('#recId').value || undefined,
+    name: $('#recName').value,
+    type: $('#recType').value,
+    category: $('#recCategory').value,
+    amount: parseFloat($('#recAmount').value) || 0,
+    accountId: $('#recAccount').value,
+    dayOfMonth: $('#recDay').value ? parseInt($('#recDay').value, 10) : '',
+    note: $('#recNote').value,
+    active: $('#recActive').checked
+  };
+  try{
+    await runBusy(async () => {
+      let saved;
+      if(data.id) saved = await apiPost('update','recurring',data);
+      else { delete data.id; saved = await apiPost('add','recurring',data); }
+      upsertLocal('recurring', saved);
+      resetRecurringForm();
+      $('#recDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#recCancel').addEventListener('click', resetRecurringForm);
+function resetRecurringForm(){
+  $('#recId').value=''; $('#recName').value=''; $('#recAmount').value='';
+  $('#recAccount').value=''; $('#recDay').value=''; $('#recNote').value='';
+  $('#recActive').checked = true;
+  setRecType('expense');
+}
+window.editRecurring = id => {
+  const t = state.recurring.find(x => x.id === id);
+  if(!t) return;
+  $('#recId').value = t.id;
+  $('#recName').value = t.name;
+  setRecType(t.type === 'income' ? 'income' : 'expense', t.category);
+  $('#recAmount').value = t.amount;
+  $('#recAccount').value = t.accountId || '';
+  $('#recDay').value = t.dayOfMonth || '';
+  $('#recNote').value = t.note || '';
+  $('#recActive').checked = String(t.active) !== 'false';
+  $('#recDetails').open = true;
+  $('#recDetails').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteRecurring = async id => {
+  if(!confirm('確定刪除這個固定項目？（已經加入過的記帳紀錄不會被刪除）')) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','recurring',{id});
+      removeLocal('recurring', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- 類別設定（新增/刪除記帳的品項類別） ----------
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function renderCategories(){
+  ['expense','income'].forEach(type => {
+    const chipWrap = $(type === 'expense' ? '#catChipsExpense' : '#catChipsIncome');
+    chipWrap.innerHTML = getCategories(type).map(c =>
+      `<span class="chip">${escapeHtml(c)}<button type="button" class="catRemoveBtn" data-cat-type="${type}" data-cat-name="${escapeHtml(c)}" title="刪除">×</button></span>`
+    ).join('');
+  });
+}
+function removeCategoryUI(type, name){
+  if(!confirm(`確定刪除「${name}」這個類別嗎？（不會影響已經記過的舊資料）`)) return;
+  removeCategory(type, name);
+  renderCategories();
+  populateTrCategories($('#trType').value);
+  populateRecCategories($('#recType').value);
+}
+$('#catChipsExpense').addEventListener('click', e => {
+  const btn = e.target.closest('.catRemoveBtn');
+  if(btn) removeCategoryUI(btn.dataset.catType, btn.dataset.catName);
+});
+$('#catChipsIncome').addEventListener('click', e => {
+  const btn = e.target.closest('.catRemoveBtn');
+  if(btn) removeCategoryUI(btn.dataset.catType, btn.dataset.catName);
+});
+function handleAddCategory(type, inputSel){
+  const input = $(inputSel);
+  const ok = addCategory(type, input.value);
+  if(!ok){ alert('請輸入尚未存在的類別名稱。'); return; }
+  input.value = '';
+  renderCategories();
+  populateTrCategories($('#trType').value);
+  populateRecCategories($('#recType').value);
+}
+$('#catAddExpenseBtn').addEventListener('click', () => handleAddCategory('expense', '#catAddExpense'));
+$('#catAddIncomeBtn').addEventListener('click', () => handleAddCategory('income', '#catAddIncome'));
+$('#catAddExpense').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddCategory('expense', '#catAddExpense'); } });
+$('#catAddIncome').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddCategory('income', '#catAddIncome'); } });
+
 // ---------- 共同帳本（誰先付、誰欠誰） ----------
 // 每筆記帳只要 splitMode !== 'personal' 就算共同帳本項目：
 //   split   平分：payer 那一方墊了一半屬於對方的錢 → 對方欠 payer 一半金額
@@ -1515,6 +1868,7 @@ $('#csvImportBtn').addEventListener('click', async () => {
       state.liabilities = all.liabilities;
       state.interest = all.interest;
       state.transactions = all.transactions;
+      state.recurring = all.recurring || [];
       renderAll();
     }, '匯入中…（資料量大可能需要一點時間）');
     $('#csvStatus').textContent = `匯入完成，共新增 ${mapped.length} 筆記帳。`;
