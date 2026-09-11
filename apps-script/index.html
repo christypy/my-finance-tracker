@@ -1,0 +1,3002 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#101d36">
+<title>我的存摺 · 個人存款管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#182a4a;
+    --ink-soft:#33456b;
+    --paper:#f8f3e4;
+    --paper-line:#e2d6b3;
+    --card:#ffffff;
+    --cover:#101d36;
+    --cover-soft:#16244a;
+    --gold:#b4903b;
+    --gold-soft:#e4d5a4;
+    --red:#9c3b34;
+    --red-bg:#f6e2df;
+    --green:#3e6b52;
+    --green-bg:#e1ece4;
+    --radius:14px;
+    --radius-sm:9px;
+    --nav-h:64px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:var(--cover);
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(180,144,59,.14), transparent 42%),
+      radial-gradient(circle at 88% 92%, rgba(180,144,59,.10), transparent 42%);
+    font-family:'Noto Sans TC', sans-serif;
+    color:var(--ink);
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:760px;
+    margin:0 auto;
+    padding:20px 14px calc(var(--nav-h) + 28px);
+  }
+  .book-title{
+    text-align:center;
+    color:var(--gold-soft);
+    font-family:'Roboto Slab', serif;
+    letter-spacing:.06em;
+    font-size:13px;
+    margin:4px 0 16px;
+    font-weight:400;
+  }
+
+  /* ---- Desktop top tabs ---- */
+  .tabs{
+    display:flex;
+    gap:4px;
+    margin-bottom:14px;
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family:'Roboto Slab', serif;
+    font-size:14px;
+    padding:10px 16px;
+    background:var(--cover-soft);
+    color:var(--gold-soft);
+    border:none;
+    border-radius:999px;
+    cursor:pointer;
+    white-space:nowrap;
+    opacity:.65;
+    transition:opacity .15s, background .15s;
+  }
+  .tab svg{width:16px;height:16px;flex:none;}
+  .tab.active{
+    background:var(--gold);
+    color:#241c08;
+    opacity:1;
+  }
+
+  .page{
+    background:var(--paper);
+    padding:20px 18px 26px;
+    border-radius:var(--radius);
+    min-height:360px;
+    box-shadow: 0 20px 44px rgba(0,0,0,.35);
+  }
+  .view{display:none;}
+  .view.active{display:block; animation:fadein .22s ease;}
+  @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  h2{
+    font-family:'Roboto Slab', serif;
+    font-size:19px;
+    margin:0 0 14px;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+
+  /* ---- Dashboard summary ---- */
+  .net-hero{
+    background:linear-gradient(135deg, var(--ink), #223667);
+    color:var(--paper);
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:16px;
+  }
+  .net-hero .label{font-size:12px; color:var(--gold-soft); letter-spacing:.03em;}
+  .net-hero .value{font-family:'Roboto Slab', serif; font-size:32px; margin-top:4px;}
+  .net-hero .sub{display:flex; gap:18px; margin-top:14px; font-size:12px; color:#cdd7ef;}
+  .net-hero .sub b{color:#fff; font-family:'Roboto Slab', serif; font-size:14px; display:block; margin-top:2px;}
+
+  .summary-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(120px,1fr));
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .summary-card{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    padding:12px 13px;
+    border-radius:var(--radius-sm);
+    box-shadow:0 2px 6px rgba(24,42,74,.05);
+  }
+  .summary-card .label{font-size:11.5px;color:var(--ink-soft);}
+  .summary-card .value{
+    font-family:'Roboto Slab', serif;
+    font-size:18px;
+    margin-top:3px;
+  }
+  .summary-card.clickable{ cursor:pointer; transition:box-shadow .15s, border-color .15s; }
+  .summary-card.clickable.active{ border-color:var(--gold); box-shadow:0 0 0 2px rgba(180,144,59,.28); }
+  .dash-list-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .dash-list-head h2{ margin:0; }
+  .dash-list-reset{ background:none; border:none; color:var(--gold); font-size:12.5px; padding:4px 2px; min-height:auto; text-decoration:underline; }
+
+  /* ---- Cards list (accounts/liabilities/interest) ---- */
+  .item-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:20px; }
+  .item-card{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-sm);
+    padding:13px 14px;
+    box-shadow:0 2px 6px rgba(24,42,74,.05);
+  }
+  .item-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .item-name{ font-weight:600; font-size:15px; }
+  .item-note{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .item-value{ font-family:'Roboto Slab', serif; font-size:17px; white-space:nowrap; }
+  .item-meta{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px; font-size:12px; color:var(--ink-soft); }
+  .item-meta span b{ color:var(--ink); font-family:'Roboto Slab', serif; }
+  .item-actions{ display:flex; gap:8px; margin-top:10px; }
+
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    padding:3px 9px;
+    border-radius:999px;
+    background:var(--gold-soft);
+    color:#5a4413;
+    font-weight:500;
+  }
+  .badge.paid{background:var(--green-bg); color:var(--green);}
+  .badge.unpaid{background:var(--red-bg); color:var(--red);}
+
+  button, .btn{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:14px;
+    padding:10px 16px;
+    border:1px solid var(--ink);
+    background:transparent;
+    color:var(--ink);
+    border-radius:999px;
+    cursor:pointer;
+    min-height:40px;
+    -webkit-appearance:none;
+  }
+  button.primary{background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600;}
+  button.danger{border-color:var(--red); color:var(--red);}
+  button.small{padding:6px 13px; font-size:12.5px; min-height:32px;}
+  button:active{transform:scale(.97);}
+
+  details.entry-wrap{ margin-bottom:18px; }
+  details.entry-wrap > summary{
+    list-style:none;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:'Roboto Slab', serif;
+    font-size:14px;
+    padding:11px 16px;
+    background:var(--ink);
+    color:var(--paper);
+    border-radius:999px;
+    font-weight:600;
+    min-height:44px;
+  }
+  details.entry-wrap > summary::-webkit-details-marker{display:none;}
+  details.entry-wrap > summary .plus{font-size:17px; line-height:1;}
+  details.entry-wrap[open] > summary .plus{transform:rotate(45deg); display:inline-block;}
+
+  form.entry{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    padding:16px;
+    border-radius:var(--radius-sm);
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:12px;
+    margin-top:10px;
+  }
+  form.entry label{
+    display:flex;
+    flex-direction:column;
+    font-size:12px;
+    color:var(--ink-soft);
+    gap:5px;
+    font-weight:500;
+  }
+  input, select, textarea{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:16px; /* avoid iOS auto-zoom */
+    padding:10px 11px;
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-sm);
+    background:#fffdf8;
+    color:var(--ink);
+    min-height:42px;
+  }
+  input:focus, select:focus, textarea:focus{
+    outline:none;
+    border-color:var(--gold);
+    box-shadow:0 0 0 3px rgba(180,144,59,.18);
+  }
+  form.entry .full{grid-column:1/-1;}
+  .form-actions{grid-column:1/-1; display:flex; gap:8px; flex-wrap:wrap;}
+  .hint{font-size:12.5px; color:var(--ink-soft); margin:0 0 16px; line-height:1.6;}
+  .empty{color:var(--ink-soft); font-size:13px; padding:18px 0; text-align:center;}
+  .settings-block{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    padding:16px;
+    border-radius:var(--radius-sm);
+    display:grid;
+    gap:14px;
+  }
+  .status{font-size:13px; margin-top:4px; padding:8px 10px; border-radius:var(--radius-sm);}
+  .status.ok{color:var(--green); background:var(--green-bg);}
+  .status.err{color:var(--red); background:var(--red-bg);}
+
+  /* ---- Bottom nav (mobile) ---- */
+  .bottom-nav{
+    display:none;
+    position:fixed;
+    left:0; right:0; bottom:0;
+    background:var(--cover);
+    border-top:1px solid rgba(228,213,164,.15);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    z-index:50;
+  }
+  .bottom-nav .tabs{
+    margin:0;
+    overflow:visible;
+    justify-content:space-around;
+  }
+  .bottom-nav .tab{
+    flex-direction:column;
+    background:transparent;
+    border-radius:10px;
+    padding:6px 8px;
+    gap:2px;
+    font-size:10.5px;
+    opacity:.55;
+    min-width:56px;
+  }
+  .bottom-nav .tab svg{width:20px;height:20px;}
+  .bottom-nav .tab.active{ background:transparent; color:var(--gold-soft); opacity:1; }
+
+  /* ---- Segmented sub-nav (記帳: 紀錄/統計、統計: 月/年) ---- */
+  .segmented{ display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .segmented button{ flex:1; min-height:38px; padding:8px 10px; font-size:13px; border-radius:999px; }
+  .segmented button.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600; }
+
+  .period-row{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .period-row input, .period-row select{ min-height:38px; padding:7px 10px; width:auto; }
+  .filter-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; font-size:13px; color:var(--ink-soft); }
+  .filter-row label{ display:flex; align-items:center; gap:6px; }
+  .filter-row input[type="checkbox"]{ min-height:auto; width:16px; height:16px; padding:0; }
+
+  .type-toggle{ display:flex; gap:8px; }
+  .type-toggle button{ flex:1; }
+  .type-toggle button.active.income{ background:var(--green); color:#fff; border-color:var(--green); }
+  .type-toggle button.active.expense{ background:var(--red); color:#fff; border-color:var(--red); }
+
+  .item-value.income{ color:var(--green); }
+  .item-value.expense{ color:var(--red); }
+
+  .stat-section{ margin-bottom:22px; }
+  .stat-section h3{ font-family:'Roboto Slab', serif; font-size:15px; margin:0 0 10px; color:var(--ink); }
+  .stat-bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px; }
+  .stat-bar-label{ width:64px; flex:none; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stat-bar-track{ flex:1; height:16px; background:var(--paper-line); border-radius:999px; overflow:hidden; }
+  .stat-bar-fill{ height:100%; border-radius:999px; background:var(--gold); }
+  .stat-bar-fill.income{ background:var(--green); }
+  .stat-bar-fill.expense{ background:var(--red); }
+  .stat-bar-value{ width:104px; flex:none; text-align:right; font-family:'Roboto Slab', serif; font-size:12px; white-space:nowrap; }
+
+  /* ---- Busy / processing state (避免連續點擊造成重複紀錄) ---- */
+  body.busy button, body.busy .tab{ pointer-events:none; opacity:.55; }
+  #busyToast{
+    position:fixed; left:50%; bottom:calc(var(--nav-h) + 14px); transform:translateX(-50%) translateY(8px);
+    background:var(--ink); color:var(--paper); font-size:13px; padding:9px 18px; border-radius:999px;
+    box-shadow:0 8px 20px rgba(0,0,0,.3); z-index:100; opacity:0; pointer-events:none; transition:opacity .15s, transform .15s;
+    display:flex; align-items:center; gap:8px;
+  }
+  #busyToast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  #busyToast .spinner{
+    width:13px; height:13px; border-radius:50%; border:2px solid rgba(248,243,228,.35); border-top-color:var(--paper);
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  @media (min-width:681px){ #busyToast{ bottom:24px; } }
+
+  .checkbox-row{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .checkbox-row input[type="checkbox"]{ min-height:auto; width:17px; height:17px; padding:0; }
+
+  .ledger-hero{
+    background:linear-gradient(135deg, var(--ink), #223667);
+    color:var(--paper); border-radius:var(--radius); padding:20px; margin-bottom:16px;
+  }
+  .ledger-hero .label{font-size:12px; color:var(--gold-soft); letter-spacing:.03em;}
+  .ledger-hero .value{font-family:'Roboto Slab', serif; font-size:26px; margin-top:4px;}
+  .ledger-hero .hint2{font-size:12px; color:#cdd7ef; margin-top:8px; line-height:1.6;}
+
+  .import-steps{ display:flex; flex-direction:column; gap:14px; }
+
+  /* ---- 固定項目提醒 banner ---- */
+  .recurring-banner{
+    background:var(--gold-soft); border:1px solid var(--gold); color:#5a4413;
+    border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:16px;
+    font-size:13px; line-height:1.6; display:flex; flex-direction:column; gap:8px;
+  }
+  .recurring-banner b{ font-family:'Roboto Slab', serif; }
+  .recurring-pending-item{ display:flex; align-items:center; gap:8px; font-size:13px; }
+  .recurring-pending-item label{ display:flex; align-items:center; gap:6px; flex:1; }
+  .recurring-pending-item input[type="checkbox"]{ min-height:auto; width:16px; height:16px; padding:0; }
+
+  /* ---- 類別管理 ---- */
+  .category-manage{ display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--paper-line);
+    border-radius:999px; padding:6px 8px 6px 13px; font-size:12.5px; color:var(--ink);
+  }
+  .chip button{
+    min-height:auto; width:20px; height:20px; padding:0; border:none; border-radius:50%;
+    background:var(--red-bg); color:var(--red); font-size:13px; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .cat-add-row{ display:flex; gap:8px; }
+  .cat-add-row input{ flex:1; }
+  .cat-add-row button{ flex:none; }
+  .map-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .map-grid label{ display:flex; flex-direction:column; font-size:12px; color:var(--ink-soft); gap:5px; font-weight:500; }
+  .csv-preview-wrap{ overflow-x:auto; border:1px solid var(--paper-line); border-radius:var(--radius-sm); }
+  table.csv-preview{ border-collapse:collapse; width:100%; font-size:12px; white-space:nowrap; }
+  table.csv-preview th, table.csv-preview td{ padding:7px 10px; border-bottom:1px solid var(--paper-line); text-align:left; }
+  table.csv-preview th{ background:var(--card); color:var(--ink-soft); font-weight:600; }
+
+  /* ---- 記帳表單：金額優先的大輸入區 ---- */
+  .amount-hero{
+    grid-column:1/-1;
+    background:linear-gradient(135deg, var(--ink), #223667);
+    border-radius:var(--radius-sm);
+    padding:16px 16px 14px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .amount-hero .amount-label{ font-size:12px; color:var(--gold-soft); letter-spacing:.03em; }
+  .amount-hero .amount-input-row{ display:flex; align-items:baseline; gap:6px; }
+  .amount-hero .amount-input-row span{ font-family:'Roboto Slab', serif; font-size:26px; color:var(--paper); }
+  .amount-hero input#trAmount, .amount-hero input#recAmount{
+    background:transparent; border:none; box-shadow:none; color:var(--paper);
+    font-family:'Roboto Slab', serif; font-size:36px; padding:2px 0; min-height:auto; flex:1; width:100%;
+  }
+  .amount-hero input#trAmount:focus, .amount-hero input#recAmount:focus{ box-shadow:none; }
+  .quick-amount-row{ display:flex; gap:6px; flex-wrap:wrap; }
+  .quick-amount-row button{
+    min-height:32px; padding:5px 12px; font-size:12.5px; border-radius:999px;
+    border-color:rgba(228,213,164,.5); color:var(--gold-soft); background:rgba(255,255,255,.06);
+  }
+  .quick-amount-row button.clear{ color:#f0c7c2; border-color:rgba(240,199,194,.5); }
+
+  /* ---- 主類別 / 子類別 選單 ---- */
+  .cat-select-row{ grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+
+  /* ---- 統計：期間左右切換 ---- */
+  .period-nav{ display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .period-nav-btn{
+    min-height:38px; width:38px; padding:0; flex:none; font-size:16px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .period-nav select, .period-nav input{ min-height:38px; padding:7px 10px; width:auto; }
+
+  /* ---- 統計：比較卡片 ---- */
+  .compare-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:18px; }
+  .compare-card{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm);
+    padding:11px 13px; box-shadow:0 2px 6px rgba(24,42,74,.05);
+  }
+  .compare-card .label{ font-size:11.5px; color:var(--ink-soft); }
+  .compare-card .value{ font-family:'Roboto Slab', serif; font-size:16px; margin-top:3px; }
+  .compare-card .value.up{ color:var(--red); }
+  .compare-card .value.down{ color:var(--green); }
+  .compare-card .value.flat{ color:var(--ink-soft); }
+
+  /* ---- 統計：圓餅圖 ---- */
+  .pie-wrap{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin-bottom:6px; }
+  .pie-wrap svg{ width:150px; height:150px; flex:none; }
+  .pie-legend{ flex:1; min-width:160px; display:flex; flex-direction:column; gap:7px; }
+  .pie-legend-row{ display:flex; align-items:center; gap:8px; font-size:12.5px; }
+  .pie-legend-dot{ width:10px; height:10px; border-radius:50%; flex:none; }
+  .pie-legend-label{ flex:1; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pie-legend-value{ font-family:'Roboto Slab', serif; font-size:12px; color:var(--ink-soft); white-space:nowrap; }
+
+  /* ---- 類別管理（主類別 + 子類別） ---- */
+  .main-cat-block{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm);
+    padding:12px 13px; display:flex; flex-direction:column; gap:9px;
+  }
+  .main-cat-head{ display:flex; align-items:center; gap:8px; }
+  .main-cat-head .main-cat-name{ font-weight:600; font-size:14.5px; flex:1; }
+  .main-cat-head button{ min-height:28px; padding:4px 11px; font-size:12px; }
+  .sub-cat-row{ display:flex; flex-wrap:wrap; gap:6px; padding-left:2px; }
+  .sub-chip{
+    display:flex; align-items:center; gap:5px; background:var(--paper); border:1px solid var(--paper-line);
+    border-radius:999px; padding:4px 6px 4px 10px; font-size:11.5px; color:var(--ink-soft);
+  }
+  .sub-chip button{
+    min-height:auto; width:16px; height:16px; padding:0; border:none; border-radius:50%;
+    background:var(--red-bg); color:var(--red); font-size:11px; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .sub-add-row{ display:flex; gap:6px; padding-left:2px; }
+  .sub-add-row input{ flex:1; min-height:34px; padding:6px 10px; font-size:13px; }
+  .sub-add-row button{ flex:none; min-height:34px; padding:5px 12px; font-size:12.5px; }
+
+  /* ---- 類別月份分佈 ---- */
+  .dist-select-row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .dist-select-row select{ min-height:38px; padding:7px 10px; }
+  .dist-month-block{ margin-bottom:14px; }
+  .dist-month-title{ font-size:12.5px; color:var(--ink-soft); margin-bottom:6px; font-family:'Roboto Slab', serif; }
+
+  /* ---- 統計分析：預算追蹤 ---- */
+  .stat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .budget-add-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .budget-add-row select{ flex:1 1 140px; min-height:38px; padding:7px 10px; }
+  .budget-add-row input{ flex:1 1 120px; min-height:38px; padding:7px 10px; }
+  .budget-add-row button{ flex:none; min-height:38px; }
+  .budget-row{ background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:10px; }
+  .budget-row-top{ display:flex; justify-content:space-between; gap:8px; font-size:13px; margin-bottom:6px; }
+  .budget-row-top span:first-child{ font-weight:600; color:var(--ink); }
+  .budget-row-top span:last-child{ font-family:'Roboto Slab', serif; color:var(--ink-soft); white-space:nowrap; }
+  .budget-track{ height:14px; background:var(--paper-line); border-radius:999px; overflow:hidden; }
+  .budget-fill{ height:100%; border-radius:999px; background:var(--green); transition:width .2s; }
+  .budget-fill.warn{ background:var(--gold); }
+  .budget-fill.danger{ background:var(--red); }
+  .budget-row-bottom{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; font-size:11.5px; color:var(--ink-soft); }
+  .budget-row-bottom .ok{ color:var(--green); font-weight:600; }
+  .budget-row-bottom .warn{ color:var(--gold); font-weight:600; }
+  .budget-row-bottom .danger{ color:var(--red); font-weight:600; }
+  .budget-row-bottom button{ margin-left:auto; }
+
+  /* ---- 統計分析：支出排行（圓餅 + 排行榜） ---- */
+  .category-rank-wrap{ display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+  .pie-wrap-mini{ flex:none; width:130px; }
+  .pie-wrap-mini svg{ width:130px; height:130px; display:block; }
+  .rank-list{ flex:1 1 220px; min-width:200px; }
+  .rank-row{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; }
+  .rank-row:last-child{ margin-bottom:0; }
+  .rank-num{ width:18px; flex:none; font-family:'Roboto Slab', serif; font-size:13px; color:var(--gold); font-weight:700; padding-top:1px; }
+  .rank-bar-wrap{ flex:1; min-width:0; }
+  .rank-top{ display:flex; justify-content:space-between; gap:8px; font-size:12.5px; margin-bottom:4px; }
+  .rank-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
+  .rank-label{ color:var(--ink); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rank-value{ font-family:'Roboto Slab', serif; font-size:11.5px; color:var(--ink-soft); white-space:nowrap; flex:none; }
+  .rank-meta{ display:flex; justify-content:space-between; gap:8px; font-size:11px; color:var(--ink-soft); margin-top:4px; }
+  .rank-mover{ font-family:'Roboto Slab', serif; white-space:nowrap; }
+  .rank-mover.up{ color:var(--red); }
+  .rank-mover.down{ color:var(--green); }
+  .rank-mover.flat{ color:var(--ink-soft); }
+
+  /* ---- 統計分析：每日消費節奏 ---- */
+  .day-chart{ display:flex; align-items:flex-end; gap:2px; height:84px; background:var(--paper); border-radius:var(--radius-sm); padding:8px 6px 0; margin-bottom:8px; }
+  .day-bar{ flex:1; height:100%; display:flex; align-items:flex-end; min-width:3px; }
+  .day-bar-fill{ width:100%; background:var(--red); border-radius:2px 2px 0 0; min-height:0; }
+  .day-bar.weekend .day-bar-fill{ background:var(--gold); }
+  .day-bar.today{ outline:1.5px solid var(--ink); outline-offset:1px; border-radius:2px; }
+  .day-highlights{ display:flex; flex-direction:column; gap:6px; font-size:12.5px; }
+  .day-highlight-row{ display:flex; justify-content:space-between; color:var(--ink-soft); }
+  .day-highlight-row b{ color:var(--ink); font-family:'Roboto Slab', serif; font-weight:600; }
+
+  @media (max-width:680px){
+    .wrap{ padding:14px 10px calc(var(--nav-h) + 22px); }
+    .tabs.top-tabs{ display:none; }
+    .bottom-nav{ display:block; }
+    .page{ padding:16px 13px 22px; }
+    .net-hero .value{ font-size:27px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="book-title">我 的 存 摺 · 個 人 存 款 管 理</p>
+
+  <div class="tabs top-tabs" id="tabsTop"></div>
+
+  <div class="page">
+
+    <!-- 總覽 -->
+    <div class="view active" id="view-dashboard">
+      <div class="net-hero">
+        <div class="label">淨資產</div>
+        <div class="value" id="netHeroValue">$0</div>
+        <div class="sub">
+          <div>資產<b id="netHeroAssets">$0</b></div>
+          <div>未繳負債<b id="netHeroDebt">$0</b></div>
+        </div>
+      </div>
+      <div class="summary-grid" id="summaryGrid"></div>
+      <div class="dash-list-head">
+        <h2 id="dashboardAccountsTitle">帳戶一覽</h2>
+        <button type="button" class="dash-list-reset" id="dashboardFilterReset" style="display:none;">顯示全部</button>
+      </div>
+      <div class="item-list" id="dashboardAccountsList"></div>
+    </div>
+
+    <!-- 帳戶 -->
+    <div class="view" id="view-accounts">
+      <h2>帳戶</h2>
+      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。銀行帳戶可填年利率，用來估算利息（實際入帳請到「利息紀錄」新增）。</p>
+      <details class="entry-wrap" id="accountDetails">
+        <summary><span class="plus">＋</span>新增 / 編輯帳戶</summary>
+        <form class="entry" id="accountForm">
+          <input type="hidden" id="accId">
+          <label>名稱
+            <input type="text" id="accName" placeholder="例如：中信活儲" required>
+          </label>
+          <label>類型
+            <select id="accType">
+              <option value="現金">現金</option>
+              <option value="銀行">銀行</option>
+              <option value="行動支付">行動支付</option>
+              <option value="悠遊卡">悠遊卡</option>
+              <option value="投資">投資</option>
+            </select>
+          </label>
+          <label>目前餘額
+            <input type="number" id="accBalance" step="0.01" required>
+          </label>
+          <label>年利率 %（銀行適用，選填）
+            <input type="number" id="accRate" step="0.001" placeholder="例如 1.8">
+          </label>
+          <label class="full">備註
+            <input type="text" id="accNote" placeholder="選填">
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">儲存帳戶</button>
+            <button type="button" id="accCancel">清空表單</button>
+          </div>
+        </form>
+      </details>
+      <div class="item-list" id="accountsList"></div>
+    </div>
+
+    <!-- 利息紀錄 -->
+    <div class="view" id="view-interest">
+      <h2>利息紀錄</h2>
+      <p class="hint">銀行真的撥利息給你時，在這裡新增一筆，系統會自動把金額加進該帳戶的餘額。</p>
+      <details class="entry-wrap" open id="interestDetails">
+        <summary><span class="plus">＋</span>新增利息入帳</summary>
+        <form class="entry" id="interestForm">
+          <label>帳戶
+            <select id="intAccount" required></select>
+          </label>
+          <label>入帳日期
+            <input type="date" id="intDate" required>
+          </label>
+          <label>金額
+            <input type="number" id="intAmount" step="0.01" required>
+          </label>
+          <label class="full">備註
+            <input type="text" id="intNote" placeholder="例如：3月活儲利息">
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">新增並加入餘額</button>
+          </div>
+        </form>
+      </details>
+      <div class="item-list" id="interestList"></div>
+    </div>
+
+    <!-- 負債 -->
+    <div class="view" id="view-liabilities">
+      <h2>負債（含國民年金未繳款）</h2>
+      <details class="entry-wrap" id="liabilityDetails">
+        <summary><span class="plus">＋</span>新增 / 編輯負債項目</summary>
+        <form class="entry" id="liabilityForm">
+          <input type="hidden" id="liaId">
+          <label>項目名稱
+            <input type="text" id="liaName" placeholder="例如：國民年金 3月" required>
+          </label>
+          <label>金額
+            <input type="number" id="liaAmount" step="0.01" required>
+          </label>
+          <label>繳費期限
+            <input type="date" id="liaDue">
+          </label>
+          <label>狀態
+            <select id="liaPaid">
+              <option value="false">未繳</option>
+              <option value="true">已繳</option>
+            </select>
+          </label>
+          <label class="full">備註
+            <input type="text" id="liaNote" placeholder="選填">
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">儲存項目</button>
+            <button type="button" id="liaCancel">清空表單</button>
+          </div>
+        </form>
+      </details>
+      <div class="item-list" id="liabilitiesList"></div>
+    </div>
+
+    <!-- 記帳 -->
+    <div class="view" id="view-transactions">
+      <h2>記帳</h2>
+      <div class="segmented" id="trSubNav">
+        <button type="button" class="active" data-sub="records">紀錄</button>
+        <button type="button" data-sub="ledger">共同帳本</button>
+        <button type="button" data-sub="transfer">轉帳</button>
+        <button type="button" data-sub="recurring">固定項目</button>
+        <button type="button" data-sub="stats">統計分析</button>
+        <button type="button" data-sub="import">匯入CSV</button>
+        <button type="button" data-sub="categories">類別設定</button>
+      </div>
+
+      <!-- 記帳：紀錄 -->
+      <div id="trSub-records">
+        <div id="recurringBanner"></div>
+        <details class="entry-wrap" id="trDetails">
+          <summary><span class="plus">＋</span>新增 / 編輯記帳</summary>
+          <form class="entry" id="trForm">
+            <input type="hidden" id="trId">
+            <div class="full type-toggle">
+              <button type="button" class="expense active" data-type="expense">支出</button>
+              <button type="button" class="income" data-type="income">收入</button>
+            </div>
+            <input type="hidden" id="trType" value="expense">
+            <div class="amount-hero">
+              <div class="amount-label">金額</div>
+              <div class="amount-input-row">
+                <span>$</span>
+                <input type="number" id="trAmount" step="0.01" min="0" placeholder="0" required>
+              </div>
+              <div class="quick-amount-row">
+                <button type="button" data-qadd="50">+50</button>
+                <button type="button" data-qadd="100">+100</button>
+                <button type="button" data-qadd="500">+500</button>
+                <button type="button" data-qadd="1000">+1000</button>
+                <button type="button" class="clear" data-qadd="clear">清空</button>
+              </div>
+            </div>
+            <div class="cat-select-row">
+              <label>主類別
+                <select id="trCategory"></select>
+              </label>
+              <label>子類別（選填）
+                <select id="trSubcategory"><option value="">不指定</option></select>
+              </label>
+            </div>
+            <label>日期
+              <input type="date" id="trDate" required>
+            </label>
+            <label>帳戶（選填，會自動增減餘額）
+              <select id="trAccount">
+                <option value="">不指定</option>
+              </select>
+            </label>
+            <label class="full">備註
+              <input type="text" id="trNote" placeholder="選填">
+            </label>
+            <div class="full checkbox-row">
+              <input type="checkbox" id="trShared">
+              <label for="trShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
+            </div>
+            <div class="full" id="trLedgerFields" style="display:none;">
+              <div class="map-grid">
+                <label>誰先付款
+                  <select id="trPayer">
+                    <option value="me">我先付</option>
+                    <option value="partner">對方先付</option>
+                  </select>
+                </label>
+                <label>分攤方式
+                  <select id="trSplitMode">
+                    <option value="split">平分（各一半）</option>
+                    <option value="advance">全額代墊（全部算對方的）</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary">儲存記帳</button>
+              <button type="button" id="trCancel">清空表單</button>
+            </div>
+          </form>
+        </details>
+        <div class="filter-row">
+          <label>月份 <input type="month" id="trFilterMonth"></label>
+          <label><input type="checkbox" id="trShowAll"> 顯示全部</label>
+        </div>
+        <div class="item-list" id="transactionsList"></div>
+      </div>
+
+      <!-- 記帳：共同帳本 -->
+      <div id="trSub-ledger" style="display:none;">
+        <p class="hint">記帳時勾選「共同帳本項目」並選擇誰先付款、怎麼分攤，這裡會自動幫你算出目前誰欠誰多少，等金額大到可以一次轉帳時再按「結算」。</p>
+        <div class="ledger-hero">
+          <div class="label">目前帳本餘額</div>
+          <div class="value" id="ledgerBalanceValue">打平了</div>
+          <div class="hint2" id="ledgerBalanceHint">尚無未結算的共同帳本紀錄。</div>
+        </div>
+        <div class="form-actions" style="margin-bottom:16px;">
+          <button type="button" class="primary" id="ledgerSettleBtn">結算 / 標記已轉帳完成</button>
+        </div>
+        <h2 style="font-size:15px;">未結算明細</h2>
+        <div class="item-list" id="ledgerList"></div>
+      </div>
+
+      <!-- 記帳：轉帳 -->
+      <div id="trSub-transfer" style="display:none;">
+        <p class="hint">帳戶之間互相轉移金額，例如現金存入悠遊卡、提領現金、儲值行動支付等。轉帳不會計入收入／支出統計，只會同時調整兩個帳戶的餘額。</p>
+        <details class="entry-wrap" open id="trfDetails">
+          <summary><span class="plus">＋</span>新增轉帳</summary>
+          <form class="entry" id="trfForm">
+            <label>從（轉出帳戶）
+              <select id="trfFrom" required>
+                <option value="">請選擇</option>
+              </select>
+            </label>
+            <label>到（轉入帳戶）
+              <select id="trfTo" required>
+                <option value="">請選擇</option>
+              </select>
+            </label>
+            <label>金額
+              <input type="number" id="trfAmount" step="0.01" min="0" required>
+            </label>
+            <label>日期
+              <input type="date" id="trfDate" required>
+            </label>
+            <label class="full">備註
+              <input type="text" id="trfNote" placeholder="選填，例如：提領現金">
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="primary">儲存轉帳</button>
+              <button type="button" id="trfCancel">清空表單</button>
+            </div>
+          </form>
+        </details>
+        <div class="item-list" id="transfersList"></div>
+      </div>
+
+      <!-- 記帳：固定項目 -->
+      <div id="trSub-recurring" style="display:none;">
+        <p class="hint">設定每個月都要繳的房租、健保費、訂閱費用等固定項目。之後每個月只要打開「記帳」，就會看到本月尚未加入的固定項目，一鍵就能加進記帳紀錄（不會重複加入）。</p>
+        <details class="entry-wrap" id="recDetails">
+          <summary><span class="plus">＋</span>新增 / 編輯固定項目</summary>
+          <form class="entry" id="recForm">
+            <input type="hidden" id="recId">
+            <div class="full type-toggle">
+              <button type="button" class="expense active" data-rectype="expense">支出</button>
+              <button type="button" class="income" data-rectype="income">收入</button>
+            </div>
+            <input type="hidden" id="recType" value="expense">
+            <label>名稱
+              <input type="text" id="recName" placeholder="例如：房租、健保費、Netflix 訂閱" required>
+            </label>
+            <label>主類別
+              <select id="recCategory"></select>
+            </label>
+            <label>子類別（選填）
+              <select id="recSubcategory"><option value="">不指定</option></select>
+            </label>
+            <label>金額
+              <input type="number" id="recAmount" step="0.01" min="0" required>
+            </label>
+            <label>帳戶（選填，加入時會自動增減餘額）
+              <select id="recAccount">
+                <option value="">不指定</option>
+              </select>
+            </label>
+            <label>每月幾號繳（僅供提醒顯示）
+              <input type="number" id="recDay" min="1" max="28" placeholder="例如 5">
+            </label>
+            <label class="full">備註
+              <input type="text" id="recNote" placeholder="選填">
+            </label>
+            <div class="full checkbox-row">
+              <input type="checkbox" id="recActive" checked>
+              <label for="recActive" style="margin:0;">啟用（會出現在每月待加入清單）</label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary">儲存固定項目</button>
+              <button type="button" id="recCancel">清空表單</button>
+            </div>
+          </form>
+        </details>
+        <h2 style="font-size:15px;">本月待加入</h2>
+        <div id="recurringPendingList"></div>
+        <h2 style="font-size:15px;">所有固定項目</h2>
+        <div class="item-list" id="recurringList"></div>
+      </div>
+
+      <!-- 記帳：統計分析 -->
+      <div id="trSub-stats" style="display:none;">
+        <div class="segmented" id="statsModeNav">
+          <button type="button" class="active" data-mode="month">依月份</button>
+          <button type="button" data-mode="year">依年度</button>
+        </div>
+        <div class="period-nav">
+          <button type="button" class="period-nav-btn" id="statsPrevBtn" title="上一期">‹</button>
+          <input type="month" id="statsMonthInput">
+          <select id="statsYearInput" style="display:none;"></select>
+          <button type="button" class="period-nav-btn" id="statsNextBtn" title="下一期">›</button>
+        </div>
+
+        <!-- ① 本期關鍵指標 -->
+        <div class="summary-grid" id="statsSummaryGrid"></div>
+        <div class="compare-grid" id="statsCompareGrid"></div>
+
+        <!-- ② 預算追蹤 -->
+        <div class="stat-section" id="statsBudgetSection">
+          <div class="stat-section-head">
+            <h3>預算追蹤</h3>
+          </div>
+          <p class="hint" style="margin-bottom:10px;">設定每月預算，這裡會即時顯示花了多少、還剩多少。只存在這台裝置的瀏覽器裡。</p>
+          <div class="budget-add-row">
+            <select id="budgetCatSelect"></select>
+            <input type="number" id="budgetAmountInput" min="0" step="1" placeholder="每月預算金額">
+            <button type="button" class="primary" id="budgetSaveBtn">設定</button>
+          </div>
+          <div id="budgetList"></div>
+        </div>
+
+        <!-- ③ 支出去了哪裡：排行 + 跟上期比 -->
+        <div class="stat-section">
+          <h3>支出去了哪裡</h3>
+          <div class="category-rank-wrap">
+            <div class="pie-wrap-mini" id="statsExpensePie"></div>
+            <div class="rank-list" id="statsCategoryRank"></div>
+          </div>
+        </div>
+
+        <!-- ④ 固定 vs 彈性支出 -->
+        <div class="stat-section">
+          <h3>固定支出 vs 彈性支出</h3>
+          <p class="hint" style="margin-bottom:10px;">固定支出＝由「固定項目」自動加入的紀錄（房租、訂閱費等）；其餘算彈性花費，是比較能省的部分。</p>
+          <div id="statsFixedVsFlex"></div>
+        </div>
+
+        <!-- ⑤ 消費節奏：月模式看每日、年模式看每月 -->
+        <div class="stat-section" id="statsDailySection">
+          <h3>每日消費節奏</h3>
+          <div id="statsDailyChart"></div>
+          <p class="hint" style="margin:8px 0 10px;">紅色＝平日、金色＝週末；長條愈高代表當天花愈多。</p>
+          <div class="day-highlights" id="statsDailyHighlights"></div>
+        </div>
+        <div class="stat-section" id="statsYearlyTrendSection" style="display:none;">
+          <h3>年度每月支出趨勢</h3>
+          <div id="statsYearlyTrend"></div>
+        </div>
+
+        <!-- ⑥ 收入來源 -->
+        <div class="stat-section">
+          <h3>收入品項分佈</h3>
+          <div id="statsIncomeBreakdown"></div>
+        </div>
+
+        <!-- ⑦ 進階查詢（預設收合，不干擾主要重點） -->
+        <details class="entry-wrap" id="statsAdvancedDetails">
+          <summary><span class="plus">＋</span>進階：類別月份分佈查詢</summary>
+          <div class="stat-section" style="margin-top:14px;">
+            <p class="hint" style="margin-bottom:10px;">選擇主類別（與子類別）後，可以看到該年度每個月的支出金額變化，適合深入追蹤單一類別的長期趨勢。</p>
+            <div class="dist-select-row">
+              <select id="distYearInput"></select>
+              <select id="distCategoryInput"><option value="">全部主類別</option></select>
+              <select id="distSubcategoryInput"><option value="">不分子類別</option></select>
+            </div>
+            <div id="statsDistribution"></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- 記帳：匯入 CSV -->
+      <div id="trSub-import" style="display:none;">
+        <p class="hint">把其他記帳 App 匯出的 CSV 檔案匯入，就能跟這裡的紀錄一起做統計分析。匯入前可以先對應欄位、預覽內容再確定送出。</p>
+        <div class="import-steps">
+          <label>選擇 CSV 檔案
+            <input type="file" id="csvFile" accept=".csv,text/csv">
+          </label>
+          <div id="csvMapSection" style="display:none;">
+            <div class="map-grid">
+              <label>日期欄位
+                <select id="csvColDate"></select>
+              </label>
+              <label>金額欄位
+                <select id="csvColAmount"></select>
+              </label>
+              <label>主類別欄位
+                <select id="csvColCategory"><option value="">（不對應）</option></select>
+              </label>
+              <label>子類別欄位（選填）
+                <select id="csvColSubcategory"><option value="">（不對應）</option></select>
+              </label>
+              <label>備註欄位
+                <select id="csvColNote"><option value="">（不對應）</option></select>
+              </label>
+              <label>收支欄位（選填）
+                <select id="csvColType"><option value="">（不對應，用下面規則判斷）</option></select>
+              </label>
+              <label>沒有收支欄位時，怎麼判斷收入/支出
+                <select id="csvTypeRule">
+                  <option value="sign">依金額正負判斷（正=收入，負=支出）</option>
+                  <option value="all_expense">全部視為支出</option>
+                  <option value="all_income">全部視為收入</option>
+                </select>
+              </label>
+            </div>
+            <p class="hint" style="margin:10px 0 0;">預覽（前 5 筆）：</p>
+            <div class="csv-preview-wrap"><table class="csv-preview" id="csvPreviewTable"></table></div>
+            <div class="form-actions" style="margin-top:12px;">
+              <button type="button" class="primary" id="csvImportBtn">確認匯入</button>
+              <button type="button" id="csvCancelBtn">取消</button>
+            </div>
+            <div class="status" id="csvStatus" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 記帳：類別設定 -->
+      <div id="trSub-categories" style="display:none;">
+        <p class="hint">管理記帳的「主類別」與「子類別」，支出跟收入分開管理。刪除類別不會影響已經記過的舊資料，只是選單裡不會再出現。這些設定只存在這台裝置的瀏覽器裡。</p>
+        <div class="category-manage">
+          <h2 style="font-size:15px;">支出類別</h2>
+          <div id="catBlocksExpense" style="display:flex; flex-direction:column; gap:10px;"></div>
+          <div class="cat-add-row">
+            <input type="text" id="catAddExpense" placeholder="新增支出主類別，例如：寵物">
+            <button type="button" class="primary" id="catAddExpenseBtn">新增主類別</button>
+          </div>
+        </div>
+        <div class="category-manage">
+          <h2 style="font-size:15px;">收入類別</h2>
+          <div id="catBlocksIncome" style="display:flex; flex-direction:column; gap:10px;"></div>
+          <div class="cat-add-row">
+            <input type="text" id="catAddIncome" placeholder="新增收入主類別，例如：租金收入">
+            <button type="button" class="primary" id="catAddIncomeBtn">新增主類別</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 設定 -->
+    <div class="view" id="view-settings">
+      <h2>設定</h2>
+      <p class="hint">填入你部署 Google Apps Script 後取得的網址與密鑰，只存在你這台裝置的瀏覽器裡，不會上傳到 GitHub。</p>
+      <div class="settings-block">
+        <label>Apps Script 網址
+          <input type="text" id="cfgUrl" placeholder="https://script.google.com/macros/s/xxx/exec">
+        </label>
+        <label>密鑰 (SECRET_TOKEN)
+          <input type="text" id="cfgToken" placeholder="你在 Apps Script 指令碼屬性設定的值">
+        </label>
+        <button id="cfgSave" class="primary">儲存設定並重新連線</button>
+        <div class="status" id="cfgStatus"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<nav class="bottom-nav">
+  <div class="tabs" id="tabsBottom"></div>
+</nav>
+<div id="busyToast"><span class="spinner"></span><span id="busyToastText">處理中…</span></div>
+
+<script>
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+// ---------- 忙碌保護：避免等待時多點幾下造成重複紀錄 ----------
+let busyCount = 0;
+function setBusy(on, text){
+  busyCount = Math.max(0, busyCount + (on ? 1 : -1));
+  document.body.classList.toggle('busy', busyCount > 0);
+  const toast = $('#busyToast');
+  if(text) $('#busyToastText').textContent = text;
+  toast.classList.toggle('show', busyCount > 0);
+}
+// 包住一個 async 操作：執行期間整個畫面會被鎖住（按鈕點不動），
+// 避免因為網路慢、Apps Script 回應久而被連點好幾次造成重複紀錄
+async function runBusy(fn, text){
+  setBusy(true, text || '處理中…');
+  try{
+    return await fn();
+  } finally {
+    setBusy(false);
+  }
+}
+
+// ---------- Icons ----------
+const ICONS = {
+  dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>',
+  accounts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M16 14h2"/></svg>',
+  interest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15V9l3 2 3-2v6"/></svg>',
+  liabilities: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
+  transactions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h4"/><path d="M8 4v3M16 4v3"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>'
+};
+const TAB_DEFS = [
+  { view:'dashboard', label:'總覽' },
+  { view:'accounts', label:'帳戶' },
+  { view:'transactions', label:'記帳' },
+  { view:'interest', label:'利息' },
+  { view:'liabilities', label:'負債' },
+  { view:'settings', label:'設定' }
+];
+
+function buildTabs(container){
+  container.innerHTML = TAB_DEFS.map((t,i) =>
+    `<div class="tab${i===0?' active':''}" data-view="${t.view}">${ICONS[t.view]}<span>${t.label}</span></div>`
+  ).join('');
+}
+buildTabs($('#tabsTop'));
+buildTabs($('#tabsBottom'));
+
+function switchTab(view){
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  if(view === 'transactions'){
+    // 切到「記帳」分頁時，直接展開新增記帳表單，不用再點一次「＋新增／編輯記帳」
+    $('#trDetails').open = true;
+  }
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+$$('.tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.view)));
+
+const cfg = {
+  url: localStorage.getItem('fin_url') || '',
+  token: localStorage.getItem('fin_token') || ''
+};
+
+let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [] };
+
+// 記帳品項（主類別 + 子類別，依收入/支出分開）。使用者可以在「類別設定」子分頁
+// 新增/編輯/刪除主類別與子類別，存放在 localStorage（不會影響已經記過的舊資料）。
+const DEFAULT_CATEGORY_TREE = {
+  expense: [
+    { name:'餐飲', subs:['早餐','午餐','晚餐','飲料','消夜'] },
+    { name:'交通', subs:['大眾運輸','加油','停車','計程車','保養'] },
+    { name:'購物', subs:['日用品','服飾','電器','其他'] },
+    { name:'娛樂', subs:['電影','遊戲','訂閱','旅遊'] },
+    { name:'醫療', subs:['看診','藥品','保健品'] },
+    { name:'教育', subs:['書籍','課程','學費'] },
+    { name:'居家', subs:['房租','水電','瓦斯','網路','家具'] },
+    { name:'保險', subs:['保費'] },
+    { name:'旅遊', subs:['機票','住宿','餐飲','交通'] },
+    { name:'其他', subs:[] }
+  ],
+  income: [
+    { name:'薪資', subs:['本薪','加班費'] },
+    { name:'獎金', subs:['年終獎金','績效獎金'] },
+    { name:'投資收益', subs:['股息','利息','資本利得'] },
+    { name:'兼職', subs:[] },
+    { name:'其他', subs:[] }
+  ]
+};
+const CAT_TREE_KEY = type => 'fin_category_tree_' + type;
+const CAT_LEGACY_KEY = type => 'fin_categories_' + type; // 舊版扁平類別清單，用於自動搬遷
+
+function cloneCategoryTree(tree){ return tree.map(m => ({ name: m.name, subs: [...(m.subs || [])] })); }
+
+function loadCategoryTree(type){
+  try{
+    const raw = localStorage.getItem(CAT_TREE_KEY(type));
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(Array.isArray(parsed)) return parsed;
+    }
+  }catch(e){}
+  // 尚未有新版資料：以預設類別為底，把舊版扁平清單（如果有）併入為主類別
+  const tree = cloneCategoryTree(DEFAULT_CATEGORY_TREE[type]);
+  try{
+    const legacyRaw = localStorage.getItem(CAT_LEGACY_KEY(type));
+    if(legacyRaw){
+      const legacyNames = JSON.parse(legacyRaw) || [];
+      legacyNames.forEach(name => {
+        if(name && !tree.some(m => m.name === name)) tree.push({ name, subs: [] });
+      });
+    }
+  }catch(e){}
+  saveCategoryTree(type, tree);
+  return tree;
+}
+function saveCategoryTree(type, tree){
+  localStorage.setItem(CAT_TREE_KEY(type), JSON.stringify(tree));
+}
+function getCategoryTree(type){ return loadCategoryTree(type); }
+function getCategoryNames(type){ return getCategoryTree(type).map(m => m.name); }
+function getSubcategories(type, mainName){
+  const m = getCategoryTree(type).find(x => x.name === mainName);
+  return m ? (m.subs || []) : [];
+}
+function addMainCategory(type, name){
+  name = String(name || '').trim();
+  if(!name) return false;
+  const tree = getCategoryTree(type);
+  if(tree.some(m => m.name === name)) return false;
+  tree.push({ name, subs: [] });
+  saveCategoryTree(type, tree);
+  return true;
+}
+function renameMainCategory(type, oldName, newName){
+  newName = String(newName || '').trim();
+  if(!newName || newName === oldName) return false;
+  const tree = getCategoryTree(type);
+  if(tree.some(m => m.name === newName)) return false;
+  const m = tree.find(x => x.name === oldName);
+  if(!m) return false;
+  m.name = newName;
+  saveCategoryTree(type, tree);
+  return true;
+}
+function removeMainCategory(type, name){
+  const tree = getCategoryTree(type).filter(m => m.name !== name);
+  saveCategoryTree(type, tree);
+}
+function addSubCategory(type, mainName, subName){
+  subName = String(subName || '').trim();
+  if(!subName) return false;
+  const tree = getCategoryTree(type);
+  const m = tree.find(x => x.name === mainName);
+  if(!m) return false;
+  if(!m.subs) m.subs = [];
+  if(m.subs.includes(subName)) return false;
+  m.subs.push(subName);
+  saveCategoryTree(type, tree);
+  return true;
+}
+function renameSubCategory(type, mainName, oldSub, newSub){
+  newSub = String(newSub || '').trim();
+  if(!newSub || newSub === oldSub) return false;
+  const tree = getCategoryTree(type);
+  const m = tree.find(x => x.name === mainName);
+  if(!m || !m.subs) return false;
+  if(m.subs.includes(newSub)) return false;
+  const idx = m.subs.indexOf(oldSub);
+  if(idx === -1) return false;
+  m.subs[idx] = newSub;
+  saveCategoryTree(type, tree);
+  return true;
+}
+function removeSubCategory(type, mainName, subName){
+  const tree = getCategoryTree(type);
+  const m = tree.find(x => x.name === mainName);
+  if(!m) return;
+  m.subs = (m.subs || []).filter(s => s !== subName);
+  saveCategoryTree(type, tree);
+}
+// 為了相容既有程式碼，保留 CATEGORIES 這個名字（取主類別名稱陣列，動態取值）
+const CATEGORIES = {
+  get expense(){ return getCategoryNames('expense'); },
+  get income(){ return getCategoryNames('income'); }
+};
+
+// ---------- API ----------
+async function apiGet(sheet){
+  const url = `${cfg.url}?token=${encodeURIComponent(cfg.token)}&sheet=${sheet}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || '讀取失敗');
+  return json.data;
+}
+async function apiPost(action, sheet, data){
+  const res = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ token: cfg.token, action, sheet, data })
+  });
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || '操作失敗');
+  return json.data;
+}
+
+async function loadAll(){
+  if(!cfg.url || !cfg.token){
+    $('#cfgStatus').textContent = '尚未設定，請先到「設定」填入網址與密鑰。';
+    $('#cfgStatus').className = 'status err';
+    return;
+  }
+  try{
+    // 一次請求拿回四張表（sheet=all），比分開四個請求更快、也更省 Apps Script 的執行額度
+    await runBusy(async () => {
+      const all = await apiGet('all');
+      state.accounts = all.accounts;
+      state.liabilities = all.liabilities;
+      state.interest = all.interest;
+      state.transactions = all.transactions;
+      state.recurring = all.recurring || [];
+      renderAll();
+    }, '載入資料中…');
+    $('#cfgStatus').textContent = '已連線成功。';
+    $('#cfgStatus').className = 'status ok';
+  }catch(err){
+    $('#cfgStatus').textContent = '連線失敗：' + err.message;
+    $('#cfgStatus').className = 'status err';
+  }
+}
+
+function fmt(n){
+  const num = Number(n) || 0;
+  return num.toLocaleString('zh-Hant-TW', { minimumFractionDigits:0, maximumFractionDigits:2 });
+}
+
+// ---------- 帳戶類型排序：記帳時預設用現金，選單依「現金 → 行動支付 → 銀行 → 悠遊卡 → 投資」排序 ----------
+const ACCOUNT_TYPE_ORDER = ['現金','行動支付','銀行','悠遊卡','投資'];
+function accountTypeRank(type){
+  const idx = ACCOUNT_TYPE_ORDER.indexOf(type);
+  return idx === -1 ? ACCOUNT_TYPE_ORDER.length : idx;
+}
+function sortAccountsForSelect(accounts){
+  return [...accounts].sort((a,b) => {
+    const r = accountTypeRank(a.type) - accountTypeRank(b.type);
+    if(r !== 0) return r;
+    return String(a.name).localeCompare(String(b.name), 'zh-Hant');
+  });
+}
+function sortAccountTypeEntries(types){
+  return [...types].sort((a,b) => accountTypeRank(a) - accountTypeRank(b));
+}
+function defaultCashAccountId(){
+  const sorted = sortAccountsForSelect(state.accounts);
+  const cash = sorted.find(a => a.type === '現金');
+  return cash ? cash.id : '';
+}
+
+// ---------- 本地狀態更新（避免每次操作都重新整批下載，減少等待） ----------
+function upsertLocal(key, obj){
+  if(!obj) return;
+  const list = state[key];
+  const idx = list.findIndex(x => x.id === obj.id);
+  if(idx === -1) list.push(obj); else list[idx] = obj;
+}
+function removeLocal(key, id){
+  state[key] = state[key].filter(x => x.id !== id);
+}
+
+// ---------- Render ----------
+function renderAll(){
+  renderDashboard();
+  renderAccounts();
+  renderInterest();
+  renderLiabilities();
+  renderTransactions();
+  renderLedger();
+  renderTransfers();
+  renderRecurring();
+  renderStats();
+  renderCategories();
+}
+
+// 點擊「帳戶一覽」上方的類型卡片（銀行／現金／行動支付…）可以篩選下方清單只顯示該類型的帳戶，
+// 再點一次或按「顯示全部」可以取消篩選。
+let dashboardFilterType = null;
+
+function renderDashboard(){
+  const byType = {};
+  let totalAssets = 0;
+  state.accounts.forEach(a => {
+    const bal = Number(a.balance) || 0;
+    byType[a.type] = (byType[a.type] || 0) + bal;
+    totalAssets += bal;
+  });
+  const totalDebt = state.liabilities
+    .filter(l => String(l.paid) !== 'true')
+    .reduce((s,l) => s + (Number(l.amount)||0), 0);
+  const net = totalAssets - totalDebt;
+
+  $('#netHeroValue').textContent = '$' + fmt(net);
+  $('#netHeroAssets').textContent = '$' + fmt(totalAssets);
+  $('#netHeroDebt').textContent = '$' + fmt(totalDebt);
+
+  // 如果目前篩選的類型已經沒有任何帳戶了（例如帳戶被刪除或改了類型），自動取消篩選
+  if(dashboardFilterType && !byType.hasOwnProperty(dashboardFilterType)) dashboardFilterType = null;
+
+  const grid = $('#summaryGrid');
+  const orderedTypes = sortAccountTypeEntries(Object.keys(byType));
+  grid.innerHTML = orderedTypes.map(type => {
+    const val = byType[type];
+    const active = dashboardFilterType === type;
+    return `<div class="summary-card clickable${active ? ' active' : ''}" data-type="${escapeHtml(type)}">
+      <div class="label">${type}</div><div class="value">$${fmt(val)}</div>
+    </div>`;
+  }).join('');
+  $$('#summaryGrid .summary-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const t = card.dataset.type;
+      dashboardFilterType = (dashboardFilterType === t) ? null : t;
+      renderDashboard();
+    });
+  });
+
+  const list = $('#dashboardAccountsList');
+  const titleEl = $('#dashboardAccountsTitle');
+  const resetBtn = $('#dashboardFilterReset');
+  const accountsToShow = dashboardFilterType
+    ? state.accounts.filter(a => a.type === dashboardFilterType)
+    : state.accounts;
+
+  titleEl.textContent = dashboardFilterType ? `帳戶一覽 · ${dashboardFilterType}` : '帳戶一覽';
+  resetBtn.style.display = dashboardFilterType ? '' : 'none';
+
+  if(!state.accounts.length){
+    list.innerHTML = `<div class="empty">尚無帳戶，請到「帳戶」新增。</div>`;
+  } else if(!accountsToShow.length){
+    list.innerHTML = `<div class="empty">這個類型尚無帳戶。</div>`;
+  } else {
+    const sortedAccounts = [...accountsToShow].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
+    list.innerHTML = sortedAccounts.map(a => `
+      <div class="item-card">
+        <div class="item-top">
+          <div><div class="item-name">${a.name}</div><span class="badge">${a.type}</span></div>
+          <div class="item-value">$${fmt(a.balance)}</div>
+        </div>
+      </div>`).join('');
+  }
+}
+$('#dashboardFilterReset').addEventListener('click', () => {
+  dashboardFilterType = null;
+  renderDashboard();
+});
+
+function renderAccounts(){
+  const list = $('#accountsList');
+  if(!state.accounts.length){
+    list.innerHTML = `<div class="empty">尚無帳戶。</div>`;
+  } else {
+    const sortedAccounts = [...state.accounts].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
+    list.innerHTML = sortedAccounts.map(a => {
+      const rate = a.interestRate ? Number(a.interestRate) : 0;
+      const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
+      return `<div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${a.name}</div>
+            <span class="badge">${a.type}</span>
+            ${a.note ? `<div class="item-note">${a.note}</div>` : ''}
+          </div>
+          <div class="item-value">$${fmt(a.balance)}</div>
+        </div>
+        ${rate ? `<div class="item-meta">
+          <span>年利率 <b>${rate}%</b></span>
+          <span>估算下期利息 <b>$${fmt(est)}</b></span>
+        </div>` : ''}
+        <div class="item-actions">
+          <button class="small" onclick="editAccount('${a.id}')">編輯</button>
+          <button class="small danger" onclick="deleteAccount('${a.id}')">刪除</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const orderedAccounts = sortAccountsForSelect(state.accounts);
+  const optionsHtml = orderedAccounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+
+  const sel = $('#intAccount');
+  sel.innerHTML = optionsHtml;
+
+  const trSel = $('#trAccount');
+  const keepVal = trSel.value;
+  trSel.innerHTML = `<option value="">不指定</option>` + optionsHtml;
+  trSel.value = keepVal;
+  // 新增記帳（尚未選帳戶）時，預設帶入現金帳戶，選單依現金→行動支付→銀行…排序
+  if(!$('#trId').value && !trSel.value){
+    const cashId = defaultCashAccountId();
+    if(cashId) trSel.value = cashId;
+  }
+
+  const recSel = $('#recAccount');
+  const keepRecVal = recSel.value;
+  recSel.innerHTML = `<option value="">不指定</option>` + optionsHtml;
+  recSel.value = keepRecVal;
+
+  // 轉帳表單的「從」「到」帳戶選單
+  const trfFrom = $('#trfFrom');
+  const trfTo = $('#trfTo');
+  if(trfFrom && trfTo){
+    const keepFrom = trfFrom.value, keepTo = trfTo.value;
+    trfFrom.innerHTML = `<option value="">請選擇</option>` + optionsHtml;
+    trfTo.innerHTML = `<option value="">請選擇</option>` + optionsHtml;
+    trfFrom.value = keepFrom;
+    trfTo.value = keepTo;
+  }
+}
+
+function renderInterest(){
+  const list = $('#interestList');
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  const rows = [...state.interest].sort((a,b) => (a.date < b.date ? 1 : -1));
+  if(!rows.length){
+    list.innerHTML = `<div class="empty">尚無利息紀錄。</div>`;
+  } else {
+    list.innerHTML = rows.map(r => `
+      <div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${byId[r.accountId] || '（帳戶已刪除）'}</div>
+            <div class="item-note">${r.date}${r.note ? ' · ' + r.note : ''}</div>
+          </div>
+          <div class="item-value">+$${fmt(r.amount)}</div>
+        </div>
+        <div class="item-actions">
+          <button class="small danger" onclick="deleteInterest('${r.id}')">刪除</button>
+        </div>
+      </div>`).join('');
+  }
+}
+
+function renderLiabilities(){
+  const list = $('#liabilitiesList');
+  if(!state.liabilities.length){
+    list.innerHTML = `<div class="empty">尚無負債項目。</div>`;
+  } else {
+    list.innerHTML = state.liabilities.map(l => {
+      const paid = String(l.paid) === 'true';
+      return `<div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${l.name}</div>
+            <span class="badge ${paid?'paid':'unpaid'}">${paid ? '已繳' : '未繳'}</span>
+            ${l.note ? `<div class="item-note">${l.note}</div>` : ''}
+          </div>
+          <div class="item-value">$${fmt(l.amount)}</div>
+        </div>
+        ${l.dueDate ? `<div class="item-meta"><span>期限 <b>${l.dueDate}</b></span></div>` : ''}
+        <div class="item-actions">
+          <button class="small" onclick="editLiability('${l.id}')">編輯</button>
+          <button class="small danger" onclick="deleteLiability('${l.id}')">刪除</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+function renderTransactions(){
+  const list = $('#transactionsList');
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  const showAll = $('#trShowAll').checked;
+  const month = $('#trFilterMonth').value; // 'YYYY-MM'
+  let rows = state.transactions.filter(t => t.type !== 'transfer');
+  if(!showAll && month){
+    rows = rows.filter(t => (t.date || '').startsWith(month));
+  }
+  rows.sort((a,b) => (a.date < b.date ? 1 : -1));
+
+  if(!rows.length){
+    list.innerHTML = `<div class="empty">${showAll ? '尚無記帳紀錄。' : '這個月尚無記帳紀錄。'}</div>`;
+    return;
+  }
+  list.innerHTML = rows.map(t => {
+    const isExpense = t.type === 'expense';
+    const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${t.category || '其他'}${t.subcategory ? ' · ' + t.subcategory : ''}</div>
+          <div class="item-note">${t.date}${acc ? ' · ' + acc : ''}${t.note ? ' · ' + t.note : ''}</div>
+        </div>
+        <div class="item-value ${isExpense ? 'expense' : 'income'}">${isExpense ? '-' : '+'}$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function populateTrCategories(type, selected, selectedSub){
+  const sel = $('#trCategory');
+  const names = getCategoryNames(type);
+  sel.innerHTML = names.map(c => `<option value="${c}">${c}</option>`).join('');
+  if(selected && names.includes(selected)) sel.value = selected;
+  else if(names.length) sel.value = names[0];
+  populateTrSubcategories(type, sel.value, selectedSub);
+}
+function populateTrSubcategories(type, mainName, selectedSub){
+  const sel = $('#trSubcategory');
+  const subs = getSubcategories(type, mainName);
+  sel.innerHTML = `<option value="">不指定</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('');
+  if(selectedSub && subs.includes(selectedSub)) sel.value = selectedSub;
+  else sel.value = '';
+}
+$('#trCategory').addEventListener('change', () => {
+  populateTrSubcategories($('#trType').value, $('#trCategory').value);
+});
+$$('#trForm .quick-amount-row button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = $('#trAmount');
+    if(btn.dataset.qadd === 'clear'){ input.value = ''; input.focus(); return; }
+    const add = Number(btn.dataset.qadd) || 0;
+    const current = parseFloat(input.value) || 0;
+    input.value = current + add;
+    input.focus();
+  });
+});
+
+function setTrType(type, selectedCategory, selectedSub){
+  $('#trType').value = type;
+  $$('.type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  populateTrCategories(type, selectedCategory, selectedSub);
+}
+
+// ---------- 記帳統計分析 ----------
+let statsMode = 'month'; // 'month' | 'year'
+
+function currentStatsPeriod(){
+  return statsMode === 'month' ? $('#statsMonthInput').value : $('#statsYearInput').value;
+}
+
+function transactionsInPeriod(period){
+  if(!period) return [];
+  return state.transactions.filter(t => (t.date || '').startsWith(period));
+}
+
+function breakdownByCategory(rows, type){
+  const map = {};
+  let total = 0;
+  rows.filter(t => t.type === type).forEach(t => {
+    const amt = Number(t.amount) || 0;
+    const cat = t.category || '其他';
+    map[cat] = (map[cat] || 0) + amt;
+    total += amt;
+  });
+  return { total, items: Object.entries(map).sort((a,b) => b[1]-a[1]) };
+}
+
+function renderBarList(container, items, total, cssClass){
+  if(!items.length){
+    container.innerHTML = `<div class="empty">這段期間沒有資料。</div>`;
+    return;
+  }
+  container.innerHTML = items.map(([label, val]) => {
+    const pct = total ? Math.round(val/total*100) : 0;
+    return `<div class="stat-bar-row">
+      <div class="stat-bar-label">${label}</div>
+      <div class="stat-bar-track"><div class="stat-bar-fill ${cssClass}" style="width:${pct}%"></div></div>
+      <div class="stat-bar-value">$${fmt(val)} (${pct}%)</div>
+    </div>`;
+  }).join('');
+}
+
+function populateStatsYearOptions(){
+  const years = new Set(state.transactions.map(t => (t.date||'').slice(0,4)).filter(Boolean));
+  const thisYear = String(new Date().getFullYear());
+  years.add(thisYear);
+  const sel = $('#statsYearInput');
+  const keep = sel.value || thisYear;
+  years.add(keep); // 保留目前導覽到的年份，就算該年還沒有資料也不會被重置
+  const sorted = Array.from(years).sort((a,b) => b.localeCompare(a));
+  sel.innerHTML = sorted.map(y => `<option value="${y}">${y} 年</option>`).join('');
+  sel.value = keep;
+}
+
+// 上一期／下一期：月模式跨月（含跨年），年模式直接年份 +-1
+function shiftStatsPeriod(delta){
+  if(statsMode === 'month'){
+    const val = $('#statsMonthInput').value;
+    if(!val) return;
+    const [y, m] = val.split('-').map(Number);
+    const d = new Date(y, (m - 1) + delta, 1);
+    $('#statsMonthInput').value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  } else {
+    const sel = $('#statsYearInput');
+    const year = (parseInt(sel.value, 10) || new Date().getFullYear()) + delta;
+    sel.value = String(year);
+  }
+  renderStats();
+}
+$('#statsPrevBtn').addEventListener('click', () => shiftStatsPeriod(-1));
+$('#statsNextBtn').addEventListener('click', () => shiftStatsPeriod(1));
+
+// 上一期的期間字串（月模式回傳上個月 YYYY-MM，年模式回傳去年 YYYY）
+function previousPeriodStr(period, mode){
+  if(mode === 'month'){
+    const [y, m] = period.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+  return String((parseInt(period, 10) || 0) - 1);
+}
+function expenseTotalOf(period){
+  return transactionsInPeriod(period).filter(t => t.type === 'expense').reduce((s,t) => s + (Number(t.amount)||0), 0);
+}
+// 所有「有資料」的期間（依模式為月或年），用來計算平均值
+function periodsWithData(mode){
+  const set = new Set();
+  state.transactions.forEach(t => {
+    const d = t.date || '';
+    if(!d) return;
+    set.add(mode === 'month' ? d.slice(0,7) : d.slice(0,4));
+  });
+  return Array.from(set);
+}
+function averageExpense(mode, excludePeriod){
+  const periods = periodsWithData(mode).filter(p => p !== excludePeriod);
+  if(!periods.length) return null;
+  const total = periods.reduce((s,p) => s + expenseTotalOf(p), 0);
+  return total / periods.length;
+}
+function renderCompareCard(label, current, base){
+  if(base === null || base === undefined){
+    return `<div class="compare-card"><div class="label">${label}</div><div class="value flat">尚無資料可比較</div></div>`;
+  }
+  if(Math.abs(current - base) < 0.005){
+    return `<div class="compare-card"><div class="label">${label}</div><div class="value flat">— 持平</div></div>`;
+  }
+  const diff = current - base;
+  const pct = base ? Math.abs(diff / base * 100) : 100;
+  const cls = diff > 0 ? 'up' : 'down';
+  const arrow = diff > 0 ? '▲' : '▼';
+  return `<div class="compare-card"><div class="label">${label}</div><div class="value ${cls}">${arrow} ${pct.toFixed(1)}%（$${fmt(Math.abs(diff))}）</div></div>`;
+}
+function renderCompare(period, expenseTotal){
+  const prevPeriod = previousPeriodStr(period, statsMode);
+  const prevTotal = expenseTotalOf(prevPeriod);
+  const avgTotal = averageExpense(statsMode, period);
+  const prevLabel = statsMode === 'month' ? '跟上個月比' : '跟去年比';
+  $('#statsCompareGrid').innerHTML =
+    renderCompareCard(prevLabel, expenseTotal, prevTotal) +
+    renderCompareCard('跟平均比', expenseTotal, avgTotal);
+}
+
+// ---------- 圓餅圖（純 SVG，無外部套件） ----------
+const PIE_COLORS = ['#b4903b','#9c3b34','#3e6b52','#33456b','#e4d5a4','#7a4f9c','#3b7d9c','#c47a3b','#5a7a3b','#8a3b6a','#3b8a7a','#6b5a3b'];
+function polarPoint(cx, cy, r, angleDeg){
+  const rad = (angleDeg - 90) * Math.PI / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+function pieSlicePath(cx, cy, r, startAngle, endAngle){
+  const start = polarPoint(cx, cy, r, endAngle);
+  const end = polarPoint(cx, cy, r, startAngle);
+  const largeArc = (endAngle - startAngle) <= 180 ? 0 : 1;
+  return `M ${cx} ${cy} L ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 0 ${end.x.toFixed(2)} ${end.y.toFixed(2)} Z`;
+}
+// withLegend=false 只畫圓餅本身（不附文字清單），用在旁邊已經有排行榜清單的地方，避免資訊重複
+function renderPieChart(container, items, total, withLegend){
+  if(withLegend === undefined) withLegend = true;
+  if(!items.length || !total){
+    container.innerHTML = withLegend ? `<div class="empty">這段期間沒有支出資料。</div>` : '';
+    return;
+  }
+  const cx = 75, cy = 75, r = 70;
+  let angle = 0;
+  const slices = items.map(([label, val], i) => {
+    const pct = val / total;
+    const startAngle = angle;
+    const endAngle = angle + pct * 360;
+    angle = endAngle;
+    const color = PIE_COLORS[i % PIE_COLORS.length];
+    const path = items.length === 1
+      ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>`
+      : `<path d="${pieSlicePath(cx, cy, r, startAngle, endAngle)}" fill="${color}"/>`;
+    return { path, label, val, pct, color };
+  });
+  const svg = `<svg viewBox="0 0 150 150">${slices.map(s => s.path).join('')}</svg>`;
+  if(!withLegend){ container.innerHTML = svg; return; }
+  const legend = slices.map(s => `
+    <div class="pie-legend-row">
+      <span class="pie-legend-dot" style="background:${s.color}"></span>
+      <span class="pie-legend-label">${s.label}</span>
+      <span class="pie-legend-value">$${fmt(s.val)}（${Math.round(s.pct*100)}%）</span>
+    </div>`).join('');
+  container.innerHTML = `${svg}<div class="pie-legend">${legend}</div>`;
+}
+
+// ---------- 支出去了哪裡：排行榜（金額＋佔比＋筆數／平均＋跟上期比） ----------
+function categoryStatsFor(rows, type){
+  const map = {};
+  let total = 0;
+  rows.filter(t => t.type === type).forEach(t => {
+    const cat = t.category || '其他';
+    const amt = Number(t.amount) || 0;
+    if(!map[cat]) map[cat] = { total: 0, count: 0 };
+    map[cat].total += amt;
+    map[cat].count += 1;
+    total += amt;
+  });
+  return { total, map };
+}
+function renderCategoryRanking(container, cur, prev){
+  const entries = Object.entries(cur.map).sort((a,b) => b[1].total - a[1].total);
+  if(!entries.length){
+    container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
+    return;
+  }
+  container.innerHTML = entries.map(([cat, info], i) => {
+    const pct = cur.total ? Math.round(info.total / cur.total * 100) : 0;
+    const avg = info.count ? info.total / info.count : 0;
+    const prevTotal = (prev.map[cat] && prev.map[cat].total) || 0;
+    const diff = info.total - prevTotal;
+    let moverHtml = '<span></span>';
+    if(prevTotal > 0.005 || Math.abs(diff) > 0.005){
+      if(Math.abs(diff) < 0.005){
+        moverHtml = `<span class="rank-mover flat">— 跟上期持平</span>`;
+      } else {
+        const cls = diff > 0 ? 'up' : 'down';
+        const arrow = diff > 0 ? '▲' : '▼';
+        moverHtml = `<span class="rank-mover ${cls}">${arrow} $${fmt(Math.abs(diff))} 較上期</span>`;
+      }
+    }
+    return `<div class="rank-row">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-bar-wrap">
+        <div class="rank-top">
+          <span class="rank-label"><span class="rank-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>${escapeHtml(cat)}</span>
+          <span class="rank-value">$${fmt(info.total)}（${pct}%）</span>
+        </div>
+        <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
+        <div class="rank-meta">
+          <span>${info.count} 筆 · 平均 $${fmt(avg)}</span>
+          ${moverHtml}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- 固定支出 vs 彈性支出 ----------
+function renderFixedVsFlexible(container, rows){
+  const expenseRows = rows.filter(t => t.type === 'expense');
+  const total = expenseRows.reduce((s,t) => s + (Number(t.amount)||0), 0);
+  if(!total){
+    container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
+    return;
+  }
+  const fixed = expenseRows.filter(t => t.recurringId).reduce((s,t) => s + (Number(t.amount)||0), 0);
+  const flexible = total - fixed;
+  const parts = [
+    { label: '固定支出', val: fixed, color: 'var(--gold)' },
+    { label: '彈性支出', val: flexible, color: 'var(--red)' }
+  ];
+  container.innerHTML = parts.map(p => {
+    const pct = total ? Math.round(p.val / total * 100) : 0;
+    return `<div class="stat-bar-row">
+      <div class="stat-bar-label" style="width:56px;">${p.label}</div>
+      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${pct}%; background:${p.color};"></div></div>
+      <div class="stat-bar-value">$${fmt(p.val)}（${pct}%）</div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- 預算追蹤（存在這台裝置的瀏覽器裡，跟類別設定一樣） ----------
+const BUDGET_KEY = 'fin_budgets_v1'; // { [主類別 或 "__total__"]: 每月預算金額 }
+const BUDGET_TOTAL_KEY = '__total__';
+function loadBudgets(){
+  try{
+    const raw = localStorage.getItem(BUDGET_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && typeof parsed === 'object') return parsed;
+    }
+  }catch(e){}
+  return {};
+}
+function saveBudgets(map){ localStorage.setItem(BUDGET_KEY, JSON.stringify(map)); }
+function setBudget(cat, amount){
+  const map = loadBudgets();
+  if(amount > 0) map[cat] = amount; else delete map[cat];
+  saveBudgets(map);
+}
+function removeBudget(cat){
+  const map = loadBudgets();
+  delete map[cat];
+  saveBudgets(map);
+}
+function populateBudgetCatOptions(){
+  const sel = $('#budgetCatSelect');
+  const keep = sel.value;
+  const names = getCategoryNames('expense');
+  sel.innerHTML = `<option value="${BUDGET_TOTAL_KEY}">整體支出（不分類別）</option>` +
+    names.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if(Array.from(sel.options).some(o => o.value === keep)) sel.value = keep;
+}
+function renderBudgetSection(period, expenseByCat, totalExpense){
+  const section = $('#statsBudgetSection');
+  if(statsMode !== 'month'){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  populateBudgetCatOptions();
+  const budgets = loadBudgets();
+  const entries = Object.entries(budgets);
+  const list = $('#budgetList');
+  if(!entries.length){
+    list.innerHTML = `<div class="empty">尚未設定預算。設定後，這裡會顯示每個類別（或整體）本月花了多少、還剩多少，超支會提醒你。</div>`;
+    return;
+  }
+  const withUsage = entries.map(([cat, amt]) => {
+    const spent = cat === BUDGET_TOTAL_KEY ? totalExpense : (expenseByCat[cat] || 0);
+    const pct = amt ? Math.round(spent / amt * 100) : 0;
+    return { cat, amt: Number(amt) || 0, spent, pct };
+  }).sort((a,b) => (a.cat === BUDGET_TOTAL_KEY ? -1 : b.cat === BUDGET_TOTAL_KEY ? 1 : b.pct - a.pct));
+
+  list.innerHTML = withUsage.map(b => {
+    const label = b.cat === BUDGET_TOTAL_KEY ? '整體支出' : b.cat;
+    const barPct = Math.max(0, Math.min(100, b.pct));
+    const cls = b.pct >= 100 ? 'danger' : (b.pct >= 70 ? 'warn' : 'ok');
+    const remain = b.amt - b.spent;
+    const remainText = remain >= 0 ? `剩 $${fmt(remain)}` : `超支 $${fmt(Math.abs(remain))}`;
+    return `<div class="budget-row">
+      <div class="budget-row-top">
+        <span>${escapeHtml(label)}</span>
+        <span>$${fmt(b.spent)} / $${fmt(b.amt)}</span>
+      </div>
+      <div class="budget-track"><div class="budget-fill ${cls}" style="width:${barPct}%"></div></div>
+      <div class="budget-row-bottom">
+        <span class="${cls}">${b.pct}%</span>
+        <span>${remainText}</span>
+        <button type="button" class="small danger" data-del-budget="${escapeHtml(b.cat)}">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+$('#budgetSaveBtn').addEventListener('click', () => {
+  const cat = $('#budgetCatSelect').value;
+  const amt = parseFloat($('#budgetAmountInput').value);
+  if(!amt || amt <= 0){ alert('請輸入大於 0 的預算金額。'); return; }
+  setBudget(cat, amt);
+  $('#budgetAmountInput').value = '';
+  renderStats();
+});
+$('#budgetList').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-del-budget]');
+  if(!btn) return;
+  removeBudget(btn.dataset.delBudget);
+  renderStats();
+});
+
+// ---------- 每日消費節奏（月模式）----------
+function daysElapsedInPeriod(period, mode){
+  if(!period) return 0;
+  const now = new Date();
+  if(mode === 'month'){
+    const [y, m] = period.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const isCurrent = period === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    if(isCurrent) return now.getDate();
+    const isFuture = new Date(y, m - 1, 1) > now;
+    return isFuture ? 0 : daysInMonth;
+  }
+  const y = parseInt(period, 10);
+  if(!y) return 0;
+  const isCurrent = y === now.getFullYear();
+  if(isCurrent){
+    const start = new Date(y, 0, 1);
+    return Math.floor((now - start) / 86400000) + 1;
+  }
+  if(y > now.getFullYear()) return 0;
+  return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+}
+function totalDaysInPeriod(period, mode){
+  if(!period) return 0;
+  if(mode === 'month'){
+    const [y, m] = period.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  }
+  const y = parseInt(period, 10) || 0;
+  return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+}
+function renderDailyRhythm(period){
+  const section = $('#statsDailySection');
+  if(statsMode !== 'month' || !period){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  const [y, m] = period.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const daily = Array(daysInMonth).fill(0);
+  state.transactions.forEach(t => {
+    if(t.type !== 'expense') return;
+    const d = t.date || '';
+    if(!d.startsWith(period)) return;
+    const day = parseInt(d.slice(8,10), 10);
+    if(day >= 1 && day <= daysInMonth) daily[day-1] += Number(t.amount) || 0;
+  });
+  const maxVal = Math.max(...daily, 0);
+  const now = new Date();
+  const isCurrentMonth = period === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const todayDay = isCurrentMonth ? now.getDate() : null;
+
+  $('#statsDailyChart').innerHTML = `<div class="day-chart">${daily.map((val, i) => {
+    const day = i + 1;
+    const pct = maxVal ? Math.round(val / maxVal * 100) : 0;
+    const dow = new Date(y, m - 1, day).getDay();
+    const weekend = dow === 0 || dow === 6;
+    const isToday = todayDay === day;
+    const height = val > 0 ? Math.max(pct, 4) : 0;
+    return `<div class="day-bar${weekend ? ' weekend' : ''}${isToday ? ' today' : ''}" title="${m}/${day}：$${fmt(val)}">
+      <div class="day-bar-fill" style="height:${height}%"></div>
+    </div>`;
+  }).join('')}</div>`;
+
+  const spendDays = daily.filter(v => v > 0).length;
+  const daysElapsed = Math.min(daysInMonth, daysElapsedInPeriod(period, 'month')) || daysInMonth;
+  const noSpendDays = daysElapsed - spendDays;
+  let maxDay = 0, maxDayVal = 0;
+  daily.forEach((v, i) => { if(v > maxDayVal){ maxDayVal = v; maxDay = i + 1; } });
+  $('#statsDailyHighlights').innerHTML = `
+    <div class="day-highlight-row"><span>花費最高的一天</span><b>${maxDayVal ? `${m}/${maxDay}（$${fmt(maxDayVal)}）` : '—'}</b></div>
+    <div class="day-highlight-row"><span>無消費天數</span><b>${Math.max(0, noSpendDays)} / ${daysElapsed} 天（已過的天數）</b></div>
+  `;
+}
+
+function renderStats(){
+  populateStatsYearOptions();
+  if(!$('#statsMonthInput').value){
+    const now = new Date();
+    $('#statsMonthInput').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  const period = currentStatsPeriod();
+  const rows = transactionsInPeriod(period);
+
+  const incomeTotal = rows.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const expenseTotal = rows.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const net = incomeTotal - expenseTotal;
+
+  // ① 本期關鍵指標：收支結餘之外，加上儲蓄率、日均花費、（未過完的期間）預估總支出
+  const daysElapsed = Math.max(daysElapsedInPeriod(period, statsMode), 0);
+  const totalDaysN = totalDaysInPeriod(period, statsMode);
+  const dailyAvg = daysElapsed > 0 ? expenseTotal / daysElapsed : 0;
+  const savingsRate = incomeTotal > 0 ? (net / incomeTotal * 100) : null;
+  const isPartial = daysElapsed > 0 && daysElapsed < totalDaysN;
+  const projected = isPartial ? dailyAvg * totalDaysN : null;
+
+  $('#statsSummaryGrid').innerHTML = `
+    <div class="summary-card"><div class="label">收入</div><div class="value" style="color:var(--green)">$${fmt(incomeTotal)}</div></div>
+    <div class="summary-card"><div class="label">支出</div><div class="value" style="color:var(--red)">$${fmt(expenseTotal)}</div></div>
+    <div class="summary-card"><div class="label">結餘</div><div class="value">$${fmt(net)}</div></div>
+    <div class="summary-card"><div class="label">儲蓄率</div><div class="value">${savingsRate === null ? '—' : fmt(savingsRate) + '%'}</div></div>
+    <div class="summary-card"><div class="label">日均花費</div><div class="value">$${fmt(dailyAvg)}</div></div>
+    ${projected !== null ? `<div class="summary-card"><div class="label">預估${statsMode==='month'?'月底':'年底'}總支出</div><div class="value" style="color:var(--red)">$${fmt(projected)}</div></div>` : ''}
+  `;
+
+  renderCompare(period, expenseTotal);
+
+  // ② 支出去了哪裡：排行榜（跟上一期比較誰漲最多、誰降最多）
+  const prevPeriod = previousPeriodStr(period, statsMode);
+  const curExpStats = categoryStatsFor(rows, 'expense');
+  const prevExpStats = categoryStatsFor(transactionsInPeriod(prevPeriod), 'expense');
+  const rankedItems = Object.entries(curExpStats.map).sort((a,b) => b[1].total - a[1].total).map(([cat, info]) => [cat, info.total]);
+  renderPieChart($('#statsExpensePie'), rankedItems, curExpStats.total, false);
+  renderCategoryRanking($('#statsCategoryRank'), curExpStats, prevExpStats);
+
+  // ③ 預算追蹤
+  const expenseByCat = {};
+  Object.entries(curExpStats.map).forEach(([cat, info]) => { expenseByCat[cat] = info.total; });
+  renderBudgetSection(period, expenseByCat, expenseTotal);
+
+  // ④ 固定 vs 彈性支出
+  renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
+
+  // ⑤ 消費節奏：月模式顯示每日長條圖，年模式顯示每月趨勢
+  renderDailyRhythm(period);
+  const trendSection = $('#statsYearlyTrendSection');
+  if(statsMode === 'year' && period){
+    trendSection.style.display = '';
+    const monthlyExpense = Array(12).fill(0);
+    let maxVal = 0;
+    state.transactions.forEach(t => {
+      if(t.type !== 'expense') return;
+      const d = t.date || '';
+      if(!d.startsWith(period)) return;
+      const m = parseInt(d.slice(5,7), 10) - 1;
+      if(m >= 0 && m < 12){
+        monthlyExpense[m] += Number(t.amount) || 0;
+        maxVal = Math.max(maxVal, monthlyExpense[m]);
+      }
+    });
+    $('#statsYearlyTrend').innerHTML = monthlyExpense.map((val, i) => {
+      const pct = maxVal ? Math.round(val/maxVal*100) : 0;
+      return `<div class="stat-bar-row">
+        <div class="stat-bar-label">${i+1} 月</div>
+        <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
+        <div class="stat-bar-value">$${fmt(val)}</div>
+      </div>`;
+    }).join('');
+  } else {
+    trendSection.style.display = 'none';
+  }
+
+  // ⑥ 收入來源
+  const inc = breakdownByCategory(rows, 'income');
+  renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
+
+  // ⑦ 進階查詢（類別月份分佈，預設收合）
+  renderDistribution();
+}
+
+// ---------- 類別月份分佈（依主類別 / 子類別看每個月支出） ----------
+function populateDistYearOptions(){
+  const years = new Set(state.transactions.map(t => (t.date||'').slice(0,4)).filter(Boolean));
+  const thisYear = String(new Date().getFullYear());
+  years.add(thisYear);
+  const sel = $('#distYearInput');
+  const keep = sel.value || thisYear;
+  years.add(keep);
+  const sorted = Array.from(years).sort((a,b) => b.localeCompare(a));
+  sel.innerHTML = sorted.map(y => `<option value="${y}">${y} 年</option>`).join('');
+  sel.value = keep;
+}
+function populateDistCategoryOptions(){
+  const sel = $('#distCategoryInput');
+  const keep = sel.value;
+  const names = getCategoryNames('expense');
+  sel.innerHTML = `<option value="">全部主類別</option>` + names.map(c => `<option value="${c}">${c}</option>`).join('');
+  sel.value = names.includes(keep) ? keep : '';
+}
+function populateDistSubcategoryOptions(mainCat){
+  const sel = $('#distSubcategoryInput');
+  const keep = sel.value;
+  if(!mainCat){
+    sel.innerHTML = `<option value="">不分子類別</option>`;
+    sel.value = '';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  const subs = getSubcategories('expense', mainCat);
+  sel.innerHTML = `<option value="">不分子類別</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('');
+  sel.value = subs.includes(keep) ? keep : '';
+}
+function distBarRow(label, val, total){
+  const pct = total ? Math.round(val/total*100) : 0;
+  return `<div class="stat-bar-row">
+    <div class="stat-bar-label">${label}</div>
+    <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
+    <div class="stat-bar-value">$${fmt(val)}</div>
+  </div>`;
+}
+function renderDistribution(){
+  populateDistYearOptions();
+  populateDistCategoryOptions();
+  const year = $('#distYearInput').value;
+  const mainCat = $('#distCategoryInput').value;
+  populateDistSubcategoryOptions(mainCat);
+  const subCat = $('#distSubcategoryInput').value;
+
+  const container = $('#statsDistribution');
+  const blocks = [];
+  for(let i = 0; i < 12; i++){
+    const period = `${year}-${String(i+1).padStart(2,'0')}`;
+    const rows = state.transactions.filter(t => t.type === 'expense' && (t.date||'').startsWith(period));
+    if(!mainCat){
+      const map = {};
+      let total = 0;
+      rows.forEach(t => {
+        const cat = t.category || '其他';
+        const amt = Number(t.amount) || 0;
+        map[cat] = (map[cat] || 0) + amt;
+        total += amt;
+      });
+      const items = Object.entries(map).sort((a,b) => b[1]-a[1]);
+      const body = items.length ? items.map(([label,val]) => distBarRow(label, val, total)).join('') : `<div class="empty">無資料</div>`;
+      blocks.push(`<div class="dist-month-block"><div class="dist-month-title">${i+1} 月（共 $${fmt(total)}）</div>${body}</div>`);
+    } else {
+      const filtered = rows.filter(t => t.category === mainCat && (!subCat || t.subcategory === subCat));
+      const total = filtered.reduce((s,t) => s + (Number(t.amount)||0), 0);
+      let body = '';
+      if(!subCat){
+        const map = {};
+        filtered.forEach(t => {
+          const sub = t.subcategory || '（未分子類別）';
+          map[sub] = (map[sub] || 0) + (Number(t.amount) || 0);
+        });
+        const items = Object.entries(map).sort((a,b) => b[1]-a[1]);
+        body = items.length ? items.map(([label,val]) => distBarRow(label, val, total)).join('') : '';
+      }
+      blocks.push(`<div class="dist-month-block"><div class="dist-month-title">${i+1} 月 · $${fmt(total)}</div>${body}</div>`);
+    }
+  }
+  container.innerHTML = blocks.join('');
+}
+$('#distYearInput').addEventListener('change', renderDistribution);
+$('#distCategoryInput').addEventListener('change', renderDistribution);
+$('#distSubcategoryInput').addEventListener('change', renderDistribution);
+
+// 記帳頁：紀錄 / 共同帳本 / 固定項目 / 統計分析 / 匯入 / 類別設定 子分頁切換
+const TR_SUBS = ['records','ledger','transfer','recurring','stats','import','categories'];
+$('#trSubNav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-sub]');
+  if(!btn) return;
+  $$('#trSubNav button').forEach(b => b.classList.toggle('active', b === btn));
+  TR_SUBS.forEach(sub => { $('#trSub-' + sub).style.display = (sub === btn.dataset.sub) ? '' : 'none'; });
+  if(btn.dataset.sub === 'stats') renderStats();
+  if(btn.dataset.sub === 'ledger') renderLedger();
+  if(btn.dataset.sub === 'recurring') renderRecurring();
+  if(btn.dataset.sub === 'categories') renderCategories();
+  if(btn.dataset.sub === 'records') $('#trDetails').open = true;
+});
+window.goToRecurringTab = function(){
+  const btn = $('#trSubNav button[data-sub="recurring"]');
+  if(btn) btn.click();
+};
+
+// 統計：月/年 模式切換
+$('#statsModeNav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-mode]');
+  if(!btn) return;
+  statsMode = btn.dataset.mode;
+  $$('#statsModeNav button').forEach(b => b.classList.toggle('active', b === btn));
+  $('#statsMonthInput').style.display = statsMode === 'month' ? '' : 'none';
+  $('#statsYearInput').style.display = statsMode === 'year' ? '' : 'none';
+  renderStats();
+});
+$('#statsMonthInput').addEventListener('change', renderStats);
+$('#statsYearInput').addEventListener('change', renderStats);
+
+// ---------- Accounts CRUD ----------
+$('#accountForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = {
+    id: $('#accId').value || undefined,
+    name: $('#accName').value,
+    type: $('#accType').value,
+    balance: parseFloat($('#accBalance').value) || 0,
+    interestRate: $('#accRate').value ? parseFloat($('#accRate').value) : '',
+    note: $('#accNote').value
+  };
+  try{
+    await runBusy(async () => {
+      let saved;
+      if(data.id) saved = await apiPost('update','accounts',data);
+      else { delete data.id; saved = await apiPost('add','accounts',data); }
+      upsertLocal('accounts', saved);
+      resetAccountForm();
+      $('#accountDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#accCancel').addEventListener('click', resetAccountForm);
+function resetAccountForm(){
+  $('#accId').value=''; $('#accName').value=''; $('#accType').value='現金';
+  $('#accBalance').value=''; $('#accRate').value=''; $('#accNote').value='';
+}
+window.editAccount = id => {
+  const a = state.accounts.find(x => x.id === id);
+  if(!a) return;
+  $('#accId').value=a.id; $('#accName').value=a.name; $('#accType').value=a.type;
+  $('#accBalance').value=a.balance; $('#accRate').value=a.interestRate || '';
+  $('#accNote').value=a.note || '';
+  $('#accountDetails').open = true;
+  $('#accountDetails').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteAccount = async id => {
+  if(!confirm('確定刪除這個帳戶？')) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','accounts',{id});
+      removeLocal('accounts', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- Interest CRUD ----------
+$('#interestForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const accountId = $('#intAccount').value;
+  const amount = parseFloat($('#intAmount').value) || 0;
+  const data = { accountId, date: $('#intDate').value, amount, note: $('#intNote').value };
+  try{
+    await runBusy(async () => {
+      const saved = await apiPost('add','interest',data);
+      upsertLocal('interest', saved);
+      const acc = state.accounts.find(a => a.id === accountId);
+      if(acc){
+        const updatedAcc = await apiPost('update','accounts',{ ...acc, balance: (Number(acc.balance)||0) + amount });
+        upsertLocal('accounts', updatedAcc);
+      }
+      $('#interestForm').reset();
+      renderAll();
+    }, '新增中…');
+  }catch(err){ alert('新增失敗：' + err.message); }
+});
+window.deleteInterest = async id => {
+  if(!confirm('確定刪除這筆利息紀錄？（不會自動從餘額扣回，請自行到帳戶調整）')) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','interest',{id});
+      removeLocal('interest', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- Liabilities CRUD ----------
+$('#liabilityForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = {
+    id: $('#liaId').value || undefined,
+    name: $('#liaName').value,
+    amount: parseFloat($('#liaAmount').value) || 0,
+    dueDate: $('#liaDue').value,
+    paid: $('#liaPaid').value,
+    note: $('#liaNote').value
+  };
+  try{
+    await runBusy(async () => {
+      let saved;
+      if(data.id) saved = await apiPost('update','liabilities',data);
+      else { delete data.id; saved = await apiPost('add','liabilities',data); }
+      upsertLocal('liabilities', saved);
+      resetLiabilityForm();
+      $('#liabilityDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#liaCancel').addEventListener('click', resetLiabilityForm);
+function resetLiabilityForm(){
+  $('#liaId').value=''; $('#liaName').value=''; $('#liaAmount').value='';
+  $('#liaDue').value=''; $('#liaPaid').value='false'; $('#liaNote').value='';
+}
+window.editLiability = id => {
+  const l = state.liabilities.find(x => x.id === id);
+  if(!l) return;
+  $('#liaId').value=l.id; $('#liaName').value=l.name; $('#liaAmount').value=l.amount;
+  $('#liaDue').value=l.dueDate || ''; $('#liaPaid').value=String(l.paid);
+  $('#liaNote').value=l.note || '';
+  $('#liabilityDetails').open = true;
+  $('#liabilityDetails').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteLiability = async id => {
+  if(!confirm('確定刪除這個負債項目？')) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','liabilities',{id});
+      removeLocal('liabilities', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- Transactions (記帳) CRUD ----------
+(function initTrDefaults(){
+  const now = new Date();
+  $('#trDate').value = now.toISOString().slice(0,10);
+  $('#trFilterMonth').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  populateTrCategories('expense');
+})();
+
+$$('.type-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => setTrType(btn.dataset.type));
+});
+
+$('#trShared').addEventListener('change', () => {
+  $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
+});
+
+$('#trFilterMonth').addEventListener('change', renderTransactions);
+$('#trShowAll').addEventListener('change', () => {
+  $('#trFilterMonth').disabled = $('#trShowAll').checked;
+  renderTransactions();
+});
+
+// 記帳新增/編輯/刪除都是「一次 exec 內同時處理記帳列 + 帳戶餘額」的複合動作（見 Code.gs 的
+// addTransactionTx / updateTransactionTx / deleteTransactionTx），比以前「新增記帳→更新帳戶
+// →重新整批下載」快非常多，也不用整批重抓資料。
+$('#trForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = $('#trId').value || undefined;
+  const type = $('#trType').value;
+  const amount = parseFloat($('#trAmount').value) || 0;
+  const accountId = $('#trAccount').value;
+  const shared = $('#trShared').checked;
+  const data = {
+    id,
+    date: $('#trDate').value,
+    type,
+    category: $('#trCategory').value,
+    subcategory: $('#trSubcategory').value,
+    amount,
+    accountId,
+    note: $('#trNote').value,
+    payer: shared ? $('#trPayer').value : 'me',
+    splitMode: shared ? $('#trSplitMode').value : 'personal',
+    settled: false
+  };
+  try{
+    await runBusy(async () => {
+      let result;
+      if(id){
+        result = await apiPost('updateTransactionTx','transactions',data);
+        upsertLocal('transactions', result.transaction);
+        (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      } else {
+        delete data.id;
+        result = await apiPost('addTransactionTx','transactions',data);
+        upsertLocal('transactions', result.transaction);
+        if(result.account) upsertLocal('accounts', result.account);
+      }
+      resetTransactionForm();
+      $('#trDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#trCancel').addEventListener('click', resetTransactionForm);
+function resetTransactionForm(){
+  $('#trId').value = '';
+  $('#trDate').value = new Date().toISOString().slice(0,10);
+  $('#trAmount').value = '';
+  $('#trAccount').value = defaultCashAccountId();
+  $('#trNote').value = '';
+  $('#trShared').checked = false;
+  $('#trLedgerFields').style.display = 'none';
+  $('#trPayer').value = 'me';
+  $('#trSplitMode').value = 'split';
+  setTrType('expense');
+}
+window.editTransaction = id => {
+  const t = state.transactions.find(x => x.id === id);
+  if(!t) return;
+  $('#trId').value = t.id;
+  $('#trDate').value = t.date;
+  $('#trAmount').value = t.amount;
+  setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
+  $('#trAccount').value = t.accountId || '';
+  $('#trNote').value = t.note || '';
+  const shared = t.splitMode && t.splitMode !== 'personal';
+  $('#trShared').checked = shared;
+  $('#trLedgerFields').style.display = shared ? '' : 'none';
+  $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+  $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  $('#trDetails').open = true;
+  $('#trDetails').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteTransaction = async id => {
+  if(!confirm('確定刪除這筆記帳？若有連結帳戶，餘額會自動還原。')) return;
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('deleteTransactionTx','transactions',{id});
+      removeLocal('transactions', id);
+      if(result.account) upsertLocal('accounts', result.account);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- 固定項目（房租/健保費/訂閱費用...每月自動填寫） ----------
+function currentMonthStr(){
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+function populateRecCategories(type, selected, selectedSub){
+  const sel = $('#recCategory');
+  const names = getCategoryNames(type);
+  sel.innerHTML = names.map(c => `<option value="${c}">${c}</option>`).join('');
+  if(selected && names.includes(selected)) sel.value = selected;
+  else if(names.length) sel.value = names[0];
+  populateRecSubcategories(type, sel.value, selectedSub);
+}
+function populateRecSubcategories(type, mainName, selectedSub){
+  const sel = $('#recSubcategory');
+  const subs = getSubcategories(type, mainName);
+  sel.innerHTML = `<option value="">不指定</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('');
+  if(selectedSub && subs.includes(selectedSub)) sel.value = selectedSub;
+  else sel.value = '';
+}
+$('#recCategory').addEventListener('change', () => {
+  populateRecSubcategories($('#recType').value, $('#recCategory').value);
+});
+function setRecType(type, selectedCategory, selectedSub){
+  $('#recType').value = type;
+  $$('#recForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.rectype === type));
+  populateRecCategories(type, selectedCategory, selectedSub);
+}
+$$('#recForm .type-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => setRecType(btn.dataset.rectype));
+});
+(function initRecDefaults(){ populateRecCategories('expense'); })();
+
+// 找出目前這個月，啟用中但還沒被加入記帳的固定項目
+function pendingRecurringForMonth(month){
+  const doneIds = new Set(
+    state.transactions.filter(t => (t.date||'').slice(0,7) === month && t.recurringId).map(t => String(t.recurringId))
+  );
+  return state.recurring.filter(t => String(t.active) !== 'false' && !doneIds.has(String(t.id)));
+}
+
+function renderRecurringBanner(){
+  const el = $('#recurringBanner');
+  const month = currentMonthStr();
+  const pending = pendingRecurringForMonth(month);
+  if(!pending.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="recurring-banner">
+    <div><b>本月（${month}）有 ${pending.length} 筆固定項目還沒加入記帳：</b>${pending.map(t=>t.name).join('、')}</div>
+    <div class="form-actions">
+      <button type="button" class="primary small" onclick="goToRecurringTab()">前往「固定項目」加入</button>
+    </div>
+  </div>`;
+}
+
+function renderRecurringPending(){
+  const wrap = $('#recurringPendingList');
+  const month = currentMonthStr();
+  const pending = pendingRecurringForMonth(month);
+  if(!state.recurring.length){
+    wrap.innerHTML = `<div class="empty">尚未設定任何固定項目。</div>`;
+    return;
+  }
+  if(!pending.length){
+    wrap.innerHTML = `<div class="empty">本月（${month}）的固定項目都已經加入記帳了。</div>`;
+    return;
+  }
+  wrap.innerHTML = pending.map(t => `
+    <div class="recurring-pending-item">
+      <label><input type="checkbox" class="recPendingCheck" value="${t.id}" checked>
+        ${t.name}（${t.category || ''}）$${fmt(t.amount)}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}
+      </label>
+    </div>`).join('') +
+    `<div class="form-actions" style="margin-top:10px;">
+      <button type="button" class="primary" id="recRunSelectedBtn">把勾選的加入本月記帳</button>
+    </div>`;
+  $('#recRunSelectedBtn').addEventListener('click', runSelectedRecurring);
+}
+
+async function runSelectedRecurring(){
+  const ids = $$('.recPendingCheck:checked').map(cb => cb.value);
+  if(!ids.length){ alert('請先勾選要加入的固定項目。'); return; }
+  const month = currentMonthStr();
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('runRecurringTemplates','transactions',{ month, ids });
+      (result.created || []).forEach(tx => upsertLocal('transactions', tx));
+      (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      renderAll();
+    }, '加入記帳中…');
+  }catch(err){ alert('加入失敗：' + err.message); }
+}
+
+function renderRecurring(){
+  renderRecurringBanner();
+  renderRecurringPending();
+  const list = $('#recurringList');
+  if(!state.recurring.length){
+    list.innerHTML = `<div class="empty">尚未設定固定項目，點上方「＋新增／編輯固定項目」開始設定。</div>`;
+    return;
+  }
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  list.innerHTML = state.recurring.map(t => {
+    const active = String(t.active) !== 'false';
+    const isExpense = t.type !== 'income';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${t.name}</div>
+          <span class="badge ${active ? 'paid' : 'unpaid'}">${active ? '啟用中' : '已停用'}</span>
+          <div class="item-note">${t.category || ''}${t.subcategory ? ' · ' + t.subcategory : ''}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}${t.accountId ? ' · ' + (byId[t.accountId] || '（帳戶已刪除）') : ''}${t.note ? ' · ' + t.note : ''}</div>
+        </div>
+        <div class="item-value ${isExpense ? 'expense' : 'income'}">${isExpense ? '-' : '+'}$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="small" onclick="editRecurring('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteRecurring('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+$('#recForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = {
+    id: $('#recId').value || undefined,
+    name: $('#recName').value,
+    type: $('#recType').value,
+    category: $('#recCategory').value,
+    subcategory: $('#recSubcategory').value,
+    amount: parseFloat($('#recAmount').value) || 0,
+    accountId: $('#recAccount').value,
+    dayOfMonth: $('#recDay').value ? parseInt($('#recDay').value, 10) : '',
+    note: $('#recNote').value,
+    active: $('#recActive').checked
+  };
+  try{
+    await runBusy(async () => {
+      let saved;
+      if(data.id) saved = await apiPost('update','recurring',data);
+      else { delete data.id; saved = await apiPost('add','recurring',data); }
+      upsertLocal('recurring', saved);
+      resetRecurringForm();
+      $('#recDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#recCancel').addEventListener('click', resetRecurringForm);
+function resetRecurringForm(){
+  $('#recId').value=''; $('#recName').value=''; $('#recAmount').value='';
+  $('#recAccount').value=''; $('#recDay').value=''; $('#recNote').value='';
+  $('#recActive').checked = true;
+  setRecType('expense');
+}
+window.editRecurring = id => {
+  const t = state.recurring.find(x => x.id === id);
+  if(!t) return;
+  $('#recId').value = t.id;
+  $('#recName').value = t.name;
+  setRecType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
+  $('#recAmount').value = t.amount;
+  $('#recAccount').value = t.accountId || '';
+  $('#recDay').value = t.dayOfMonth || '';
+  $('#recNote').value = t.note || '';
+  $('#recActive').checked = String(t.active) !== 'false';
+  $('#recDetails').open = true;
+  $('#recDetails').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteRecurring = async id => {
+  if(!confirm('確定刪除這個固定項目？（已經加入過的記帳紀錄不會被刪除）')) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','recurring',{id});
+      removeLocal('recurring', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- 類別設定（管理主類別 / 子類別，可新增、編輯、刪除） ----------
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function refreshCategoryDependents(){
+  populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
+  populateRecCategories($('#recType').value, $('#recCategory').value, $('#recSubcategory').value);
+}
+function renderCategoryBlocks(type){
+  const wrap = $(type === 'expense' ? '#catBlocksExpense' : '#catBlocksIncome');
+  const tree = getCategoryTree(type);
+  if(!tree.length){
+    wrap.innerHTML = `<div class="empty">尚無主類別，請在下方新增。</div>`;
+    return;
+  }
+  wrap.innerHTML = tree.map(m => `
+    <div class="main-cat-block">
+      <div class="main-cat-head">
+        <span class="main-cat-name">${escapeHtml(m.name)}</span>
+        <button type="button" class="small catRenameMainBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}">重新命名</button>
+        <button type="button" class="small danger catRemoveMainBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}">刪除</button>
+      </div>
+      <div class="sub-cat-row">
+        ${(m.subs || []).map(s => `
+          <span class="sub-chip">
+            <span class="catRenameSubBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" data-cat-sub="${escapeHtml(s)}" style="cursor:pointer;">${escapeHtml(s)}</span>
+            <button type="button" class="catRemoveSubBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" data-cat-sub="${escapeHtml(s)}" title="刪除">×</button>
+          </span>`).join('') || `<span class="item-note" style="margin:0;">（尚無子類別）</span>`}
+      </div>
+      <div class="sub-add-row">
+        <input type="text" class="catAddSubInput" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" placeholder="新增子類別">
+        <button type="button" class="catAddSubBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}">新增</button>
+      </div>
+    </div>`).join('');
+}
+function renderCategories(){
+  renderCategoryBlocks('expense');
+  renderCategoryBlocks('income');
+}
+
+function handleAddMainCategory(type, inputSel){
+  const input = $(inputSel);
+  const ok = addMainCategory(type, input.value);
+  if(!ok){ alert('請輸入尚未存在的主類別名稱。'); return; }
+  input.value = '';
+  renderCategories();
+  refreshCategoryDependents();
+}
+$('#catAddExpenseBtn').addEventListener('click', () => handleAddMainCategory('expense', '#catAddExpense'));
+$('#catAddIncomeBtn').addEventListener('click', () => handleAddMainCategory('income', '#catAddIncome'));
+$('#catAddExpense').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddMainCategory('expense', '#catAddExpense'); } });
+$('#catAddIncome').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddMainCategory('income', '#catAddIncome'); } });
+
+function handleCategoryBlockClick(e){
+  const renameMain = e.target.closest('.catRenameMainBtn');
+  if(renameMain){
+    const { catType, catMain } = renameMain.dataset;
+    const next = prompt(`重新命名主類別「${catMain}」：`, catMain);
+    if(next === null) return;
+    if(!renameMainCategory(catType, catMain, next)){ alert('名稱不能為空，也不能跟現有主類別重複。'); return; }
+    renderCategories();
+    refreshCategoryDependents();
+    return;
+  }
+  const removeMain = e.target.closest('.catRemoveMainBtn');
+  if(removeMain){
+    const { catType, catMain } = removeMain.dataset;
+    if(!confirm(`確定刪除主類別「${catMain}」嗎？（連同底下子類別，不會影響已經記過的舊資料）`)) return;
+    removeMainCategory(catType, catMain);
+    renderCategories();
+    refreshCategoryDependents();
+    return;
+  }
+  const renameSub = e.target.closest('.catRenameSubBtn');
+  if(renameSub){
+    const { catType, catMain, catSub } = renameSub.dataset;
+    const next = prompt(`重新命名子類別「${catSub}」（主類別：${catMain}）：`, catSub);
+    if(next === null) return;
+    if(!renameSubCategory(catType, catMain, catSub, next)){ alert('名稱不能為空，也不能跟同一主類別下的子類別重複。'); return; }
+    renderCategories();
+    refreshCategoryDependents();
+    return;
+  }
+  const removeSub = e.target.closest('.catRemoveSubBtn');
+  if(removeSub){
+    const { catType, catMain, catSub } = removeSub.dataset;
+    if(!confirm(`確定刪除子類別「${catSub}」嗎？（不會影響已經記過的舊資料）`)) return;
+    removeSubCategory(catType, catMain, catSub);
+    renderCategories();
+    refreshCategoryDependents();
+    return;
+  }
+  const addSubBtn = e.target.closest('.catAddSubBtn');
+  if(addSubBtn){
+    const { catType, catMain } = addSubBtn.dataset;
+    const input = addSubBtn.parentElement.querySelector('.catAddSubInput');
+    const ok = addSubCategory(catType, catMain, input.value);
+    if(!ok){ alert('請輸入尚未存在的子類別名稱。'); return; }
+    input.value = '';
+    renderCategories();
+    refreshCategoryDependents();
+  }
+}
+$('#catBlocksExpense').addEventListener('click', handleCategoryBlockClick);
+$('#catBlocksIncome').addEventListener('click', handleCategoryBlockClick);
+$('#catBlocksExpense').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.target.classList.contains('catAddSubInput')){
+    e.preventDefault();
+    e.target.nextElementSibling.click();
+  }
+});
+$('#catBlocksIncome').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.target.classList.contains('catAddSubInput')){
+    e.preventDefault();
+    e.target.nextElementSibling.click();
+  }
+});
+
+// ---------- 共同帳本（誰先付、誰欠誰） ----------
+// 每筆記帳只要 splitMode !== 'personal' 就算共同帳本項目：
+//   split   平分：payer 那一方墊了一半屬於對方的錢 → 對方欠 payer 一半金額
+//   advance 全額代墊：整筆其實是對方的花費 → 對方欠 payer 全額
+// settled 為 true 的紀錄不計入餘額（已經轉帳結清過）。
+function ledgerUnsettledItems(){
+  return state.transactions.filter(t =>
+    t.type === 'expense' && t.splitMode && t.splitMode !== 'personal' && String(t.settled) !== 'true'
+  );
+}
+function ledgerOwed(t){
+  const amt = Number(t.amount) || 0;
+  return t.splitMode === 'advance' ? amt : amt / 2;
+}
+function ledgerBalance(items){
+  // 正值 = 對方欠我；負值 = 我欠對方
+  return items.reduce((sum, t) => sum + (t.payer === 'partner' ? -ledgerOwed(t) : ledgerOwed(t)), 0);
+}
+function renderLedger(){
+  const items = ledgerUnsettledItems();
+  const balance = ledgerBalance(items);
+  const valueEl = $('#ledgerBalanceValue');
+  const hintEl = $('#ledgerBalanceHint');
+  if(Math.abs(balance) < 0.01){
+    valueEl.textContent = '打平了';
+    hintEl.textContent = items.length ? '這些項目金額互相抵銷，暫時不用轉帳。' : '尚無未結算的共同帳本紀錄。';
+  } else if(balance > 0){
+    valueEl.textContent = `對方欠你 $${fmt(balance)}`;
+    hintEl.textContent = '累積夠多、方便轉帳時，可以按下方「結算」一次結清。';
+  } else {
+    valueEl.textContent = `你欠對方 $${fmt(-balance)}`;
+    hintEl.textContent = '累積夠多、方便轉帳時，可以按下方「結算」一次結清。';
+  }
+
+  const list = $('#ledgerList');
+  if(!items.length){
+    list.innerHTML = `<div class="empty">目前沒有未結算的共同帳本項目。</div>`;
+    return;
+  }
+  const sorted = [...items].sort((a,b) => (a.date < b.date ? 1 : -1));
+  list.innerHTML = sorted.map(t => {
+    const owed = ledgerOwed(t);
+    const payerLabel = t.payer === 'partner' ? '對方付' : '我付';
+    const modeLabel = t.splitMode === 'advance' ? '全額代墊' : '平分';
+    const direction = t.payer === 'partner' ? '你欠對方' : '對方欠你';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${t.category || '其他'}</div>
+          <div class="item-note">${t.date} · ${payerLabel} · ${modeLabel}${t.note ? ' · ' + t.note : ''}</div>
+        </div>
+        <div class="item-value">$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-meta"><span>${direction} <b>$${fmt(owed)}</b></span></div>
+    </div>`;
+  }).join('');
+}
+$('#ledgerSettleBtn').addEventListener('click', async () => {
+  const items = ledgerUnsettledItems();
+  if(!items.length){ alert('目前沒有需要結算的項目。'); return; }
+  const balance = ledgerBalance(items);
+  const who = balance > 0 ? '對方轉給你' : balance < 0 ? '你轉給對方' : '不用轉帳';
+  if(!confirm(`共 ${items.length} 筆未結算項目，結果為 ${who} $${fmt(Math.abs(balance))}。\n確定這筆錢已經轉帳完成，把這些項目標記為已結算嗎？`)) return;
+  try{
+    await runBusy(async () => {
+      const ids = items.map(t => t.id);
+      await apiPost('settleLedger','transactions',{ ids });
+      items.forEach(t => { t.settled = true; });
+      renderAll();
+    }, '結算中…');
+  }catch(err){ alert('結算失敗：' + err.message); }
+});
+
+// ---------- 帳戶轉帳（現金↔悠遊卡、提領、儲值…） ----------
+// 轉帳用 type:'transfer' 存成一筆 Transactions 紀錄，accountId 是轉出帳戶、
+// toAccountId 是轉入帳戶；後端 addTransactionTx/updateTransactionTx/deleteTransactionTx
+// 會同時調整兩個帳戶的餘額，且不會計入收入／支出統計（統計只看 expense/income）。
+(function initTransferDefaults(){
+  $('#trfDate').value = new Date().toISOString().slice(0,10);
+})();
+
+function transfersList(){
+  return state.transactions.filter(t => t.type === 'transfer').sort((a,b) => (a.date < b.date ? 1 : -1));
+}
+
+function renderTransfers(){
+  const list = $('#transfersList');
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  const rows = transfersList();
+  if(!rows.length){
+    list.innerHTML = `<div class="empty">尚無轉帳紀錄。</div>`;
+    return;
+  }
+  list.innerHTML = rows.map(t => {
+    const fromName = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '（未指定）';
+    const toName = t.toAccountId ? (byId[t.toAccountId] || '（帳戶已刪除）') : '（未指定）';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${fromName} → ${toName}</div>
+          <div class="item-note">${t.date}${t.note ? ' · ' + t.note : ''}</div>
+        </div>
+        <div class="item-value">$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="small danger" onclick="deleteTransfer('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+$('#trfForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const fromId = $('#trfFrom').value;
+  const toId = $('#trfTo').value;
+  const amount = parseFloat($('#trfAmount').value) || 0;
+  if(!fromId || !toId){ alert('請選擇轉出與轉入帳戶。'); return; }
+  if(fromId === toId){ alert('轉出與轉入帳戶不能是同一個。'); return; }
+  if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
+  const data = {
+    date: $('#trfDate').value,
+    type: 'transfer',
+    category: '轉帳',
+    subcategory: '',
+    amount,
+    accountId: fromId,
+    toAccountId: toId,
+    note: $('#trfNote').value,
+    payer: 'me',
+    splitMode: 'personal',
+    settled: false
+  };
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('addTransactionTx','transactions',data);
+      upsertLocal('transactions', result.transaction);
+      (result.accounts || (result.account ? [result.account] : [])).forEach(acc => upsertLocal('accounts', acc));
+      resetTransferForm();
+      $('#trfDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#trfCancel').addEventListener('click', resetTransferForm);
+function resetTransferForm(){
+  $('#trfFrom').value = '';
+  $('#trfTo').value = '';
+  $('#trfAmount').value = '';
+  $('#trfDate').value = new Date().toISOString().slice(0,10);
+  $('#trfNote').value = '';
+}
+window.deleteTransfer = async id => {
+  if(!confirm('確定刪除這筆轉帳？兩個帳戶的餘額會自動還原。')) return;
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('deleteTransactionTx','transactions',{id});
+      removeLocal('transactions', id);
+      (result.accounts || (result.account ? [result.account] : [])).forEach(acc => upsertLocal('accounts', acc));
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- 匯入 CSV ----------
+// 純前端解析 CSV（支援雙引號欄位），對應欄位後用批次寫入（batchAddTransactions），
+// 一次 exec 內寫完所有列，不會一筆一筆來回，匯入大量資料也不會卡很久。
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field = ''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if(c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  const nonEmpty = rows.filter(r => r.some(v => String(v).trim() !== ''));
+  if(!nonEmpty.length) return { headers: [], rows: [] };
+  return { headers: nonEmpty[0], rows: nonEmpty.slice(1) };
+}
+
+let csvParsed = { headers: [], rows: [] };
+
+function guessColumn(headers, keywords){
+  const idx = headers.findIndex(h => keywords.some(k => String(h).toLowerCase().includes(k)));
+  return idx === -1 ? '' : String(idx);
+}
+
+function buildColSelect(select, headers, guessIdx, allowEmpty){
+  const opts = headers.map((h,i) => `<option value="${i}">${h || ('欄位 ' + (i+1))}</option>`);
+  select.innerHTML = (allowEmpty ? select.querySelector('option[value=""]')?.outerHTML || '' : '') + opts.join('');
+  if(guessIdx !== '') select.value = guessIdx;
+}
+
+$('#csvFile').addEventListener('change', () => {
+  const file = $('#csvFile').files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    csvParsed = parseCSV(String(reader.result));
+    if(!csvParsed.headers.length){ alert('讀不到內容，請確認檔案是否為 CSV。'); return; }
+    const h = csvParsed.headers;
+    buildColSelect($('#csvColDate'), h, guessColumn(h, ['日期','date','時間']), false);
+    buildColSelect($('#csvColAmount'), h, guessColumn(h, ['金額','amount','price','money']), false);
+    buildColSelect($('#csvColCategory'), h, guessColumn(h, ['品項','分類','主類別','類別','category','項目']), true);
+    buildColSelect($('#csvColSubcategory'), h, guessColumn(h, ['子類別','子分類','細項','subcategory','sub category','sub-category']), true);
+    buildColSelect($('#csvColNote'), h, guessColumn(h, ['備註','說明','note','memo']), true);
+    buildColSelect($('#csvColType'), h, guessColumn(h, ['收支','類型','type','收入支出']), true);
+    $('#csvMapSection').style.display = '';
+    $('#csvStatus').style.display = 'none';
+    renderCsvPreview();
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+['#csvColDate','#csvColAmount','#csvColCategory','#csvColSubcategory','#csvColNote','#csvColType','#csvTypeRule'].forEach(sel => {
+  $(sel).addEventListener('change', renderCsvPreview);
+});
+
+function mapCsvRow(row){
+  const get = idx => (idx === '' || idx === undefined) ? '' : (row[Number(idx)] || '').trim();
+  const dateRaw = get($('#csvColDate').value);
+  const amountRaw = get($('#csvColAmount').value).replace(/[,$\s]/g,'');
+  const categoryRaw = get($('#csvColCategory').value);
+  const subcategoryRaw = get($('#csvColSubcategory').value);
+  const noteRaw = get($('#csvColNote').value);
+  const typeRaw = get($('#csvColType').value).toLowerCase();
+
+  let date = dateRaw.replace(/\//g,'-');
+  const amountNum = parseFloat(amountRaw);
+
+  let type;
+  if(typeRaw){
+    type = (typeRaw.includes('收') || typeRaw.includes('income') || typeRaw.includes('in')) ? 'income' : 'expense';
+  } else {
+    const rule = $('#csvTypeRule').value;
+    if(rule === 'all_expense') type = 'expense';
+    else if(rule === 'all_income') type = 'income';
+    else type = amountNum < 0 ? 'expense' : 'income';
+  }
+  return {
+    date,
+    type,
+    category: categoryRaw || '其他',
+    subcategory: subcategoryRaw || '',
+    amount: Math.abs(amountNum) || 0,
+    accountId: '',
+    note: noteRaw,
+    payer: 'me',
+    splitMode: 'personal',
+    settled: false,
+    valid: !!date && !isNaN(amountNum)
+  };
+}
+
+function renderCsvPreview(){
+  const rows = csvParsed.rows.slice(0, 5).map(mapCsvRow);
+  const table = $('#csvPreviewTable');
+  table.innerHTML = `<tr><th>日期</th><th>收支</th><th>主類別</th><th>子類別</th><th>金額</th><th>備註</th></tr>` +
+    rows.map(r => `<tr style="${r.valid ? '' : 'color:var(--red)'}"><td>${r.date||'(空)'}</td><td>${r.type==='income'?'收入':'支出'}</td><td>${r.category}</td><td>${r.subcategory || ''}</td><td>${fmt(r.amount)}</td><td>${r.note}</td></tr>`).join('');
+}
+
+$('#csvImportBtn').addEventListener('click', async () => {
+  const mapped = csvParsed.rows.map(mapCsvRow).filter(r => r.valid);
+  const invalidCount = csvParsed.rows.length - mapped.length;
+  if(!mapped.length){ alert('沒有可匯入的資料，請確認日期／金額欄位對應是否正確。'); return; }
+  if(!confirm(`確定匯入 ${mapped.length} 筆記帳資料嗎？${invalidCount ? `（另有 ${invalidCount} 筆因日期或金額格式異常被略過）` : ''}`)) return;
+  try{
+    await runBusy(async () => {
+      const rows = mapped.map(({valid, ...rest}) => rest);
+      await apiPost('batchAddTransactions','transactions',{ rows });
+      const all = await apiGet('all');
+      state.accounts = all.accounts;
+      state.liabilities = all.liabilities;
+      state.interest = all.interest;
+      state.transactions = all.transactions;
+      state.recurring = all.recurring || [];
+      renderAll();
+    }, '匯入中…（資料量大可能需要一點時間）');
+    $('#csvStatus').textContent = `匯入完成，共新增 ${mapped.length} 筆記帳。`;
+    $('#csvStatus').className = 'status ok';
+    $('#csvStatus').style.display = '';
+    $('#csvFile').value = '';
+    $('#csvMapSection').style.display = 'none';
+  }catch(err){
+    $('#csvStatus').textContent = '匯入失敗：' + err.message;
+    $('#csvStatus').className = 'status err';
+    $('#csvStatus').style.display = '';
+  }
+});
+$('#csvCancelBtn').addEventListener('click', () => {
+  $('#csvFile').value = '';
+  $('#csvMapSection').style.display = 'none';
+  $('#csvStatus').style.display = 'none';
+});
+
+// ---------- Settings ----------
+$('#cfgUrl').value = cfg.url;
+$('#cfgToken').value = cfg.token;
+$('#cfgSave').addEventListener('click', () => {
+  cfg.url = $('#cfgUrl').value.trim();
+  cfg.token = $('#cfgToken').value.trim();
+  localStorage.setItem('fin_url', cfg.url);
+  localStorage.setItem('fin_token', cfg.token);
+  loadAll();
+});
+
+loadAll();
+</script>
+</body>
+</html>
