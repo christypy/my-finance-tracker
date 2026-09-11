@@ -311,6 +311,41 @@
   .stat-bar-fill.expense{ background:var(--red); }
   .stat-bar-value{ width:104px; flex:none; text-align:right; font-family:'Roboto Slab', serif; font-size:12px; white-space:nowrap; }
 
+  /* ---- Busy / processing state (避免連續點擊造成重複紀錄) ---- */
+  body.busy button, body.busy .tab{ pointer-events:none; opacity:.55; }
+  #busyToast{
+    position:fixed; left:50%; bottom:calc(var(--nav-h) + 14px); transform:translateX(-50%) translateY(8px);
+    background:var(--ink); color:var(--paper); font-size:13px; padding:9px 18px; border-radius:999px;
+    box-shadow:0 8px 20px rgba(0,0,0,.3); z-index:100; opacity:0; pointer-events:none; transition:opacity .15s, transform .15s;
+    display:flex; align-items:center; gap:8px;
+  }
+  #busyToast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  #busyToast .spinner{
+    width:13px; height:13px; border-radius:50%; border:2px solid rgba(248,243,228,.35); border-top-color:var(--paper);
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  @media (min-width:681px){ #busyToast{ bottom:24px; } }
+
+  .checkbox-row{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .checkbox-row input[type="checkbox"]{ min-height:auto; width:17px; height:17px; padding:0; }
+
+  .ledger-hero{
+    background:linear-gradient(135deg, var(--ink), #223667);
+    color:var(--paper); border-radius:var(--radius); padding:20px; margin-bottom:16px;
+  }
+  .ledger-hero .label{font-size:12px; color:var(--gold-soft); letter-spacing:.03em;}
+  .ledger-hero .value{font-family:'Roboto Slab', serif; font-size:26px; margin-top:4px;}
+  .ledger-hero .hint2{font-size:12px; color:#cdd7ef; margin-top:8px; line-height:1.6;}
+
+  .import-steps{ display:flex; flex-direction:column; gap:14px; }
+  .map-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .map-grid label{ display:flex; flex-direction:column; font-size:12px; color:var(--ink-soft); gap:5px; font-weight:500; }
+  .csv-preview-wrap{ overflow-x:auto; border:1px solid var(--paper-line); border-radius:var(--radius-sm); }
+  table.csv-preview{ border-collapse:collapse; width:100%; font-size:12px; white-space:nowrap; }
+  table.csv-preview th, table.csv-preview td{ padding:7px 10px; border-bottom:1px solid var(--paper-line); text-align:left; }
+  table.csv-preview th{ background:var(--card); color:var(--ink-soft); font-weight:600; }
+
   @media (max-width:680px){
     .wrap{ padding:14px 10px calc(var(--nav-h) + 22px); }
     .tabs.top-tabs{ display:none; }
@@ -447,7 +482,9 @@
       <h2>記帳</h2>
       <div class="segmented" id="trSubNav">
         <button type="button" class="active" data-sub="records">紀錄</button>
+        <button type="button" data-sub="ledger">共同帳本</button>
         <button type="button" data-sub="stats">統計分析</button>
+        <button type="button" data-sub="import">匯入CSV</button>
       </div>
 
       <!-- 記帳：紀錄 -->
@@ -478,6 +515,26 @@
             <label class="full">備註
               <input type="text" id="trNote" placeholder="選填">
             </label>
+            <div class="full checkbox-row">
+              <input type="checkbox" id="trShared">
+              <label for="trShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
+            </div>
+            <div class="full" id="trLedgerFields" style="display:none;">
+              <div class="map-grid">
+                <label>誰先付款
+                  <select id="trPayer">
+                    <option value="me">我先付</option>
+                    <option value="partner">對方先付</option>
+                  </select>
+                </label>
+                <label>分攤方式
+                  <select id="trSplitMode">
+                    <option value="split">平分（各一半）</option>
+                    <option value="advance">全額代墊（全部算對方的）</option>
+                  </select>
+                </label>
+              </div>
+            </div>
             <div class="form-actions">
               <button type="submit" class="primary">儲存記帳</button>
               <button type="button" id="trCancel">清空表單</button>
@@ -489,6 +546,21 @@
           <label><input type="checkbox" id="trShowAll"> 顯示全部</label>
         </div>
         <div class="item-list" id="transactionsList"></div>
+      </div>
+
+      <!-- 記帳：共同帳本 -->
+      <div id="trSub-ledger" style="display:none;">
+        <p class="hint">記帳時勾選「共同帳本項目」並選擇誰先付款、怎麼分攤，這裡會自動幫你算出目前誰欠誰多少，等金額大到可以一次轉帳時再按「結算」。</p>
+        <div class="ledger-hero">
+          <div class="label">目前帳本餘額</div>
+          <div class="value" id="ledgerBalanceValue">打平了</div>
+          <div class="hint2" id="ledgerBalanceHint">尚無未結算的共同帳本紀錄。</div>
+        </div>
+        <div class="form-actions" style="margin-bottom:16px;">
+          <button type="button" class="primary" id="ledgerSettleBtn">結算 / 標記已轉帳完成</button>
+        </div>
+        <h2 style="font-size:15px;">未結算明細</h2>
+        <div class="item-list" id="ledgerList"></div>
       </div>
 
       <!-- 記帳：統計分析 -->
@@ -515,6 +587,49 @@
           <div id="statsYearlyTrend"></div>
         </div>
       </div>
+
+      <!-- 記帳：匯入 CSV -->
+      <div id="trSub-import" style="display:none;">
+        <p class="hint">把其他記帳 App 匯出的 CSV 檔案匯入，就能跟這裡的紀錄一起做統計分析。匯入前可以先對應欄位、預覽內容再確定送出。</p>
+        <div class="import-steps">
+          <label>選擇 CSV 檔案
+            <input type="file" id="csvFile" accept=".csv,text/csv">
+          </label>
+          <div id="csvMapSection" style="display:none;">
+            <div class="map-grid">
+              <label>日期欄位
+                <select id="csvColDate"></select>
+              </label>
+              <label>金額欄位
+                <select id="csvColAmount"></select>
+              </label>
+              <label>品項 / 類別欄位
+                <select id="csvColCategory"><option value="">（不對應）</option></select>
+              </label>
+              <label>備註欄位
+                <select id="csvColNote"><option value="">（不對應）</option></select>
+              </label>
+              <label>收支欄位（選填）
+                <select id="csvColType"><option value="">（不對應，用下面規則判斷）</option></select>
+              </label>
+              <label>沒有收支欄位時，怎麼判斷收入/支出
+                <select id="csvTypeRule">
+                  <option value="sign">依金額正負判斷（正=收入，負=支出）</option>
+                  <option value="all_expense">全部視為支出</option>
+                  <option value="all_income">全部視為收入</option>
+                </select>
+              </label>
+            </div>
+            <p class="hint" style="margin:10px 0 0;">預覽（前 5 筆）：</p>
+            <div class="csv-preview-wrap"><table class="csv-preview" id="csvPreviewTable"></table></div>
+            <div class="form-actions" style="margin-top:12px;">
+              <button type="button" class="primary" id="csvImportBtn">確認匯入</button>
+              <button type="button" id="csvCancelBtn">取消</button>
+            </div>
+            <div class="status" id="csvStatus" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 設定 -->
@@ -539,10 +654,31 @@
 <nav class="bottom-nav">
   <div class="tabs" id="tabsBottom"></div>
 </nav>
+<div id="busyToast"><span class="spinner"></span><span id="busyToastText">處理中…</span></div>
 
 <script>
 const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+// ---------- 忙碌保護：避免等待時多點幾下造成重複紀錄 ----------
+let busyCount = 0;
+function setBusy(on, text){
+  busyCount = Math.max(0, busyCount + (on ? 1 : -1));
+  document.body.classList.toggle('busy', busyCount > 0);
+  const toast = $('#busyToast');
+  if(text) $('#busyToastText').textContent = text;
+  toast.classList.toggle('show', busyCount > 0);
+}
+// 包住一個 async 操作：執行期間整個畫面會被鎖住（按鈕點不動），
+// 避免因為網路慢、Apps Script 回應久而被連點好幾次造成重複紀錄
+async function runBusy(fn, text){
+  setBusy(true, text || '處理中…');
+  try{
+    return await fn();
+  } finally {
+    setBusy(false);
+  }
+}
 
 // ---------- Icons ----------
 const ICONS = {
@@ -616,14 +752,15 @@ async function loadAll(){
     return;
   }
   try{
-    const [accounts, liabilities, interest, transactions] = await Promise.all([
-      apiGet('accounts'), apiGet('liabilities'), apiGet('interest'), apiGet('transactions')
-    ]);
-    state.accounts = accounts;
-    state.liabilities = liabilities;
-    state.interest = interest;
-    state.transactions = transactions;
-    renderAll();
+    // 一次請求拿回四張表（sheet=all），比分開四個請求更快、也更省 Apps Script 的執行額度
+    await runBusy(async () => {
+      const all = await apiGet('all');
+      state.accounts = all.accounts;
+      state.liabilities = all.liabilities;
+      state.interest = all.interest;
+      state.transactions = all.transactions;
+      renderAll();
+    }, '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
   }catch(err){
@@ -637,6 +774,17 @@ function fmt(n){
   return num.toLocaleString('zh-Hant-TW', { minimumFractionDigits:0, maximumFractionDigits:2 });
 }
 
+// ---------- 本地狀態更新（避免每次操作都重新整批下載，減少等待） ----------
+function upsertLocal(key, obj){
+  if(!obj) return;
+  const list = state[key];
+  const idx = list.findIndex(x => x.id === obj.id);
+  if(idx === -1) list.push(obj); else list[idx] = obj;
+}
+function removeLocal(key, id){
+  state[key] = state[key].filter(x => x.id !== id);
+}
+
 // ---------- Render ----------
 function renderAll(){
   renderDashboard();
@@ -644,6 +792,7 @@ function renderAll(){
   renderInterest();
   renderLiabilities();
   renderTransactions();
+  renderLedger();
   renderStats();
 }
 
@@ -919,14 +1068,15 @@ function renderStats(){
   }
 }
 
-// 記帳頁：紀錄 / 統計 子分頁切換
+// 記帳頁：紀錄 / 共同帳本 / 統計分析 / 匯入 子分頁切換
+const TR_SUBS = ['records','ledger','stats','import'];
 $('#trSubNav').addEventListener('click', e => {
   const btn = e.target.closest('button[data-sub]');
   if(!btn) return;
   $$('#trSubNav button').forEach(b => b.classList.toggle('active', b === btn));
-  $('#trSub-records').style.display = btn.dataset.sub === 'records' ? '' : 'none';
-  $('#trSub-stats').style.display = btn.dataset.sub === 'stats' ? '' : 'none';
+  TR_SUBS.forEach(sub => { $('#trSub-' + sub).style.display = (sub === btn.dataset.sub) ? '' : 'none'; });
   if(btn.dataset.sub === 'stats') renderStats();
+  if(btn.dataset.sub === 'ledger') renderLedger();
 });
 
 // 統計：月/年 模式切換
@@ -954,11 +1104,15 @@ $('#accountForm').addEventListener('submit', async e => {
     note: $('#accNote').value
   };
   try{
-    if(data.id) await apiPost('update','accounts',data);
-    else { delete data.id; await apiPost('add','accounts',data); }
-    resetAccountForm();
-    $('#accountDetails').open = false;
-    await loadAll();
+    await runBusy(async () => {
+      let saved;
+      if(data.id) saved = await apiPost('update','accounts',data);
+      else { delete data.id; saved = await apiPost('add','accounts',data); }
+      upsertLocal('accounts', saved);
+      resetAccountForm();
+      $('#accountDetails').open = false;
+      renderAll();
+    }, '儲存中…');
   }catch(err){ alert('儲存失敗：' + err.message); }
 });
 $('#accCancel').addEventListener('click', resetAccountForm);
@@ -977,8 +1131,13 @@ window.editAccount = id => {
 };
 window.deleteAccount = async id => {
   if(!confirm('確定刪除這個帳戶？')) return;
-  try{ await apiPost('delete','accounts',{id}); await loadAll(); }
-  catch(err){ alert('刪除失敗：' + err.message); }
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','accounts',{id});
+      removeLocal('accounts', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
 };
 
 // ---------- Interest CRUD ----------
@@ -988,19 +1147,28 @@ $('#interestForm').addEventListener('submit', async e => {
   const amount = parseFloat($('#intAmount').value) || 0;
   const data = { accountId, date: $('#intDate').value, amount, note: $('#intNote').value };
   try{
-    await apiPost('add','interest',data);
-    const acc = state.accounts.find(a => a.id === accountId);
-    if(acc){
-      await apiPost('update','accounts',{ ...acc, balance: (Number(acc.balance)||0) + amount });
-    }
-    $('#interestForm').reset();
-    await loadAll();
+    await runBusy(async () => {
+      const saved = await apiPost('add','interest',data);
+      upsertLocal('interest', saved);
+      const acc = state.accounts.find(a => a.id === accountId);
+      if(acc){
+        const updatedAcc = await apiPost('update','accounts',{ ...acc, balance: (Number(acc.balance)||0) + amount });
+        upsertLocal('accounts', updatedAcc);
+      }
+      $('#interestForm').reset();
+      renderAll();
+    }, '新增中…');
   }catch(err){ alert('新增失敗：' + err.message); }
 });
 window.deleteInterest = async id => {
   if(!confirm('確定刪除這筆利息紀錄？（不會自動從餘額扣回，請自行到帳戶調整）')) return;
-  try{ await apiPost('delete','interest',{id}); await loadAll(); }
-  catch(err){ alert('刪除失敗：' + err.message); }
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','interest',{id});
+      removeLocal('interest', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
 };
 
 // ---------- Liabilities CRUD ----------
@@ -1015,11 +1183,15 @@ $('#liabilityForm').addEventListener('submit', async e => {
     note: $('#liaNote').value
   };
   try{
-    if(data.id) await apiPost('update','liabilities',data);
-    else { delete data.id; await apiPost('add','liabilities',data); }
-    resetLiabilityForm();
-    $('#liabilityDetails').open = false;
-    await loadAll();
+    await runBusy(async () => {
+      let saved;
+      if(data.id) saved = await apiPost('update','liabilities',data);
+      else { delete data.id; saved = await apiPost('add','liabilities',data); }
+      upsertLocal('liabilities', saved);
+      resetLiabilityForm();
+      $('#liabilityDetails').open = false;
+      renderAll();
+    }, '儲存中…');
   }catch(err){ alert('儲存失敗：' + err.message); }
 });
 $('#liaCancel').addEventListener('click', resetLiabilityForm);
@@ -1038,8 +1210,13 @@ window.editLiability = id => {
 };
 window.deleteLiability = async id => {
   if(!confirm('確定刪除這個負債項目？')) return;
-  try{ await apiPost('delete','liabilities',{id}); await loadAll(); }
-  catch(err){ alert('刪除失敗：' + err.message); }
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','liabilities',{id});
+      removeLocal('liabilities', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
 };
 
 // ---------- Transactions (記帳) CRUD ----------
@@ -1054,25 +1231,26 @@ $$('.type-toggle button').forEach(btn => {
   btn.addEventListener('click', () => setTrType(btn.dataset.type));
 });
 
+$('#trShared').addEventListener('change', () => {
+  $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
+});
+
 $('#trFilterMonth').addEventListener('change', renderTransactions);
 $('#trShowAll').addEventListener('change', () => {
   $('#trFilterMonth').disabled = $('#trShowAll').checked;
   renderTransactions();
 });
 
-async function applyAccountDelta(accountId, delta){
-  if(!accountId || !delta) return;
-  const acc = state.accounts.find(a => a.id === accountId);
-  if(!acc) return;
-  await apiPost('update','accounts',{ ...acc, balance: (Number(acc.balance)||0) + delta });
-}
-
+// 記帳新增/編輯/刪除都是「一次 exec 內同時處理記帳列 + 帳戶餘額」的複合動作（見 Code.gs 的
+// addTransactionTx / updateTransactionTx / deleteTransactionTx），比以前「新增記帳→更新帳戶
+// →重新整批下載」快非常多，也不用整批重抓資料。
 $('#trForm').addEventListener('submit', async e => {
   e.preventDefault();
   const id = $('#trId').value || undefined;
   const type = $('#trType').value;
   const amount = parseFloat($('#trAmount').value) || 0;
   const accountId = $('#trAccount').value;
+  const shared = $('#trShared').checked;
   const data = {
     id,
     date: $('#trDate').value,
@@ -1080,28 +1258,28 @@ $('#trForm').addEventListener('submit', async e => {
     category: $('#trCategory').value,
     amount,
     accountId,
-    note: $('#trNote').value
+    note: $('#trNote').value,
+    payer: shared ? $('#trPayer').value : 'me',
+    splitMode: shared ? $('#trSplitMode').value : 'personal',
+    settled: false
   };
   try{
-    if(id){
-      // 編輯：先把舊帳戶影響加回去，再套用新的影響
-      const old = state.transactions.find(t => t.id === id);
-      if(old && old.accountId){
-        const oldDelta = old.type === 'expense' ? Number(old.amount) : -Number(old.amount);
-        await applyAccountDelta(old.accountId, oldDelta);
+    await runBusy(async () => {
+      let result;
+      if(id){
+        result = await apiPost('updateTransactionTx','transactions',data);
+        upsertLocal('transactions', result.transaction);
+        (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      } else {
+        delete data.id;
+        result = await apiPost('addTransactionTx','transactions',data);
+        upsertLocal('transactions', result.transaction);
+        if(result.account) upsertLocal('accounts', result.account);
       }
-      await apiPost('update','transactions',data);
-    } else {
-      delete data.id;
-      await apiPost('add','transactions',data);
-    }
-    if(accountId){
-      const delta = type === 'expense' ? -amount : amount;
-      await applyAccountDelta(accountId, delta);
-    }
-    resetTransactionForm();
-    $('#trDetails').open = false;
-    await loadAll();
+      resetTransactionForm();
+      $('#trDetails').open = false;
+      renderAll();
+    }, '儲存中…');
   }catch(err){ alert('儲存失敗：' + err.message); }
 });
 $('#trCancel').addEventListener('click', resetTransactionForm);
@@ -1111,6 +1289,10 @@ function resetTransactionForm(){
   $('#trAmount').value = '';
   $('#trAccount').value = '';
   $('#trNote').value = '';
+  $('#trShared').checked = false;
+  $('#trLedgerFields').style.display = 'none';
+  $('#trPayer').value = 'me';
+  $('#trSplitMode').value = 'split';
   setTrType('expense');
 }
 window.editTransaction = id => {
@@ -1122,21 +1304,235 @@ window.editTransaction = id => {
   setTrType(t.type === 'income' ? 'income' : 'expense', t.category);
   $('#trAccount').value = t.accountId || '';
   $('#trNote').value = t.note || '';
+  const shared = t.splitMode && t.splitMode !== 'personal';
+  $('#trShared').checked = shared;
+  $('#trLedgerFields').style.display = shared ? '' : 'none';
+  $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+  $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
   $('#trDetails').open = true;
   $('#trDetails').scrollIntoView({behavior:'smooth', block:'start'});
 };
 window.deleteTransaction = async id => {
   if(!confirm('確定刪除這筆記帳？若有連結帳戶，餘額會自動還原。')) return;
   try{
-    const t = state.transactions.find(x => x.id === id);
-    await apiPost('delete','transactions',{id});
-    if(t && t.accountId){
-      const delta = t.type === 'expense' ? Number(t.amount) : -Number(t.amount);
-      await applyAccountDelta(t.accountId, delta);
-    }
-    await loadAll();
+    await runBusy(async () => {
+      const result = await apiPost('deleteTransactionTx','transactions',{id});
+      removeLocal('transactions', id);
+      if(result.account) upsertLocal('accounts', result.account);
+      renderAll();
+    }, '刪除中…');
   }catch(err){ alert('刪除失敗：' + err.message); }
 };
+
+// ---------- 共同帳本（誰先付、誰欠誰） ----------
+// 每筆記帳只要 splitMode !== 'personal' 就算共同帳本項目：
+//   split   平分：payer 那一方墊了一半屬於對方的錢 → 對方欠 payer 一半金額
+//   advance 全額代墊：整筆其實是對方的花費 → 對方欠 payer 全額
+// settled 為 true 的紀錄不計入餘額（已經轉帳結清過）。
+function ledgerUnsettledItems(){
+  return state.transactions.filter(t =>
+    t.type === 'expense' && t.splitMode && t.splitMode !== 'personal' && String(t.settled) !== 'true'
+  );
+}
+function ledgerOwed(t){
+  const amt = Number(t.amount) || 0;
+  return t.splitMode === 'advance' ? amt : amt / 2;
+}
+function ledgerBalance(items){
+  // 正值 = 對方欠我；負值 = 我欠對方
+  return items.reduce((sum, t) => sum + (t.payer === 'partner' ? -ledgerOwed(t) : ledgerOwed(t)), 0);
+}
+function renderLedger(){
+  const items = ledgerUnsettledItems();
+  const balance = ledgerBalance(items);
+  const valueEl = $('#ledgerBalanceValue');
+  const hintEl = $('#ledgerBalanceHint');
+  if(Math.abs(balance) < 0.01){
+    valueEl.textContent = '打平了';
+    hintEl.textContent = items.length ? '這些項目金額互相抵銷，暫時不用轉帳。' : '尚無未結算的共同帳本紀錄。';
+  } else if(balance > 0){
+    valueEl.textContent = `對方欠你 $${fmt(balance)}`;
+    hintEl.textContent = '累積夠多、方便轉帳時，可以按下方「結算」一次結清。';
+  } else {
+    valueEl.textContent = `你欠對方 $${fmt(-balance)}`;
+    hintEl.textContent = '累積夠多、方便轉帳時，可以按下方「結算」一次結清。';
+  }
+
+  const list = $('#ledgerList');
+  if(!items.length){
+    list.innerHTML = `<div class="empty">目前沒有未結算的共同帳本項目。</div>`;
+    return;
+  }
+  const sorted = [...items].sort((a,b) => (a.date < b.date ? 1 : -1));
+  list.innerHTML = sorted.map(t => {
+    const owed = ledgerOwed(t);
+    const payerLabel = t.payer === 'partner' ? '對方付' : '我付';
+    const modeLabel = t.splitMode === 'advance' ? '全額代墊' : '平分';
+    const direction = t.payer === 'partner' ? '你欠對方' : '對方欠你';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${t.category || '其他'}</div>
+          <div class="item-note">${t.date} · ${payerLabel} · ${modeLabel}${t.note ? ' · ' + t.note : ''}</div>
+        </div>
+        <div class="item-value">$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-meta"><span>${direction} <b>$${fmt(owed)}</b></span></div>
+    </div>`;
+  }).join('');
+}
+$('#ledgerSettleBtn').addEventListener('click', async () => {
+  const items = ledgerUnsettledItems();
+  if(!items.length){ alert('目前沒有需要結算的項目。'); return; }
+  const balance = ledgerBalance(items);
+  const who = balance > 0 ? '對方轉給你' : balance < 0 ? '你轉給對方' : '不用轉帳';
+  if(!confirm(`共 ${items.length} 筆未結算項目，結果為 ${who} $${fmt(Math.abs(balance))}。\n確定這筆錢已經轉帳完成，把這些項目標記為已結算嗎？`)) return;
+  try{
+    await runBusy(async () => {
+      const ids = items.map(t => t.id);
+      await apiPost('settleLedger','transactions',{ ids });
+      items.forEach(t => { t.settled = true; });
+      renderAll();
+    }, '結算中…');
+  }catch(err){ alert('結算失敗：' + err.message); }
+});
+
+// ---------- 匯入 CSV ----------
+// 純前端解析 CSV（支援雙引號欄位），對應欄位後用批次寫入（batchAddTransactions），
+// 一次 exec 內寫完所有列，不會一筆一筆來回，匯入大量資料也不會卡很久。
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field = ''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if(c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  const nonEmpty = rows.filter(r => r.some(v => String(v).trim() !== ''));
+  if(!nonEmpty.length) return { headers: [], rows: [] };
+  return { headers: nonEmpty[0], rows: nonEmpty.slice(1) };
+}
+
+let csvParsed = { headers: [], rows: [] };
+
+function guessColumn(headers, keywords){
+  const idx = headers.findIndex(h => keywords.some(k => String(h).toLowerCase().includes(k)));
+  return idx === -1 ? '' : String(idx);
+}
+
+function buildColSelect(select, headers, guessIdx, allowEmpty){
+  const opts = headers.map((h,i) => `<option value="${i}">${h || ('欄位 ' + (i+1))}</option>`);
+  select.innerHTML = (allowEmpty ? select.querySelector('option[value=""]')?.outerHTML || '' : '') + opts.join('');
+  if(guessIdx !== '') select.value = guessIdx;
+}
+
+$('#csvFile').addEventListener('change', () => {
+  const file = $('#csvFile').files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    csvParsed = parseCSV(String(reader.result));
+    if(!csvParsed.headers.length){ alert('讀不到內容，請確認檔案是否為 CSV。'); return; }
+    const h = csvParsed.headers;
+    buildColSelect($('#csvColDate'), h, guessColumn(h, ['日期','date','時間']), false);
+    buildColSelect($('#csvColAmount'), h, guessColumn(h, ['金額','amount','price','money']), false);
+    buildColSelect($('#csvColCategory'), h, guessColumn(h, ['品項','分類','類別','category','項目']), true);
+    buildColSelect($('#csvColNote'), h, guessColumn(h, ['備註','說明','note','memo']), true);
+    buildColSelect($('#csvColType'), h, guessColumn(h, ['收支','類型','type','收入支出']), true);
+    $('#csvMapSection').style.display = '';
+    $('#csvStatus').style.display = 'none';
+    renderCsvPreview();
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+['#csvColDate','#csvColAmount','#csvColCategory','#csvColNote','#csvColType','#csvTypeRule'].forEach(sel => {
+  $(sel).addEventListener('change', renderCsvPreview);
+});
+
+function mapCsvRow(row){
+  const get = idx => (idx === '' || idx === undefined) ? '' : (row[Number(idx)] || '').trim();
+  const dateRaw = get($('#csvColDate').value);
+  const amountRaw = get($('#csvColAmount').value).replace(/[,$\s]/g,'');
+  const categoryRaw = get($('#csvColCategory').value);
+  const noteRaw = get($('#csvColNote').value);
+  const typeRaw = get($('#csvColType').value).toLowerCase();
+
+  let date = dateRaw.replace(/\//g,'-');
+  const amountNum = parseFloat(amountRaw);
+
+  let type;
+  if(typeRaw){
+    type = (typeRaw.includes('收') || typeRaw.includes('income') || typeRaw.includes('in')) ? 'income' : 'expense';
+  } else {
+    const rule = $('#csvTypeRule').value;
+    if(rule === 'all_expense') type = 'expense';
+    else if(rule === 'all_income') type = 'income';
+    else type = amountNum < 0 ? 'expense' : 'income';
+  }
+  return {
+    date,
+    type,
+    category: categoryRaw || '其他',
+    amount: Math.abs(amountNum) || 0,
+    accountId: '',
+    note: noteRaw,
+    payer: 'me',
+    splitMode: 'personal',
+    settled: false,
+    valid: !!date && !isNaN(amountNum)
+  };
+}
+
+function renderCsvPreview(){
+  const rows = csvParsed.rows.slice(0, 5).map(mapCsvRow);
+  const table = $('#csvPreviewTable');
+  table.innerHTML = `<tr><th>日期</th><th>收支</th><th>品項</th><th>金額</th><th>備註</th></tr>` +
+    rows.map(r => `<tr style="${r.valid ? '' : 'color:var(--red)'}"><td>${r.date||'(空)'}</td><td>${r.type==='income'?'收入':'支出'}</td><td>${r.category}</td><td>${fmt(r.amount)}</td><td>${r.note}</td></tr>`).join('');
+}
+
+$('#csvImportBtn').addEventListener('click', async () => {
+  const mapped = csvParsed.rows.map(mapCsvRow).filter(r => r.valid);
+  const invalidCount = csvParsed.rows.length - mapped.length;
+  if(!mapped.length){ alert('沒有可匯入的資料，請確認日期／金額欄位對應是否正確。'); return; }
+  if(!confirm(`確定匯入 ${mapped.length} 筆記帳資料嗎？${invalidCount ? `（另有 ${invalidCount} 筆因日期或金額格式異常被略過）` : ''}`)) return;
+  try{
+    await runBusy(async () => {
+      const rows = mapped.map(({valid, ...rest}) => rest);
+      await apiPost('batchAddTransactions','transactions',{ rows });
+      const all = await apiGet('all');
+      state.accounts = all.accounts;
+      state.liabilities = all.liabilities;
+      state.interest = all.interest;
+      state.transactions = all.transactions;
+      renderAll();
+    }, '匯入中…（資料量大可能需要一點時間）');
+    $('#csvStatus').textContent = `匯入完成，共新增 ${mapped.length} 筆記帳。`;
+    $('#csvStatus').className = 'status ok';
+    $('#csvStatus').style.display = '';
+    $('#csvFile').value = '';
+    $('#csvMapSection').style.display = 'none';
+  }catch(err){
+    $('#csvStatus').textContent = '匯入失敗：' + err.message;
+    $('#csvStatus').className = 'status err';
+    $('#csvStatus').style.display = '';
+  }
+});
+$('#csvCancelBtn').addEventListener('click', () => {
+  $('#csvFile').value = '';
+  $('#csvMapSection').style.display = 'none';
+  $('#csvStatus').style.display = 'none';
+});
 
 // ---------- Settings ----------
 $('#cfgUrl').value = cfg.url;
