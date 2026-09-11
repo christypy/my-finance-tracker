@@ -461,6 +461,55 @@
   .dist-month-block{ margin-bottom:14px; }
   .dist-month-title{ font-size:12.5px; color:var(--ink-soft); margin-bottom:6px; font-family:'Roboto Slab', serif; }
 
+  /* ---- 統計分析：預算追蹤 ---- */
+  .stat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .budget-add-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .budget-add-row select{ flex:1 1 140px; min-height:38px; padding:7px 10px; }
+  .budget-add-row input{ flex:1 1 120px; min-height:38px; padding:7px 10px; }
+  .budget-add-row button{ flex:none; min-height:38px; }
+  .budget-row{ background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:10px; }
+  .budget-row-top{ display:flex; justify-content:space-between; gap:8px; font-size:13px; margin-bottom:6px; }
+  .budget-row-top span:first-child{ font-weight:600; color:var(--ink); }
+  .budget-row-top span:last-child{ font-family:'Roboto Slab', serif; color:var(--ink-soft); white-space:nowrap; }
+  .budget-track{ height:14px; background:var(--paper-line); border-radius:999px; overflow:hidden; }
+  .budget-fill{ height:100%; border-radius:999px; background:var(--green); transition:width .2s; }
+  .budget-fill.warn{ background:var(--gold); }
+  .budget-fill.danger{ background:var(--red); }
+  .budget-row-bottom{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; font-size:11.5px; color:var(--ink-soft); }
+  .budget-row-bottom .ok{ color:var(--green); font-weight:600; }
+  .budget-row-bottom .warn{ color:var(--gold); font-weight:600; }
+  .budget-row-bottom .danger{ color:var(--red); font-weight:600; }
+  .budget-row-bottom button{ margin-left:auto; }
+
+  /* ---- 統計分析：支出排行（圓餅 + 排行榜） ---- */
+  .category-rank-wrap{ display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+  .pie-wrap-mini{ flex:none; width:130px; }
+  .pie-wrap-mini svg{ width:130px; height:130px; display:block; }
+  .rank-list{ flex:1 1 220px; min-width:200px; }
+  .rank-row{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; }
+  .rank-row:last-child{ margin-bottom:0; }
+  .rank-num{ width:18px; flex:none; font-family:'Roboto Slab', serif; font-size:13px; color:var(--gold); font-weight:700; padding-top:1px; }
+  .rank-bar-wrap{ flex:1; min-width:0; }
+  .rank-top{ display:flex; justify-content:space-between; gap:8px; font-size:12.5px; margin-bottom:4px; }
+  .rank-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
+  .rank-label{ color:var(--ink); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rank-value{ font-family:'Roboto Slab', serif; font-size:11.5px; color:var(--ink-soft); white-space:nowrap; flex:none; }
+  .rank-meta{ display:flex; justify-content:space-between; gap:8px; font-size:11px; color:var(--ink-soft); margin-top:4px; }
+  .rank-mover{ font-family:'Roboto Slab', serif; white-space:nowrap; }
+  .rank-mover.up{ color:var(--red); }
+  .rank-mover.down{ color:var(--green); }
+  .rank-mover.flat{ color:var(--ink-soft); }
+
+  /* ---- 統計分析：每日消費節奏 ---- */
+  .day-chart{ display:flex; align-items:flex-end; gap:2px; height:84px; background:var(--paper); border-radius:var(--radius-sm); padding:8px 6px 0; margin-bottom:8px; }
+  .day-bar{ flex:1; height:100%; display:flex; align-items:flex-end; min-width:3px; }
+  .day-bar-fill{ width:100%; background:var(--red); border-radius:2px 2px 0 0; min-height:0; }
+  .day-bar.weekend .day-bar-fill{ background:var(--gold); }
+  .day-bar.today{ outline:1.5px solid var(--ink); outline-offset:1px; border-radius:2px; }
+  .day-highlights{ display:flex; flex-direction:column; gap:6px; font-size:12.5px; }
+  .day-highlight-row{ display:flex; justify-content:space-between; color:var(--ink-soft); }
+  .day-highlight-row b{ color:var(--ink); font-family:'Roboto Slab', serif; font-weight:600; }
+
   @media (max-width:680px){
     .wrap{ padding:14px 10px calc(var(--nav-h) + 22px); }
     .tabs.top-tabs{ display:none; }
@@ -798,34 +847,72 @@
           <select id="statsYearInput" style="display:none;"></select>
           <button type="button" class="period-nav-btn" id="statsNextBtn" title="下一期">›</button>
         </div>
+
+        <!-- ① 本期關鍵指標 -->
         <div class="summary-grid" id="statsSummaryGrid"></div>
+        <div class="compare-grid" id="statsCompareGrid"></div>
 
-        <div class="stat-section">
-          <h3>支出圓餅圖（依主類別）</h3>
-          <div class="compare-grid" id="statsCompareGrid"></div>
-          <div class="pie-wrap" id="statsExpensePie"></div>
+        <!-- ② 預算追蹤 -->
+        <div class="stat-section" id="statsBudgetSection">
+          <div class="stat-section-head">
+            <h3>預算追蹤</h3>
+          </div>
+          <p class="hint" style="margin-bottom:10px;">設定每月預算，這裡會即時顯示花了多少、還剩多少。只存在這台裝置的瀏覽器裡。</p>
+          <div class="budget-add-row">
+            <select id="budgetCatSelect"></select>
+            <input type="number" id="budgetAmountInput" min="0" step="1" placeholder="每月預算金額">
+            <button type="button" class="primary" id="budgetSaveBtn">設定</button>
+          </div>
+          <div id="budgetList"></div>
         </div>
 
+        <!-- ③ 支出去了哪裡：排行 + 跟上期比 -->
         <div class="stat-section">
-          <h3>收入品項分佈</h3>
-          <div id="statsIncomeBreakdown"></div>
+          <h3>支出去了哪裡</h3>
+          <div class="category-rank-wrap">
+            <div class="pie-wrap-mini" id="statsExpensePie"></div>
+            <div class="rank-list" id="statsCategoryRank"></div>
+          </div>
         </div>
 
+        <!-- ④ 固定 vs 彈性支出 -->
+        <div class="stat-section">
+          <h3>固定支出 vs 彈性支出</h3>
+          <p class="hint" style="margin-bottom:10px;">固定支出＝由「固定項目」自動加入的紀錄（房租、訂閱費等）；其餘算彈性花費，是比較能省的部分。</p>
+          <div id="statsFixedVsFlex"></div>
+        </div>
+
+        <!-- ⑤ 消費節奏：月模式看每日、年模式看每月 -->
+        <div class="stat-section" id="statsDailySection">
+          <h3>每日消費節奏</h3>
+          <div id="statsDailyChart"></div>
+          <p class="hint" style="margin:8px 0 10px;">紅色＝平日、金色＝週末；長條愈高代表當天花愈多。</p>
+          <div class="day-highlights" id="statsDailyHighlights"></div>
+        </div>
         <div class="stat-section" id="statsYearlyTrendSection" style="display:none;">
           <h3>年度每月支出趨勢</h3>
           <div id="statsYearlyTrend"></div>
         </div>
 
+        <!-- ⑥ 收入來源 -->
         <div class="stat-section">
-          <h3>類別月份分佈</h3>
-          <p class="hint" style="margin-bottom:10px;">選擇主類別（與子類別）後，可以看到該年度每個月的支出金額變化。</p>
-          <div class="dist-select-row">
-            <select id="distYearInput"></select>
-            <select id="distCategoryInput"><option value="">全部主類別</option></select>
-            <select id="distSubcategoryInput"><option value="">不分子類別</option></select>
-          </div>
-          <div id="statsDistribution"></div>
+          <h3>收入品項分佈</h3>
+          <div id="statsIncomeBreakdown"></div>
         </div>
+
+        <!-- ⑦ 進階查詢（預設收合，不干擾主要重點） -->
+        <details class="entry-wrap" id="statsAdvancedDetails">
+          <summary><span class="plus">＋</span>進階：類別月份分佈查詢</summary>
+          <div class="stat-section" style="margin-top:14px;">
+            <p class="hint" style="margin-bottom:10px;">選擇主類別（與子類別）後，可以看到該年度每個月的支出金額變化，適合深入追蹤單一類別的長期趨勢。</p>
+            <div class="dist-select-row">
+              <select id="distYearInput"></select>
+              <select id="distCategoryInput"><option value="">全部主類別</option></select>
+              <select id="distSubcategoryInput"><option value="">不分子類別</option></select>
+            </div>
+            <div id="statsDistribution"></div>
+          </div>
+        </details>
       </div>
 
       <!-- 記帳：匯入 CSV -->
@@ -1589,9 +1676,11 @@ function pieSlicePath(cx, cy, r, startAngle, endAngle){
   const largeArc = (endAngle - startAngle) <= 180 ? 0 : 1;
   return `M ${cx} ${cy} L ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 0 ${end.x.toFixed(2)} ${end.y.toFixed(2)} Z`;
 }
-function renderPieChart(container, items, total){
+// withLegend=false 只畫圓餅本身（不附文字清單），用在旁邊已經有排行榜清單的地方，避免資訊重複
+function renderPieChart(container, items, total, withLegend){
+  if(withLegend === undefined) withLegend = true;
   if(!items.length || !total){
-    container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
+    container.innerHTML = withLegend ? `<div class="empty">這段期間沒有支出資料。</div>` : '';
     return;
   }
   const cx = 75, cy = 75, r = 70;
@@ -1608,6 +1697,7 @@ function renderPieChart(container, items, total){
     return { path, label, val, pct, color };
   });
   const svg = `<svg viewBox="0 0 150 150">${slices.map(s => s.path).join('')}</svg>`;
+  if(!withLegend){ container.innerHTML = svg; return; }
   const legend = slices.map(s => `
     <div class="pie-legend-row">
       <span class="pie-legend-dot" style="background:${s.color}"></span>
@@ -1615,6 +1705,246 @@ function renderPieChart(container, items, total){
       <span class="pie-legend-value">$${fmt(s.val)}（${Math.round(s.pct*100)}%）</span>
     </div>`).join('');
   container.innerHTML = `${svg}<div class="pie-legend">${legend}</div>`;
+}
+
+// ---------- 支出去了哪裡：排行榜（金額＋佔比＋筆數／平均＋跟上期比） ----------
+function categoryStatsFor(rows, type){
+  const map = {};
+  let total = 0;
+  rows.filter(t => t.type === type).forEach(t => {
+    const cat = t.category || '其他';
+    const amt = Number(t.amount) || 0;
+    if(!map[cat]) map[cat] = { total: 0, count: 0 };
+    map[cat].total += amt;
+    map[cat].count += 1;
+    total += amt;
+  });
+  return { total, map };
+}
+function renderCategoryRanking(container, cur, prev){
+  const entries = Object.entries(cur.map).sort((a,b) => b[1].total - a[1].total);
+  if(!entries.length){
+    container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
+    return;
+  }
+  container.innerHTML = entries.map(([cat, info], i) => {
+    const pct = cur.total ? Math.round(info.total / cur.total * 100) : 0;
+    const avg = info.count ? info.total / info.count : 0;
+    const prevTotal = (prev.map[cat] && prev.map[cat].total) || 0;
+    const diff = info.total - prevTotal;
+    let moverHtml = '<span></span>';
+    if(prevTotal > 0.005 || Math.abs(diff) > 0.005){
+      if(Math.abs(diff) < 0.005){
+        moverHtml = `<span class="rank-mover flat">— 跟上期持平</span>`;
+      } else {
+        const cls = diff > 0 ? 'up' : 'down';
+        const arrow = diff > 0 ? '▲' : '▼';
+        moverHtml = `<span class="rank-mover ${cls}">${arrow} $${fmt(Math.abs(diff))} 較上期</span>`;
+      }
+    }
+    return `<div class="rank-row">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-bar-wrap">
+        <div class="rank-top">
+          <span class="rank-label"><span class="rank-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>${escapeHtml(cat)}</span>
+          <span class="rank-value">$${fmt(info.total)}（${pct}%）</span>
+        </div>
+        <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
+        <div class="rank-meta">
+          <span>${info.count} 筆 · 平均 $${fmt(avg)}</span>
+          ${moverHtml}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- 固定支出 vs 彈性支出 ----------
+function renderFixedVsFlexible(container, rows){
+  const expenseRows = rows.filter(t => t.type === 'expense');
+  const total = expenseRows.reduce((s,t) => s + (Number(t.amount)||0), 0);
+  if(!total){
+    container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
+    return;
+  }
+  const fixed = expenseRows.filter(t => t.recurringId).reduce((s,t) => s + (Number(t.amount)||0), 0);
+  const flexible = total - fixed;
+  const parts = [
+    { label: '固定支出', val: fixed, color: 'var(--gold)' },
+    { label: '彈性支出', val: flexible, color: 'var(--red)' }
+  ];
+  container.innerHTML = parts.map(p => {
+    const pct = total ? Math.round(p.val / total * 100) : 0;
+    return `<div class="stat-bar-row">
+      <div class="stat-bar-label" style="width:56px;">${p.label}</div>
+      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${pct}%; background:${p.color};"></div></div>
+      <div class="stat-bar-value">$${fmt(p.val)}（${pct}%）</div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- 預算追蹤（存在這台裝置的瀏覽器裡，跟類別設定一樣） ----------
+const BUDGET_KEY = 'fin_budgets_v1'; // { [主類別 或 "__total__"]: 每月預算金額 }
+const BUDGET_TOTAL_KEY = '__total__';
+function loadBudgets(){
+  try{
+    const raw = localStorage.getItem(BUDGET_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && typeof parsed === 'object') return parsed;
+    }
+  }catch(e){}
+  return {};
+}
+function saveBudgets(map){ localStorage.setItem(BUDGET_KEY, JSON.stringify(map)); }
+function setBudget(cat, amount){
+  const map = loadBudgets();
+  if(amount > 0) map[cat] = amount; else delete map[cat];
+  saveBudgets(map);
+}
+function removeBudget(cat){
+  const map = loadBudgets();
+  delete map[cat];
+  saveBudgets(map);
+}
+function populateBudgetCatOptions(){
+  const sel = $('#budgetCatSelect');
+  const keep = sel.value;
+  const names = getCategoryNames('expense');
+  sel.innerHTML = `<option value="${BUDGET_TOTAL_KEY}">整體支出（不分類別）</option>` +
+    names.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if(Array.from(sel.options).some(o => o.value === keep)) sel.value = keep;
+}
+function renderBudgetSection(period, expenseByCat, totalExpense){
+  const section = $('#statsBudgetSection');
+  if(statsMode !== 'month'){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  populateBudgetCatOptions();
+  const budgets = loadBudgets();
+  const entries = Object.entries(budgets);
+  const list = $('#budgetList');
+  if(!entries.length){
+    list.innerHTML = `<div class="empty">尚未設定預算。設定後，這裡會顯示每個類別（或整體）本月花了多少、還剩多少，超支會提醒你。</div>`;
+    return;
+  }
+  const withUsage = entries.map(([cat, amt]) => {
+    const spent = cat === BUDGET_TOTAL_KEY ? totalExpense : (expenseByCat[cat] || 0);
+    const pct = amt ? Math.round(spent / amt * 100) : 0;
+    return { cat, amt: Number(amt) || 0, spent, pct };
+  }).sort((a,b) => (a.cat === BUDGET_TOTAL_KEY ? -1 : b.cat === BUDGET_TOTAL_KEY ? 1 : b.pct - a.pct));
+
+  list.innerHTML = withUsage.map(b => {
+    const label = b.cat === BUDGET_TOTAL_KEY ? '整體支出' : b.cat;
+    const barPct = Math.max(0, Math.min(100, b.pct));
+    const cls = b.pct >= 100 ? 'danger' : (b.pct >= 70 ? 'warn' : 'ok');
+    const remain = b.amt - b.spent;
+    const remainText = remain >= 0 ? `剩 $${fmt(remain)}` : `超支 $${fmt(Math.abs(remain))}`;
+    return `<div class="budget-row">
+      <div class="budget-row-top">
+        <span>${escapeHtml(label)}</span>
+        <span>$${fmt(b.spent)} / $${fmt(b.amt)}</span>
+      </div>
+      <div class="budget-track"><div class="budget-fill ${cls}" style="width:${barPct}%"></div></div>
+      <div class="budget-row-bottom">
+        <span class="${cls}">${b.pct}%</span>
+        <span>${remainText}</span>
+        <button type="button" class="small danger" data-del-budget="${escapeHtml(b.cat)}">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+$('#budgetSaveBtn').addEventListener('click', () => {
+  const cat = $('#budgetCatSelect').value;
+  const amt = parseFloat($('#budgetAmountInput').value);
+  if(!amt || amt <= 0){ alert('請輸入大於 0 的預算金額。'); return; }
+  setBudget(cat, amt);
+  $('#budgetAmountInput').value = '';
+  renderStats();
+});
+$('#budgetList').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-del-budget]');
+  if(!btn) return;
+  removeBudget(btn.dataset.delBudget);
+  renderStats();
+});
+
+// ---------- 每日消費節奏（月模式）----------
+function daysElapsedInPeriod(period, mode){
+  if(!period) return 0;
+  const now = new Date();
+  if(mode === 'month'){
+    const [y, m] = period.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const isCurrent = period === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    if(isCurrent) return now.getDate();
+    const isFuture = new Date(y, m - 1, 1) > now;
+    return isFuture ? 0 : daysInMonth;
+  }
+  const y = parseInt(period, 10);
+  if(!y) return 0;
+  const isCurrent = y === now.getFullYear();
+  if(isCurrent){
+    const start = new Date(y, 0, 1);
+    return Math.floor((now - start) / 86400000) + 1;
+  }
+  if(y > now.getFullYear()) return 0;
+  return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+}
+function totalDaysInPeriod(period, mode){
+  if(!period) return 0;
+  if(mode === 'month'){
+    const [y, m] = period.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  }
+  const y = parseInt(period, 10) || 0;
+  return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+}
+function renderDailyRhythm(period){
+  const section = $('#statsDailySection');
+  if(statsMode !== 'month' || !period){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  const [y, m] = period.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const daily = Array(daysInMonth).fill(0);
+  state.transactions.forEach(t => {
+    if(t.type !== 'expense') return;
+    const d = t.date || '';
+    if(!d.startsWith(period)) return;
+    const day = parseInt(d.slice(8,10), 10);
+    if(day >= 1 && day <= daysInMonth) daily[day-1] += Number(t.amount) || 0;
+  });
+  const maxVal = Math.max(...daily, 0);
+  const now = new Date();
+  const isCurrentMonth = period === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const todayDay = isCurrentMonth ? now.getDate() : null;
+
+  $('#statsDailyChart').innerHTML = `<div class="day-chart">${daily.map((val, i) => {
+    const day = i + 1;
+    const pct = maxVal ? Math.round(val / maxVal * 100) : 0;
+    const dow = new Date(y, m - 1, day).getDay();
+    const weekend = dow === 0 || dow === 6;
+    const isToday = todayDay === day;
+    const height = val > 0 ? Math.max(pct, 4) : 0;
+    return `<div class="day-bar${weekend ? ' weekend' : ''}${isToday ? ' today' : ''}" title="${m}/${day}：$${fmt(val)}">
+      <div class="day-bar-fill" style="height:${height}%"></div>
+    </div>`;
+  }).join('')}</div>`;
+
+  const spendDays = daily.filter(v => v > 0).length;
+  const daysElapsed = Math.min(daysInMonth, daysElapsedInPeriod(period, 'month')) || daysInMonth;
+  const noSpendDays = daysElapsed - spendDays;
+  let maxDay = 0, maxDayVal = 0;
+  daily.forEach((v, i) => { if(v > maxDayVal){ maxDayVal = v; maxDay = i + 1; } });
+  $('#statsDailyHighlights').innerHTML = `
+    <div class="day-highlight-row"><span>花費最高的一天</span><b>${maxDayVal ? `${m}/${maxDay}（$${fmt(maxDayVal)}）` : '—'}</b></div>
+    <div class="day-highlight-row"><span>無消費天數</span><b>${Math.max(0, noSpendDays)} / ${daysElapsed} 天（已過的天數）</b></div>
+  `;
 }
 
 function renderStats(){
@@ -1630,18 +1960,43 @@ function renderStats(){
   const expenseTotal = rows.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const net = incomeTotal - expenseTotal;
 
+  // ① 本期關鍵指標：收支結餘之外，加上儲蓄率、日均花費、（未過完的期間）預估總支出
+  const daysElapsed = Math.max(daysElapsedInPeriod(period, statsMode), 0);
+  const totalDaysN = totalDaysInPeriod(period, statsMode);
+  const dailyAvg = daysElapsed > 0 ? expenseTotal / daysElapsed : 0;
+  const savingsRate = incomeTotal > 0 ? (net / incomeTotal * 100) : null;
+  const isPartial = daysElapsed > 0 && daysElapsed < totalDaysN;
+  const projected = isPartial ? dailyAvg * totalDaysN : null;
+
   $('#statsSummaryGrid').innerHTML = `
     <div class="summary-card"><div class="label">收入</div><div class="value" style="color:var(--green)">$${fmt(incomeTotal)}</div></div>
     <div class="summary-card"><div class="label">支出</div><div class="value" style="color:var(--red)">$${fmt(expenseTotal)}</div></div>
     <div class="summary-card"><div class="label">結餘</div><div class="value">$${fmt(net)}</div></div>
+    <div class="summary-card"><div class="label">儲蓄率</div><div class="value">${savingsRate === null ? '—' : fmt(savingsRate) + '%'}</div></div>
+    <div class="summary-card"><div class="label">日均花費</div><div class="value">$${fmt(dailyAvg)}</div></div>
+    ${projected !== null ? `<div class="summary-card"><div class="label">預估${statsMode==='month'?'月底':'年底'}總支出</div><div class="value" style="color:var(--red)">$${fmt(projected)}</div></div>` : ''}
   `;
 
-  const exp = breakdownByCategory(rows, 'expense');
-  const inc = breakdownByCategory(rows, 'income');
   renderCompare(period, expenseTotal);
-  renderPieChart($('#statsExpensePie'), exp.items, exp.total);
-  renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
 
+  // ② 支出去了哪裡：排行榜（跟上一期比較誰漲最多、誰降最多）
+  const prevPeriod = previousPeriodStr(period, statsMode);
+  const curExpStats = categoryStatsFor(rows, 'expense');
+  const prevExpStats = categoryStatsFor(transactionsInPeriod(prevPeriod), 'expense');
+  const rankedItems = Object.entries(curExpStats.map).sort((a,b) => b[1].total - a[1].total).map(([cat, info]) => [cat, info.total]);
+  renderPieChart($('#statsExpensePie'), rankedItems, curExpStats.total, false);
+  renderCategoryRanking($('#statsCategoryRank'), curExpStats, prevExpStats);
+
+  // ③ 預算追蹤
+  const expenseByCat = {};
+  Object.entries(curExpStats.map).forEach(([cat, info]) => { expenseByCat[cat] = info.total; });
+  renderBudgetSection(period, expenseByCat, expenseTotal);
+
+  // ④ 固定 vs 彈性支出
+  renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
+
+  // ⑤ 消費節奏：月模式顯示每日長條圖，年模式顯示每月趨勢
+  renderDailyRhythm(period);
   const trendSection = $('#statsYearlyTrendSection');
   if(statsMode === 'year' && period){
     trendSection.style.display = '';
@@ -1669,6 +2024,11 @@ function renderStats(){
     trendSection.style.display = 'none';
   }
 
+  // ⑥ 收入來源
+  const inc = breakdownByCategory(rows, 'income');
+  renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
+
+  // ⑦ 進階查詢（類別月份分佈，預設收合）
   renderDistribution();
 }
 
