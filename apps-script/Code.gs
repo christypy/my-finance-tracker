@@ -45,7 +45,9 @@ const SHEET_HEADERS = {
   // 注意：新增欄位一律加在陣列「最後面」，不要插在中間，
   // 這樣舊表格用 ensureHeaders_ 自動補欄位時，既有資料的欄位對應才不會跑掉。
   // subcategory  子類別（選填，配合前端「主類別/子類別」管理，新增於陣列最後面）
-  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId', 'subcategory'],
+  // toAccountId  轉帳專用（type:'transfer'）：accountId 是轉出帳戶、toAccountId 是轉入帳戶，
+  //              兩個帳戶的餘額會同時調整，且不計入收入／支出統計。新增於陣列最後面。
+  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId', 'subcategory', 'toAccountId'],
   // 固定項目範本（房租、健保費、訂閱費用...）：
   //   type       'expense' | 'income'
   //   dayOfMonth 每月幾號要繳（1-28，僅供提醒顯示用，不會自動觸發）
@@ -162,10 +164,33 @@ function adjustAccountBalance_(accountId, delta) {
   return obj;
 }
 
+// 統一處理一筆記帳對帳戶餘額的影響：
+// - expense/income：只影響 accountId 一個帳戶（原本邏輯）
+// - transfer：同時影響 accountId（轉出，扣款）與 toAccountId（轉入，入帳）兩個帳戶
+// sign = 1 表示套用這筆紀錄的效果；sign = -1 表示反向還原（編輯前/刪除時用）
+function applyBalanceEffect_(data, sign) {
+  const touched = [];
+  if (data.type === 'transfer') {
+    const amt = Number(data.amount) || 0;
+    if (data.accountId) {
+      const acc = adjustAccountBalance_(data.accountId, -amt * sign);
+      if (acc) touched.push(acc);
+    }
+    if (data.toAccountId) {
+      const acc2 = adjustAccountBalance_(data.toAccountId, amt * sign);
+      if (acc2) touched.push(acc2);
+    }
+  } else if (data.accountId) {
+    const acc = adjustAccountBalance_(data.accountId, txDelta_(data.type, data.amount) * sign);
+    if (acc) touched.push(acc);
+  }
+  return touched;
+}
+
 function addTransactionTx_(data) {
   const tx = addRow_('transactions', data);
-  const account = tx.accountId ? adjustAccountBalance_(tx.accountId, txDelta_(tx.type, tx.amount)) : null;
-  return { transaction: tx, account: account };
+  const accountsTouched = applyBalanceEffect_(tx, 1);
+  return { transaction: tx, account: accountsTouched[0] || null, accounts: accountsTouched };
 }
 
 function updateTransactionTx_(data) {
@@ -175,16 +200,9 @@ function updateTransactionTx_(data) {
   if (rowIndex === -1) throw new Error('找不到這筆記帳: ' + data.id);
   const old = readRowObj_(sheet, rowIndex, headers);
 
-  const accountsTouched = [];
-  if (old.accountId) {
-    const acc = adjustAccountBalance_(old.accountId, -txDelta_(old.type, old.amount));
-    if (acc) accountsTouched.push(acc);
-  }
+  const accountsTouched = applyBalanceEffect_(old, -1);
   const tx = updateRow_('transactions', data);
-  if (tx.accountId) {
-    const acc = adjustAccountBalance_(tx.accountId, txDelta_(tx.type, tx.amount));
-    if (acc) accountsTouched.push(acc);
-  }
+  applyBalanceEffect_(tx, 1).forEach(acc => accountsTouched.push(acc));
   return { transaction: tx, accounts: accountsTouched };
 }
 
@@ -195,8 +213,8 @@ function deleteTransactionTx_(id) {
   if (rowIndex === -1) throw new Error('找不到這筆記帳: ' + id);
   const old = readRowObj_(sheet, rowIndex, headers);
   sheet.deleteRow(rowIndex);
-  const account = old.accountId ? adjustAccountBalance_(old.accountId, -txDelta_(old.type, old.amount)) : null;
-  return { id: id, account: account };
+  const accountsTouched = applyBalanceEffect_(old, -1);
+  return { id: id, account: accountsTouched[0] || null, accounts: accountsTouched };
 }
 
 // 批次新增（CSV 匯入用）：一次 exec 內用陣列寫入所有列，不逐筆來回
