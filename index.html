@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的存摺 · 個人存款管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#182a4a;
+    --ink-soft:#33456b;
+    --paper:#f1e9d2;
+    --paper-line:#d9cca4;
+    --cover:#101d36;
+    --gold:#b4903b;
+    --gold-soft:#e4d5a4;
+    --red:#9c3b34;
+    --green:#3e6b52;
+    --radius:2px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--cover);
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(180,144,59,.10), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(180,144,59,.08), transparent 40%);
+    font-family:'Noto Sans TC', sans-serif;
+    color:var(--ink);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:32px 16px 64px;
+  }
+  .book{
+    width:100%;
+    max-width:880px;
+  }
+  .book-title{
+    text-align:center;
+    color:var(--gold-soft);
+    font-family:'Roboto Slab', serif;
+    letter-spacing:.04em;
+    font-size:14px;
+    margin:0 0 10px;
+    font-weight:400;
+  }
+  .tabs{
+    display:flex;
+    gap:2px;
+    margin:0 0 -1px;
+    overflow-x:auto;
+  }
+  .tab{
+    font-family:'Roboto Slab', serif;
+    font-size:14px;
+    padding:10px 18px;
+    background:#0c1730;
+    color:var(--gold-soft);
+    border:1px solid #0c1730;
+    border-bottom:none;
+    border-radius:var(--radius) var(--radius) 0 0;
+    cursor:pointer;
+    white-space:nowrap;
+    opacity:.7;
+  }
+  .tab.active{
+    background:var(--paper);
+    color:var(--ink);
+    opacity:1;
+  }
+  .page{
+    background:var(--paper);
+    background-image:repeating-linear-gradient(
+      to bottom, transparent, transparent 31px, var(--paper-line) 32px
+    );
+    padding:28px 30px 34px;
+    border-radius:0 var(--radius) var(--radius) var(--radius);
+    min-height:420px;
+    box-shadow: 0 20px 40px rgba(0,0,0,.35);
+  }
+  .view{display:none;}
+  .view.active{display:block;}
+  h2{
+    font-family:'Roboto Slab', serif;
+    font-size:20px;
+    margin:0 0 18px;
+    color:var(--ink);
+    border-bottom:2px solid var(--ink);
+    padding-bottom:8px;
+  }
+  .summary-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(150px,1fr));
+    gap:14px;
+    margin-bottom:24px;
+  }
+  .summary-card{
+    background:rgba(255,255,255,.35);
+    border:1px solid var(--paper-line);
+    padding:12px 14px;
+    border-radius:var(--radius);
+  }
+  .summary-card .label{font-size:12px;color:var(--ink-soft);}
+  .summary-card .value{
+    font-family:'Roboto Slab', serif;
+    font-size:22px;
+    margin-top:4px;
+  }
+  .summary-card.total .value{color:var(--ink);}
+  .summary-card.debt .value{color:var(--red);}
+  .summary-card.net .value{color:var(--green);}
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:14px;
+    margin-bottom:20px;
+  }
+  th, td{
+    text-align:left;
+    padding:8px 6px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  th{
+    font-family:'Roboto Slab', serif;
+    font-weight:600;
+    color:var(--ink-soft);
+    font-size:12px;
+    text-transform:none;
+  }
+  td.num, th.num{text-align:right; font-family:'Roboto Slab', serif;}
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:10px;
+    background:var(--gold-soft);
+    color:#5a4413;
+  }
+  .row-actions button{margin-right:4px;}
+  button, .btn{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:13px;
+    padding:7px 14px;
+    border:1px solid var(--ink);
+    background:transparent;
+    color:var(--ink);
+    border-radius:var(--radius);
+    cursor:pointer;
+  }
+  button.primary{background:var(--ink); color:var(--paper);}
+  button.danger{border-color:var(--red); color:var(--red);}
+  button.small{padding:4px 9px; font-size:12px;}
+  form.entry{
+    background:rgba(255,255,255,.4);
+    border:1px solid var(--paper-line);
+    padding:16px;
+    border-radius:var(--radius);
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:12px;
+    margin-bottom:22px;
+  }
+  form.entry label{
+    display:flex;
+    flex-direction:column;
+    font-size:12px;
+    color:var(--ink-soft);
+    gap:4px;
+  }
+  input, select, textarea{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:14px;
+    padding:7px 8px;
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius);
+    background:#fffdf7;
+    color:var(--ink);
+  }
+  form.entry .full{grid-column:1/-1;}
+  .form-actions{grid-column:1/-1; display:flex; gap:8px;}
+  .hint{font-size:12px; color:var(--ink-soft); margin:-8px 0 18px;}
+  .empty{color:var(--ink-soft); font-size:13px; padding:12px 0;}
+  .settings-block{
+    background:rgba(255,255,255,.4);
+    border:1px solid var(--paper-line);
+    padding:16px;
+    border-radius:var(--radius);
+    display:grid;
+    gap:12px;
+    max-width:520px;
+  }
+  .status{font-size:13px; margin-top:8px;}
+  .status.ok{color:var(--green);}
+  .status.err{color:var(--red);}
+  @media (max-width:520px){
+    .page{padding:20px 16px 26px;}
+  }
+</style>
+</head>
+<body>
+<div class="book">
+  <p class="book-title">我 的 存 摺 · 個 人 存 款 管 理</p>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-view="dashboard">總覽</div>
+    <div class="tab" data-view="accounts">帳戶</div>
+    <div class="tab" data-view="interest">利息紀錄</div>
+    <div class="tab" data-view="liabilities">負債</div>
+    <div class="tab" data-view="settings">設定</div>
+  </div>
+  <div class="page">
+
+    <!-- 總覽 -->
+    <div class="view active" id="view-dashboard">
+      <h2>總覽</h2>
+      <div class="summary-grid" id="summaryGrid"></div>
+      <table>
+        <thead><tr><th>帳戶</th><th>類型</th><th class="num">餘額</th></tr></thead>
+        <tbody id="dashboardAccountsBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 帳戶 -->
+    <div class="view" id="view-accounts">
+      <h2>帳戶</h2>
+      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。銀行帳戶可填年利率，用來估算利息（實際入帳請到「利息紀錄」新增）。</p>
+      <form class="entry" id="accountForm">
+        <input type="hidden" id="accId">
+        <label>名稱
+          <input type="text" id="accName" placeholder="例如：中信活儲" required>
+        </label>
+        <label>類型
+          <select id="accType">
+            <option value="現金">現金</option>
+            <option value="銀行">銀行</option>
+            <option value="行動支付">行動支付</option>
+            <option value="悠遊卡">悠遊卡</option>
+            <option value="投資">投資</option>
+          </select>
+        </label>
+        <label>目前餘額
+          <input type="number" id="accBalance" step="0.01" required>
+        </label>
+        <label>年利率 %（銀行適用，選填）
+          <input type="number" id="accRate" step="0.001" placeholder="例如 1.2">
+        </label>
+        <label class="full">備註
+          <input type="text" id="accNote" placeholder="選填">
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="primary">儲存帳戶</button>
+          <button type="button" id="accCancel">清空表單</button>
+        </div>
+      </form>
+      <table>
+        <thead><tr><th>名稱</th><th>類型</th><th class="num">餘額</th><th>年利率</th><th class="num">下期估算利息</th><th>操作</th></tr></thead>
+        <tbody id="accountsBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 利息紀錄 -->
+    <div class="view" id="view-interest">
+      <h2>利息紀錄</h2>
+      <p class="hint">銀行真的撥利息給你時，在這裡新增一筆，系統會自動把金額加進該帳戶的餘額。</p>
+      <form class="entry" id="interestForm">
+        <label>帳戶
+          <select id="intAccount" required></select>
+        </label>
+        <label>入帳日期
+          <input type="date" id="intDate" required>
+        </label>
+        <label>金額
+          <input type="number" id="intAmount" step="0.01" required>
+        </label>
+        <label class="full">備註
+          <input type="text" id="intNote" placeholder="例如：3月活儲利息">
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="primary">新增並加入餘額</button>
+        </div>
+      </form>
+      <table>
+        <thead><tr><th>日期</th><th>帳戶</th><th class="num">金額</th><th>備註</th><th>操作</th></tr></thead>
+        <tbody id="interestBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 負債 -->
+    <div class="view" id="view-liabilities">
+      <h2>負債（含國民年金未繳款）</h2>
+      <form class="entry" id="liabilityForm">
+        <input type="hidden" id="liaId">
+        <label>項目名稱
+          <input type="text" id="liaName" placeholder="例如：國民年金 3月" required>
+        </label>
+        <label>金額
+          <input type="number" id="liaAmount" step="0.01" required>
+        </label>
+        <label>繳費期限
+          <input type="date" id="liaDue">
+        </label>
+        <label>狀態
+          <select id="liaPaid">
+            <option value="false">未繳</option>
+            <option value="true">已繳</option>
+          </select>
+        </label>
+        <label class="full">備註
+          <input type="text" id="liaNote" placeholder="選填">
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="primary">儲存項目</button>
+          <button type="button" id="liaCancel">清空表單</button>
+        </div>
+      </form>
+      <table>
+        <thead><tr><th>項目</th><th class="num">金額</th><th>期限</th><th>狀態</th><th>操作</th></tr></thead>
+        <tbody id="liabilitiesBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 設定 -->
+    <div class="view" id="view-settings">
+      <h2>設定</h2>
+      <p class="hint">填入你部署 Google Apps Script 後取得的網址與密鑰，只存在你這台裝置的瀏覽器裡，不會上傳到 GitHub。</p>
+      <div class="settings-block">
+        <label>Apps Script 網址
+          <input type="text" id="cfgUrl" placeholder="https://script.google.com/macros/s/xxx/exec">
+        </label>
+        <label>密鑰 (SECRET_TOKEN)
+          <input type="text" id="cfgToken" placeholder="你在 Apps Script 指令碼屬性設定的值">
+        </label>
+        <button id="cfgSave" class="primary">儲存設定並重新連線</button>
+        <div class="status" id="cfgStatus"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+const cfg = {
+  url: localStorage.getItem('fin_url') || '',
+  token: localStorage.getItem('fin_token') || ''
+};
+
+let state = { accounts: [], liabilities: [], interest: [] };
+
+// ---------- Tabs ----------
+$$('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    $$('.tab').forEach(t => t.classList.remove('active'));
+    $$('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    $('#view-' + tab.dataset.view).classList.add('active');
+  });
+});
+
+// ---------- API ----------
+async function apiGet(sheet){
+  const url = `${cfg.url}?token=${encodeURIComponent(cfg.token)}&sheet=${sheet}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || '讀取失敗');
+  return json.data;
+}
+async function apiPost(action, sheet, data){
+  const res = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ token: cfg.token, action, sheet, data })
+  });
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || '操作失敗');
+  return json.data;
+}
+
+async function loadAll(){
+  if(!cfg.url || !cfg.token){
+    $('#cfgStatus').textContent = '尚未設定，請先到「設定」填入網址與密鑰。';
+    $('#cfgStatus').className = 'status err';
+    return;
+  }
+  try{
+    const [accounts, liabilities, interest] = await Promise.all([
+      apiGet('accounts'), apiGet('liabilities'), apiGet('interest')
+    ]);
+    state.accounts = accounts;
+    state.liabilities = liabilities;
+    state.interest = interest;
+    renderAll();
+    $('#cfgStatus').textContent = '已連線成功。';
+    $('#cfgStatus').className = 'status ok';
+  }catch(err){
+    $('#cfgStatus').textContent = '連線失敗：' + err.message;
+    $('#cfgStatus').className = 'status err';
+  }
+}
+
+function fmt(n){
+  const num = Number(n) || 0;
+  return num.toLocaleString('zh-Hant-TW', { minimumFractionDigits:0, maximumFractionDigits:2 });
+}
+
+// ---------- Render ----------
+function renderAll(){
+  renderDashboard();
+  renderAccounts();
+  renderInterest();
+  renderLiabilities();
+}
+
+function renderDashboard(){
+  const byType = {};
+  let totalAssets = 0;
+  state.accounts.forEach(a => {
+    const bal = Number(a.balance) || 0;
+    byType[a.type] = (byType[a.type] || 0) + bal;
+    totalAssets += bal;
+  });
+  const totalDebt = state.liabilities
+    .filter(l => String(l.paid) !== 'true')
+    .reduce((s,l) => s + (Number(l.amount)||0), 0);
+
+  const grid = $('#summaryGrid');
+  grid.innerHTML = '';
+  Object.entries(byType).forEach(([type, val]) => {
+    grid.innerHTML += `<div class="summary-card"><div class="label">${type}</div><div class="value">$${fmt(val)}</div></div>`;
+  });
+  grid.innerHTML += `<div class="summary-card total"><div class="label">資產總計</div><div class="value">$${fmt(totalAssets)}</div></div>`;
+  grid.innerHTML += `<div class="summary-card debt"><div class="label">未繳負債</div><div class="value">$${fmt(totalDebt)}</div></div>`;
+  grid.innerHTML += `<div class="summary-card net"><div class="label">淨資產</div><div class="value">$${fmt(totalAssets-totalDebt)}</div></div>`;
+
+  const body = $('#dashboardAccountsBody');
+  body.innerHTML = state.accounts.length ? '' : `<tr><td colspan="3" class="empty">尚無帳戶，請到「帳戶」新增。</td></tr>`;
+  state.accounts.forEach(a => {
+    body.innerHTML += `<tr><td>${a.name}</td><td><span class="badge">${a.type}</span></td><td class="num">$${fmt(a.balance)}</td></tr>`;
+  });
+}
+
+function renderAccounts(){
+  const body = $('#accountsBody');
+  body.innerHTML = state.accounts.length ? '' : `<tr><td colspan="6" class="empty">尚無帳戶。</td></tr>`;
+  state.accounts.forEach(a => {
+    const rate = a.interestRate ? Number(a.interestRate) : 0;
+    const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
+    body.innerHTML += `<tr>
+      <td>${a.name}${a.note ? `<br><small style="color:var(--ink-soft)">${a.note}</small>`:''}</td>
+      <td><span class="badge">${a.type}</span></td>
+      <td class="num">$${fmt(a.balance)}</td>
+      <td>${rate ? rate + '%' : '—'}</td>
+      <td class="num">${est !== null ? '$'+fmt(est) : '—'}</td>
+      <td class="row-actions">
+        <button class="small" onclick="editAccount('${a.id}')">編輯</button>
+        <button class="small danger" onclick="deleteAccount('${a.id}')">刪除</button>
+      </td>
+    </tr>`;
+  });
+
+  const sel = $('#intAccount');
+  sel.innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+}
+
+function renderInterest(){
+  const body = $('#interestBody');
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  const rows = [...state.interest].sort((a,b) => (a.date < b.date ? 1 : -1));
+  body.innerHTML = rows.length ? '' : `<tr><td colspan="5" class="empty">尚無利息紀錄。</td></tr>`;
+  rows.forEach(r => {
+    body.innerHTML += `<tr>
+      <td>${r.date}</td>
+      <td>${byId[r.accountId] || '（帳戶已刪除）'}</td>
+      <td class="num">$${fmt(r.amount)}</td>
+      <td>${r.note || ''}</td>
+      <td class="row-actions"><button class="small danger" onclick="deleteInterest('${r.id}')">刪除</button></td>
+    </tr>`;
+  });
+}
+
+function renderLiabilities(){
+  const body = $('#liabilitiesBody');
+  body.innerHTML = state.liabilities.length ? '' : `<tr><td colspan="5" class="empty">尚無負債項目。</td></tr>`;
+  state.liabilities.forEach(l => {
+    const paid = String(l.paid) === 'true';
+    body.innerHTML += `<tr>
+      <td>${l.name}${l.note ? `<br><small style="color:var(--ink-soft)">${l.note}</small>`:''}</td>
+      <td class="num">$${fmt(l.amount)}</td>
+      <td>${l.dueDate || '—'}</td>
+      <td><span class="badge" style="background:${paid ? '#d7e8dd' : '#f0d3ce'}; color:${paid ? 'var(--green)' : 'var(--red)'}">${paid ? '已繳' : '未繳'}</span></td>
+      <td class="row-actions">
+        <button class="small" onclick="editLiability('${l.id}')">編輯</button>
+        <button class="small danger" onclick="deleteLiability('${l.id}')">刪除</button>
+      </td>
+    </tr>`;
+  });
+}
+
+// ---------- Accounts CRUD ----------
+$('#accountForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = {
+    id: $('#accId').value || undefined,
+    name: $('#accName').value,
+    type: $('#accType').value,
+    balance: parseFloat($('#accBalance').value) || 0,
+    interestRate: $('#accRate').value ? parseFloat($('#accRate').value) : '',
+    note: $('#accNote').value
+  };
+  try{
+    if(data.id) await apiPost('update','accounts',data);
+    else { delete data.id; await apiPost('add','accounts',data); }
+    resetAccountForm();
+    await loadAll();
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#accCancel').addEventListener('click', resetAccountForm);
+function resetAccountForm(){
+  $('#accId').value=''; $('#accName').value=''; $('#accType').value='現金';
+  $('#accBalance').value=''; $('#accRate').value=''; $('#accNote').value='';
+}
+window.editAccount = id => {
+  const a = state.accounts.find(x => x.id === id);
+  if(!a) return;
+  $('#accId').value=a.id; $('#accName').value=a.name; $('#accType').value=a.type;
+  $('#accBalance').value=a.balance; $('#accRate').value=a.interestRate || '';
+  $('#accNote').value=a.note || '';
+  $('#view-accounts .entry').scrollIntoView({behavior:'smooth'});
+};
+window.deleteAccount = async id => {
+  if(!confirm('確定刪除這個帳戶？')) return;
+  try{ await apiPost('delete','accounts',{id}); await loadAll(); }
+  catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- Interest CRUD ----------
+$('#interestForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const accountId = $('#intAccount').value;
+  const amount = parseFloat($('#intAmount').value) || 0;
+  const data = { accountId, date: $('#intDate').value, amount, note: $('#intNote').value };
+  try{
+    await apiPost('add','interest',data);
+    const acc = state.accounts.find(a => a.id === accountId);
+    if(acc){
+      await apiPost('update','accounts',{ ...acc, balance: (Number(acc.balance)||0) + amount });
+    }
+    $('#interestForm').reset();
+    await loadAll();
+  }catch(err){ alert('新增失敗：' + err.message); }
+});
+window.deleteInterest = async id => {
+  if(!confirm('確定刪除這筆利息紀錄？（不會自動從餘額扣回，請自行到帳戶調整）')) return;
+  try{ await apiPost('delete','interest',{id}); await loadAll(); }
+  catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- Liabilities CRUD ----------
+$('#liabilityForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = {
+    id: $('#liaId').value || undefined,
+    name: $('#liaName').value,
+    amount: parseFloat($('#liaAmount').value) || 0,
+    dueDate: $('#liaDue').value,
+    paid: $('#liaPaid').value,
+    note: $('#liaNote').value
+  };
+  try{
+    if(data.id) await apiPost('update','liabilities',data);
+    else { delete data.id; await apiPost('add','liabilities',data); }
+    resetLiabilityForm();
+    await loadAll();
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#liaCancel').addEventListener('click', resetLiabilityForm);
+function resetLiabilityForm(){
+  $('#liaId').value=''; $('#liaName').value=''; $('#liaAmount').value='';
+  $('#liaDue').value=''; $('#liaPaid').value='false'; $('#liaNote').value='';
+}
+window.editLiability = id => {
+  const l = state.liabilities.find(x => x.id === id);
+  if(!l) return;
+  $('#liaId').value=l.id; $('#liaName').value=l.name; $('#liaAmount').value=l.amount;
+  $('#liaDue').value=l.dueDate || ''; $('#liaPaid').value=String(l.paid);
+  $('#liaNote').value=l.note || '';
+  $('#view-liabilities .entry').scrollIntoView({behavior:'smooth'});
+};
+window.deleteLiability = async id => {
+  if(!confirm('確定刪除這個負債項目？')) return;
+  try{ await apiPost('delete','liabilities',{id}); await loadAll(); }
+  catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- Settings ----------
+$('#cfgUrl').value = cfg.url;
+$('#cfgToken').value = cfg.token;
+$('#cfgSave').addEventListener('click', () => {
+  cfg.url = $('#cfgUrl').value.trim();
+  cfg.token = $('#cfgToken').value.trim();
+  localStorage.setItem('fin_url', cfg.url);
+  localStorage.setItem('fin_token', cfg.token);
+  loadAll();
+});
+
+loadAll();
+</script>
+</body>
+</html>
