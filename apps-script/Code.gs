@@ -20,13 +20,16 @@
 const SHEET_NAMES = {
   accounts: 'Accounts',
   liabilities: 'Liabilities',
-  interest: 'InterestRecords'
+  interest: 'InterestRecords',
+  transactions: 'Transactions'
 };
 
 const SHEET_HEADERS = {
   accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'note', 'updatedAt'],
   liabilities: ['id', 'name', 'amount', 'dueDate', 'paid', 'note', 'updatedAt'],
-  interest: ['id', 'accountId', 'date', 'amount', 'note', 'createdAt']
+  interest: ['id', 'accountId', 'date', 'amount', 'note', 'createdAt'],
+  // 記帳紀錄：type 為 'expense'（支出）或 'income'（收入），category 為品項（餐飲/交通/薪資...）
+  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt']
 };
 
 function getSheet_(key) {

@@ -282,6 +282,35 @@
   .bottom-nav .tab svg{width:20px;height:20px;}
   .bottom-nav .tab.active{ background:transparent; color:var(--gold-soft); opacity:1; }
 
+  /* ---- Segmented sub-nav (記帳: 紀錄/統計、統計: 月/年) ---- */
+  .segmented{ display:flex; gap:6px; margin-bottom:14px; }
+  .segmented button{ flex:1; min-height:38px; padding:8px 10px; font-size:13px; border-radius:999px; }
+  .segmented button.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600; }
+
+  .period-row{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .period-row input, .period-row select{ min-height:38px; padding:7px 10px; width:auto; }
+  .filter-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; font-size:13px; color:var(--ink-soft); }
+  .filter-row label{ display:flex; align-items:center; gap:6px; }
+  .filter-row input[type="checkbox"]{ min-height:auto; width:16px; height:16px; padding:0; }
+
+  .type-toggle{ display:flex; gap:8px; }
+  .type-toggle button{ flex:1; }
+  .type-toggle button.active.income{ background:var(--green); color:#fff; border-color:var(--green); }
+  .type-toggle button.active.expense{ background:var(--red); color:#fff; border-color:var(--red); }
+
+  .item-value.income{ color:var(--green); }
+  .item-value.expense{ color:var(--red); }
+
+  .stat-section{ margin-bottom:22px; }
+  .stat-section h3{ font-family:'Roboto Slab', serif; font-size:15px; margin:0 0 10px; color:var(--ink); }
+  .stat-bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px; }
+  .stat-bar-label{ width:64px; flex:none; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stat-bar-track{ flex:1; height:16px; background:var(--paper-line); border-radius:999px; overflow:hidden; }
+  .stat-bar-fill{ height:100%; border-radius:999px; background:var(--gold); }
+  .stat-bar-fill.income{ background:var(--green); }
+  .stat-bar-fill.expense{ background:var(--red); }
+  .stat-bar-value{ width:104px; flex:none; text-align:right; font-family:'Roboto Slab', serif; font-size:12px; white-space:nowrap; }
+
   @media (max-width:680px){
     .wrap{ padding:14px 10px calc(var(--nav-h) + 22px); }
     .tabs.top-tabs{ display:none; }
@@ -413,6 +442,81 @@
       <div class="item-list" id="liabilitiesList"></div>
     </div>
 
+    <!-- 記帳 -->
+    <div class="view" id="view-transactions">
+      <h2>記帳</h2>
+      <div class="segmented" id="trSubNav">
+        <button type="button" class="active" data-sub="records">紀錄</button>
+        <button type="button" data-sub="stats">統計分析</button>
+      </div>
+
+      <!-- 記帳：紀錄 -->
+      <div id="trSub-records">
+        <details class="entry-wrap" id="trDetails">
+          <summary><span class="plus">＋</span>新增 / 編輯記帳</summary>
+          <form class="entry" id="trForm">
+            <input type="hidden" id="trId">
+            <div class="full type-toggle">
+              <button type="button" class="expense active" data-type="expense">支出</button>
+              <button type="button" class="income" data-type="income">收入</button>
+            </div>
+            <input type="hidden" id="trType" value="expense">
+            <label>日期
+              <input type="date" id="trDate" required>
+            </label>
+            <label>品項 / 類別
+              <select id="trCategory"></select>
+            </label>
+            <label>金額
+              <input type="number" id="trAmount" step="0.01" min="0" required>
+            </label>
+            <label>帳戶（選填，會自動增減餘額）
+              <select id="trAccount">
+                <option value="">不指定</option>
+              </select>
+            </label>
+            <label class="full">備註
+              <input type="text" id="trNote" placeholder="選填">
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="primary">儲存記帳</button>
+              <button type="button" id="trCancel">清空表單</button>
+            </div>
+          </form>
+        </details>
+        <div class="filter-row">
+          <label>月份 <input type="month" id="trFilterMonth"></label>
+          <label><input type="checkbox" id="trShowAll"> 顯示全部</label>
+        </div>
+        <div class="item-list" id="transactionsList"></div>
+      </div>
+
+      <!-- 記帳：統計分析 -->
+      <div id="trSub-stats" style="display:none;">
+        <div class="segmented" id="statsModeNav">
+          <button type="button" class="active" data-mode="month">依月份</button>
+          <button type="button" data-mode="year">依年度</button>
+        </div>
+        <div class="period-row">
+          <input type="month" id="statsMonthInput">
+          <select id="statsYearInput" style="display:none;"></select>
+        </div>
+        <div class="summary-grid" id="statsSummaryGrid"></div>
+        <div class="stat-section">
+          <h3>支出品項分佈</h3>
+          <div id="statsExpenseBreakdown"></div>
+        </div>
+        <div class="stat-section">
+          <h3>收入品項分佈</h3>
+          <div id="statsIncomeBreakdown"></div>
+        </div>
+        <div class="stat-section" id="statsYearlyTrendSection" style="display:none;">
+          <h3>年度每月支出趨勢</h3>
+          <div id="statsYearlyTrend"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 設定 -->
     <div class="view" id="view-settings">
       <h2>設定</h2>
@@ -446,11 +550,13 @@ const ICONS = {
   accounts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M16 14h2"/></svg>',
   interest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15V9l3 2 3-2v6"/></svg>',
   liabilities: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
+  transactions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h4"/><path d="M8 4v3M16 4v3"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>'
 };
 const TAB_DEFS = [
   { view:'dashboard', label:'總覽' },
   { view:'accounts', label:'帳戶' },
+  { view:'transactions', label:'記帳' },
   { view:'interest', label:'利息' },
   { view:'liabilities', label:'負債' },
   { view:'settings', label:'設定' }
@@ -476,7 +582,13 @@ const cfg = {
   token: localStorage.getItem('fin_token') || ''
 };
 
-let state = { accounts: [], liabilities: [], interest: [] };
+let state = { accounts: [], liabilities: [], interest: [], transactions: [] };
+
+// 記帳品項（依收入/支出分開）
+const CATEGORIES = {
+  expense: ['餐飲','交通','購物','娛樂','醫療','教育','居家','保險','旅遊','其他'],
+  income: ['薪資','獎金','投資收益','兼職','其他']
+};
 
 // ---------- API ----------
 async function apiGet(sheet){
@@ -504,12 +616,13 @@ async function loadAll(){
     return;
   }
   try{
-    const [accounts, liabilities, interest] = await Promise.all([
-      apiGet('accounts'), apiGet('liabilities'), apiGet('interest')
+    const [accounts, liabilities, interest, transactions] = await Promise.all([
+      apiGet('accounts'), apiGet('liabilities'), apiGet('interest'), apiGet('transactions')
     ]);
     state.accounts = accounts;
     state.liabilities = liabilities;
     state.interest = interest;
+    state.transactions = transactions;
     renderAll();
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
@@ -530,6 +643,8 @@ function renderAll(){
   renderAccounts();
   renderInterest();
   renderLiabilities();
+  renderTransactions();
+  renderStats();
 }
 
 function renderDashboard(){
@@ -599,6 +714,12 @@ function renderAccounts(){
 
   const sel = $('#intAccount');
   sel.innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+
+  const trSel = $('#trAccount');
+  const keepVal = trSel.value;
+  trSel.innerHTML = `<option value="">不指定</option>` +
+    state.accounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+  trSel.value = keepVal;
 }
 
 function renderInterest(){
@@ -649,6 +770,177 @@ function renderLiabilities(){
     }).join('');
   }
 }
+
+function renderTransactions(){
+  const list = $('#transactionsList');
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  const showAll = $('#trShowAll').checked;
+  const month = $('#trFilterMonth').value; // 'YYYY-MM'
+  let rows = [...state.transactions];
+  if(!showAll && month){
+    rows = rows.filter(t => (t.date || '').startsWith(month));
+  }
+  rows.sort((a,b) => (a.date < b.date ? 1 : -1));
+
+  if(!rows.length){
+    list.innerHTML = `<div class="empty">${showAll ? '尚無記帳紀錄。' : '這個月尚無記帳紀錄。'}</div>`;
+    return;
+  }
+  list.innerHTML = rows.map(t => {
+    const isExpense = t.type === 'expense';
+    const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${t.category || '其他'}</div>
+          <div class="item-note">${t.date}${acc ? ' · ' + acc : ''}${t.note ? ' · ' + t.note : ''}</div>
+        </div>
+        <div class="item-value ${isExpense ? 'expense' : 'income'}">${isExpense ? '-' : '+'}$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function populateTrCategories(type, selected){
+  const sel = $('#trCategory');
+  sel.innerHTML = CATEGORIES[type].map(c => `<option value="${c}">${c}</option>`).join('');
+  if(selected && CATEGORIES[type].includes(selected)) sel.value = selected;
+}
+
+function setTrType(type, selectedCategory){
+  $('#trType').value = type;
+  $$('.type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  populateTrCategories(type, selectedCategory);
+}
+
+// ---------- 記帳統計分析 ----------
+let statsMode = 'month'; // 'month' | 'year'
+
+function currentStatsPeriod(){
+  return statsMode === 'month' ? $('#statsMonthInput').value : $('#statsYearInput').value;
+}
+
+function transactionsInPeriod(period){
+  if(!period) return [];
+  return state.transactions.filter(t => (t.date || '').startsWith(period));
+}
+
+function breakdownByCategory(rows, type){
+  const map = {};
+  let total = 0;
+  rows.filter(t => t.type === type).forEach(t => {
+    const amt = Number(t.amount) || 0;
+    const cat = t.category || '其他';
+    map[cat] = (map[cat] || 0) + amt;
+    total += amt;
+  });
+  return { total, items: Object.entries(map).sort((a,b) => b[1]-a[1]) };
+}
+
+function renderBarList(container, items, total, cssClass){
+  if(!items.length){
+    container.innerHTML = `<div class="empty">這段期間沒有資料。</div>`;
+    return;
+  }
+  container.innerHTML = items.map(([label, val]) => {
+    const pct = total ? Math.round(val/total*100) : 0;
+    return `<div class="stat-bar-row">
+      <div class="stat-bar-label">${label}</div>
+      <div class="stat-bar-track"><div class="stat-bar-fill ${cssClass}" style="width:${pct}%"></div></div>
+      <div class="stat-bar-value">$${fmt(val)} (${pct}%)</div>
+    </div>`;
+  }).join('');
+}
+
+function populateStatsYearOptions(){
+  const years = new Set(state.transactions.map(t => (t.date||'').slice(0,4)).filter(Boolean));
+  const thisYear = String(new Date().getFullYear());
+  years.add(thisYear);
+  const sorted = Array.from(years).sort((a,b) => b.localeCompare(a));
+  const sel = $('#statsYearInput');
+  const keep = sel.value || thisYear;
+  sel.innerHTML = sorted.map(y => `<option value="${y}">${y} 年</option>`).join('');
+  sel.value = sorted.includes(keep) ? keep : thisYear;
+}
+
+function renderStats(){
+  populateStatsYearOptions();
+  if(!$('#statsMonthInput').value){
+    const now = new Date();
+    $('#statsMonthInput').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  const period = currentStatsPeriod();
+  const rows = transactionsInPeriod(period);
+
+  const incomeTotal = rows.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const expenseTotal = rows.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const net = incomeTotal - expenseTotal;
+
+  $('#statsSummaryGrid').innerHTML = `
+    <div class="summary-card"><div class="label">收入</div><div class="value" style="color:var(--green)">$${fmt(incomeTotal)}</div></div>
+    <div class="summary-card"><div class="label">支出</div><div class="value" style="color:var(--red)">$${fmt(expenseTotal)}</div></div>
+    <div class="summary-card"><div class="label">結餘</div><div class="value">$${fmt(net)}</div></div>
+  `;
+
+  const exp = breakdownByCategory(rows, 'expense');
+  const inc = breakdownByCategory(rows, 'income');
+  renderBarList($('#statsExpenseBreakdown'), exp.items, exp.total, 'expense');
+  renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
+
+  const trendSection = $('#statsYearlyTrendSection');
+  if(statsMode === 'year' && period){
+    trendSection.style.display = '';
+    const monthlyExpense = Array(12).fill(0);
+    let maxVal = 0;
+    state.transactions.forEach(t => {
+      if(t.type !== 'expense') return;
+      const d = t.date || '';
+      if(!d.startsWith(period)) return;
+      const m = parseInt(d.slice(5,7), 10) - 1;
+      if(m >= 0 && m < 12){
+        monthlyExpense[m] += Number(t.amount) || 0;
+        maxVal = Math.max(maxVal, monthlyExpense[m]);
+      }
+    });
+    $('#statsYearlyTrend').innerHTML = monthlyExpense.map((val, i) => {
+      const pct = maxVal ? Math.round(val/maxVal*100) : 0;
+      return `<div class="stat-bar-row">
+        <div class="stat-bar-label">${i+1} 月</div>
+        <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
+        <div class="stat-bar-value">$${fmt(val)}</div>
+      </div>`;
+    }).join('');
+  } else {
+    trendSection.style.display = 'none';
+  }
+}
+
+// 記帳頁：紀錄 / 統計 子分頁切換
+$('#trSubNav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-sub]');
+  if(!btn) return;
+  $$('#trSubNav button').forEach(b => b.classList.toggle('active', b === btn));
+  $('#trSub-records').style.display = btn.dataset.sub === 'records' ? '' : 'none';
+  $('#trSub-stats').style.display = btn.dataset.sub === 'stats' ? '' : 'none';
+  if(btn.dataset.sub === 'stats') renderStats();
+});
+
+// 統計：月/年 模式切換
+$('#statsModeNav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-mode]');
+  if(!btn) return;
+  statsMode = btn.dataset.mode;
+  $$('#statsModeNav button').forEach(b => b.classList.toggle('active', b === btn));
+  $('#statsMonthInput').style.display = statsMode === 'month' ? '' : 'none';
+  $('#statsYearInput').style.display = statsMode === 'year' ? '' : 'none';
+  renderStats();
+});
+$('#statsMonthInput').addEventListener('change', renderStats);
+$('#statsYearInput').addEventListener('change', renderStats);
 
 // ---------- Accounts CRUD ----------
 $('#accountForm').addEventListener('submit', async e => {
@@ -748,6 +1040,102 @@ window.deleteLiability = async id => {
   if(!confirm('確定刪除這個負債項目？')) return;
   try{ await apiPost('delete','liabilities',{id}); await loadAll(); }
   catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- Transactions (記帳) CRUD ----------
+(function initTrDefaults(){
+  const now = new Date();
+  $('#trDate').value = now.toISOString().slice(0,10);
+  $('#trFilterMonth').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  populateTrCategories('expense');
+})();
+
+$$('.type-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => setTrType(btn.dataset.type));
+});
+
+$('#trFilterMonth').addEventListener('change', renderTransactions);
+$('#trShowAll').addEventListener('change', () => {
+  $('#trFilterMonth').disabled = $('#trShowAll').checked;
+  renderTransactions();
+});
+
+async function applyAccountDelta(accountId, delta){
+  if(!accountId || !delta) return;
+  const acc = state.accounts.find(a => a.id === accountId);
+  if(!acc) return;
+  await apiPost('update','accounts',{ ...acc, balance: (Number(acc.balance)||0) + delta });
+}
+
+$('#trForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = $('#trId').value || undefined;
+  const type = $('#trType').value;
+  const amount = parseFloat($('#trAmount').value) || 0;
+  const accountId = $('#trAccount').value;
+  const data = {
+    id,
+    date: $('#trDate').value,
+    type,
+    category: $('#trCategory').value,
+    amount,
+    accountId,
+    note: $('#trNote').value
+  };
+  try{
+    if(id){
+      // 編輯：先把舊帳戶影響加回去，再套用新的影響
+      const old = state.transactions.find(t => t.id === id);
+      if(old && old.accountId){
+        const oldDelta = old.type === 'expense' ? Number(old.amount) : -Number(old.amount);
+        await applyAccountDelta(old.accountId, oldDelta);
+      }
+      await apiPost('update','transactions',data);
+    } else {
+      delete data.id;
+      await apiPost('add','transactions',data);
+    }
+    if(accountId){
+      const delta = type === 'expense' ? -amount : amount;
+      await applyAccountDelta(accountId, delta);
+    }
+    resetTransactionForm();
+    $('#trDetails').open = false;
+    await loadAll();
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#trCancel').addEventListener('click', resetTransactionForm);
+function resetTransactionForm(){
+  $('#trId').value = '';
+  $('#trDate').value = new Date().toISOString().slice(0,10);
+  $('#trAmount').value = '';
+  $('#trAccount').value = '';
+  $('#trNote').value = '';
+  setTrType('expense');
+}
+window.editTransaction = id => {
+  const t = state.transactions.find(x => x.id === id);
+  if(!t) return;
+  $('#trId').value = t.id;
+  $('#trDate').value = t.date;
+  $('#trAmount').value = t.amount;
+  setTrType(t.type === 'income' ? 'income' : 'expense', t.category);
+  $('#trAccount').value = t.accountId || '';
+  $('#trNote').value = t.note || '';
+  $('#trDetails').open = true;
+  $('#trDetails').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteTransaction = async id => {
+  if(!confirm('確定刪除這筆記帳？若有連結帳戶，餘額會自動還原。')) return;
+  try{
+    const t = state.transactions.find(x => x.id === id);
+    await apiPost('delete','transactions',{id});
+    if(t && t.accountId){
+      const delta = t.type === 'expense' ? Number(t.amount) : -Number(t.amount);
+      await applyAccountDelta(t.accountId, delta);
+    }
+    await loadAll();
+  }catch(err){ alert('刪除失敗：' + err.message); }
 };
 
 // ---------- Settings ----------
