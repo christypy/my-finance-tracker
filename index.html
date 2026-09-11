@@ -927,6 +927,10 @@ buildTabs($('#tabsBottom'));
 function switchTab(view){
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  if(view === 'transactions'){
+    // 切到「記帳」分頁時，直接展開新增記帳表單，不用再點一次「＋新增／編輯記帳」
+    $('#trDetails').open = true;
+  }
   window.scrollTo({top:0, behavior:'smooth'});
 }
 $$('.tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.view)));
@@ -1647,6 +1651,7 @@ $('#trSubNav').addEventListener('click', e => {
   if(btn.dataset.sub === 'ledger') renderLedger();
   if(btn.dataset.sub === 'recurring') renderRecurring();
   if(btn.dataset.sub === 'categories') renderCategories();
+  if(btn.dataset.sub === 'records') $('#trDetails').open = true;
 });
 window.goToRecurringTab = function(){
   const btn = $('#trSubNav button[data-sub="recurring"]');
