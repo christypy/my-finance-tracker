@@ -2,7 +2,8 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#101d36">
 <title>我的存摺 · 個人存款管理</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -10,314 +11,406 @@
   :root{
     --ink:#182a4a;
     --ink-soft:#33456b;
-    --paper:#f1e9d2;
-    --paper-line:#d9cca4;
+    --paper:#f8f3e4;
+    --paper-line:#e2d6b3;
+    --card:#ffffff;
     --cover:#101d36;
+    --cover-soft:#16244a;
     --gold:#b4903b;
     --gold-soft:#e4d5a4;
     --red:#9c3b34;
+    --red-bg:#f6e2df;
     --green:#3e6b52;
-    --radius:2px;
+    --green-bg:#e1ece4;
+    --radius:14px;
+    --radius-sm:9px;
+    --nav-h:64px;
   }
-  *{box-sizing:border-box;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
   body{
     margin:0;
     background:var(--cover);
     background-image:
-      radial-gradient(circle at 15% 10%, rgba(180,144,59,.10), transparent 40%),
-      radial-gradient(circle at 85% 90%, rgba(180,144,59,.08), transparent 40%);
+      radial-gradient(circle at 12% 8%, rgba(180,144,59,.14), transparent 42%),
+      radial-gradient(circle at 88% 92%, rgba(180,144,59,.10), transparent 42%);
     font-family:'Noto Sans TC', sans-serif;
     color:var(--ink);
     min-height:100vh;
-    display:flex;
-    justify-content:center;
-    padding:32px 16px 64px;
   }
-  .book{
-    width:100%;
-    max-width:880px;
+  .wrap{
+    max-width:760px;
+    margin:0 auto;
+    padding:20px 14px calc(var(--nav-h) + 28px);
   }
   .book-title{
     text-align:center;
     color:var(--gold-soft);
     font-family:'Roboto Slab', serif;
-    letter-spacing:.04em;
-    font-size:14px;
-    margin:0 0 10px;
+    letter-spacing:.06em;
+    font-size:13px;
+    margin:4px 0 16px;
     font-weight:400;
   }
+
+  /* ---- Desktop top tabs ---- */
   .tabs{
     display:flex;
-    gap:2px;
-    margin:0 0 -1px;
+    gap:4px;
+    margin-bottom:14px;
     overflow-x:auto;
+    scrollbar-width:none;
   }
+  .tabs::-webkit-scrollbar{display:none;}
   .tab{
+    display:flex;
+    align-items:center;
+    gap:6px;
     font-family:'Roboto Slab', serif;
     font-size:14px;
-    padding:10px 18px;
-    background:#0c1730;
+    padding:10px 16px;
+    background:var(--cover-soft);
     color:var(--gold-soft);
-    border:1px solid #0c1730;
-    border-bottom:none;
-    border-radius:var(--radius) var(--radius) 0 0;
+    border:none;
+    border-radius:999px;
     cursor:pointer;
     white-space:nowrap;
-    opacity:.7;
+    opacity:.65;
+    transition:opacity .15s, background .15s;
   }
+  .tab svg{width:16px;height:16px;flex:none;}
   .tab.active{
-    background:var(--paper);
-    color:var(--ink);
+    background:var(--gold);
+    color:#241c08;
     opacity:1;
   }
+
   .page{
     background:var(--paper);
-    background-image:repeating-linear-gradient(
-      to bottom, transparent, transparent 31px, var(--paper-line) 32px
-    );
-    padding:28px 30px 34px;
-    border-radius:0 var(--radius) var(--radius) var(--radius);
-    min-height:420px;
-    box-shadow: 0 20px 40px rgba(0,0,0,.35);
+    padding:20px 18px 26px;
+    border-radius:var(--radius);
+    min-height:360px;
+    box-shadow: 0 20px 44px rgba(0,0,0,.35);
   }
   .view{display:none;}
-  .view.active{display:block;}
+  .view.active{display:block; animation:fadein .22s ease;}
+  @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
   h2{
     font-family:'Roboto Slab', serif;
-    font-size:20px;
-    margin:0 0 18px;
+    font-size:19px;
+    margin:0 0 14px;
     color:var(--ink);
-    border-bottom:2px solid var(--ink);
-    padding-bottom:8px;
+    display:flex;
+    align-items:center;
+    gap:8px;
   }
+
+  /* ---- Dashboard summary ---- */
+  .net-hero{
+    background:linear-gradient(135deg, var(--ink), #223667);
+    color:var(--paper);
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:16px;
+  }
+  .net-hero .label{font-size:12px; color:var(--gold-soft); letter-spacing:.03em;}
+  .net-hero .value{font-family:'Roboto Slab', serif; font-size:32px; margin-top:4px;}
+  .net-hero .sub{display:flex; gap:18px; margin-top:14px; font-size:12px; color:#cdd7ef;}
+  .net-hero .sub b{color:#fff; font-family:'Roboto Slab', serif; font-size:14px; display:block; margin-top:2px;}
+
   .summary-grid{
     display:grid;
-    grid-template-columns:repeat(auto-fit, minmax(150px,1fr));
-    gap:14px;
-    margin-bottom:24px;
+    grid-template-columns:repeat(auto-fill, minmax(120px,1fr));
+    gap:10px;
+    margin-bottom:18px;
   }
   .summary-card{
-    background:rgba(255,255,255,.35);
+    background:var(--card);
     border:1px solid var(--paper-line);
-    padding:12px 14px;
-    border-radius:var(--radius);
+    padding:12px 13px;
+    border-radius:var(--radius-sm);
+    box-shadow:0 2px 6px rgba(24,42,74,.05);
   }
-  .summary-card .label{font-size:12px;color:var(--ink-soft);}
+  .summary-card .label{font-size:11.5px;color:var(--ink-soft);}
   .summary-card .value{
     font-family:'Roboto Slab', serif;
-    font-size:22px;
-    margin-top:4px;
+    font-size:18px;
+    margin-top:3px;
   }
-  .summary-card.total .value{color:var(--ink);}
-  .summary-card.debt .value{color:var(--red);}
-  .summary-card.net .value{color:var(--green);}
-  table{
-    width:100%;
-    border-collapse:collapse;
-    font-size:14px;
-    margin-bottom:20px;
+
+  /* ---- Cards list (accounts/liabilities/interest) ---- */
+  .item-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:20px; }
+  .item-card{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-sm);
+    padding:13px 14px;
+    box-shadow:0 2px 6px rgba(24,42,74,.05);
   }
-  th, td{
-    text-align:left;
-    padding:8px 6px;
-    border-bottom:1px solid var(--paper-line);
-  }
-  th{
-    font-family:'Roboto Slab', serif;
-    font-weight:600;
-    color:var(--ink-soft);
-    font-size:12px;
-    text-transform:none;
-  }
-  td.num, th.num{text-align:right; font-family:'Roboto Slab', serif;}
+  .item-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .item-name{ font-weight:600; font-size:15px; }
+  .item-note{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .item-value{ font-family:'Roboto Slab', serif; font-size:17px; white-space:nowrap; }
+  .item-meta{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px; font-size:12px; color:var(--ink-soft); }
+  .item-meta span b{ color:var(--ink); font-family:'Roboto Slab', serif; }
+  .item-actions{ display:flex; gap:8px; margin-top:10px; }
+
   .badge{
     display:inline-block;
     font-size:11px;
-    padding:2px 8px;
-    border-radius:10px;
+    padding:3px 9px;
+    border-radius:999px;
     background:var(--gold-soft);
     color:#5a4413;
+    font-weight:500;
   }
-  .row-actions button{margin-right:4px;}
+  .badge.paid{background:var(--green-bg); color:var(--green);}
+  .badge.unpaid{background:var(--red-bg); color:var(--red);}
+
   button, .btn{
     font-family:'Noto Sans TC', sans-serif;
-    font-size:13px;
-    padding:7px 14px;
+    font-size:14px;
+    padding:10px 16px;
     border:1px solid var(--ink);
     background:transparent;
     color:var(--ink);
-    border-radius:var(--radius);
+    border-radius:999px;
     cursor:pointer;
+    min-height:40px;
+    -webkit-appearance:none;
   }
-  button.primary{background:var(--ink); color:var(--paper);}
+  button.primary{background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600;}
   button.danger{border-color:var(--red); color:var(--red);}
-  button.small{padding:4px 9px; font-size:12px;}
+  button.small{padding:6px 13px; font-size:12.5px; min-height:32px;}
+  button:active{transform:scale(.97);}
+
+  details.entry-wrap{ margin-bottom:18px; }
+  details.entry-wrap > summary{
+    list-style:none;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:'Roboto Slab', serif;
+    font-size:14px;
+    padding:11px 16px;
+    background:var(--ink);
+    color:var(--paper);
+    border-radius:999px;
+    font-weight:600;
+    min-height:44px;
+  }
+  details.entry-wrap > summary::-webkit-details-marker{display:none;}
+  details.entry-wrap > summary .plus{font-size:17px; line-height:1;}
+  details.entry-wrap[open] > summary .plus{transform:rotate(45deg); display:inline-block;}
+
   form.entry{
-    background:rgba(255,255,255,.4);
+    background:var(--card);
     border:1px solid var(--paper-line);
     padding:16px;
-    border-radius:var(--radius);
+    border-radius:var(--radius-sm);
     display:grid;
     grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
     gap:12px;
-    margin-bottom:22px;
+    margin-top:10px;
   }
   form.entry label{
     display:flex;
     flex-direction:column;
     font-size:12px;
     color:var(--ink-soft);
-    gap:4px;
+    gap:5px;
+    font-weight:500;
   }
   input, select, textarea{
     font-family:'Noto Sans TC', sans-serif;
-    font-size:14px;
-    padding:7px 8px;
+    font-size:16px; /* avoid iOS auto-zoom */
+    padding:10px 11px;
     border:1px solid var(--paper-line);
-    border-radius:var(--radius);
-    background:#fffdf7;
+    border-radius:var(--radius-sm);
+    background:#fffdf8;
     color:var(--ink);
+    min-height:42px;
+  }
+  input:focus, select:focus, textarea:focus{
+    outline:none;
+    border-color:var(--gold);
+    box-shadow:0 0 0 3px rgba(180,144,59,.18);
   }
   form.entry .full{grid-column:1/-1;}
-  .form-actions{grid-column:1/-1; display:flex; gap:8px;}
-  .hint{font-size:12px; color:var(--ink-soft); margin:-8px 0 18px;}
-  .empty{color:var(--ink-soft); font-size:13px; padding:12px 0;}
+  .form-actions{grid-column:1/-1; display:flex; gap:8px; flex-wrap:wrap;}
+  .hint{font-size:12.5px; color:var(--ink-soft); margin:0 0 16px; line-height:1.6;}
+  .empty{color:var(--ink-soft); font-size:13px; padding:18px 0; text-align:center;}
   .settings-block{
-    background:rgba(255,255,255,.4);
+    background:var(--card);
     border:1px solid var(--paper-line);
     padding:16px;
-    border-radius:var(--radius);
+    border-radius:var(--radius-sm);
     display:grid;
-    gap:12px;
-    max-width:520px;
+    gap:14px;
   }
-  .status{font-size:13px; margin-top:8px;}
-  .status.ok{color:var(--green);}
-  .status.err{color:var(--red);}
-  @media (max-width:520px){
-    .page{padding:20px 16px 26px;}
+  .status{font-size:13px; margin-top:4px; padding:8px 10px; border-radius:var(--radius-sm);}
+  .status.ok{color:var(--green); background:var(--green-bg);}
+  .status.err{color:var(--red); background:var(--red-bg);}
+
+  /* ---- Bottom nav (mobile) ---- */
+  .bottom-nav{
+    display:none;
+    position:fixed;
+    left:0; right:0; bottom:0;
+    background:var(--cover);
+    border-top:1px solid rgba(228,213,164,.15);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    z-index:50;
+  }
+  .bottom-nav .tabs{
+    margin:0;
+    overflow:visible;
+    justify-content:space-around;
+  }
+  .bottom-nav .tab{
+    flex-direction:column;
+    background:transparent;
+    border-radius:10px;
+    padding:6px 8px;
+    gap:2px;
+    font-size:10.5px;
+    opacity:.55;
+    min-width:56px;
+  }
+  .bottom-nav .tab svg{width:20px;height:20px;}
+  .bottom-nav .tab.active{ background:transparent; color:var(--gold-soft); opacity:1; }
+
+  @media (max-width:680px){
+    .wrap{ padding:14px 10px calc(var(--nav-h) + 22px); }
+    .tabs.top-tabs{ display:none; }
+    .bottom-nav{ display:block; }
+    .page{ padding:16px 13px 22px; }
+    .net-hero .value{ font-size:27px; }
   }
 </style>
 </head>
 <body>
-<div class="book">
+<div class="wrap">
   <p class="book-title">我 的 存 摺 · 個 人 存 款 管 理</p>
-  <div class="tabs" id="tabs">
-    <div class="tab active" data-view="dashboard">總覽</div>
-    <div class="tab" data-view="accounts">帳戶</div>
-    <div class="tab" data-view="interest">利息紀錄</div>
-    <div class="tab" data-view="liabilities">負債</div>
-    <div class="tab" data-view="settings">設定</div>
-  </div>
+
+  <div class="tabs top-tabs" id="tabsTop"></div>
+
   <div class="page">
 
     <!-- 總覽 -->
     <div class="view active" id="view-dashboard">
-      <h2>總覽</h2>
+      <div class="net-hero">
+        <div class="label">淨資產</div>
+        <div class="value" id="netHeroValue">$0</div>
+        <div class="sub">
+          <div>資產<b id="netHeroAssets">$0</b></div>
+          <div>未繳負債<b id="netHeroDebt">$0</b></div>
+        </div>
+      </div>
       <div class="summary-grid" id="summaryGrid"></div>
-      <table>
-        <thead><tr><th>帳戶</th><th>類型</th><th class="num">餘額</th></tr></thead>
-        <tbody id="dashboardAccountsBody"></tbody>
-      </table>
+      <h2>帳戶一覽</h2>
+      <div class="item-list" id="dashboardAccountsList"></div>
     </div>
 
     <!-- 帳戶 -->
     <div class="view" id="view-accounts">
       <h2>帳戶</h2>
       <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。銀行帳戶可填年利率，用來估算利息（實際入帳請到「利息紀錄」新增）。</p>
-      <form class="entry" id="accountForm">
-        <input type="hidden" id="accId">
-        <label>名稱
-          <input type="text" id="accName" placeholder="例如：中信活儲" required>
-        </label>
-        <label>類型
-          <select id="accType">
-            <option value="現金">現金</option>
-            <option value="銀行">銀行</option>
-            <option value="行動支付">行動支付</option>
-            <option value="悠遊卡">悠遊卡</option>
-            <option value="投資">投資</option>
-          </select>
-        </label>
-        <label>目前餘額
-          <input type="number" id="accBalance" step="0.01" required>
-        </label>
-        <label>年利率 %（銀行適用，選填）
-          <input type="number" id="accRate" step="0.001" placeholder="例如 1.2">
-        </label>
-        <label class="full">備註
-          <input type="text" id="accNote" placeholder="選填">
-        </label>
-        <div class="form-actions">
-          <button type="submit" class="primary">儲存帳戶</button>
-          <button type="button" id="accCancel">清空表單</button>
-        </div>
-      </form>
-      <table>
-        <thead><tr><th>名稱</th><th>類型</th><th class="num">餘額</th><th>年利率</th><th class="num">下期估算利息</th><th>操作</th></tr></thead>
-        <tbody id="accountsBody"></tbody>
-      </table>
+      <details class="entry-wrap" id="accountDetails">
+        <summary><span class="plus">＋</span>新增 / 編輯帳戶</summary>
+        <form class="entry" id="accountForm">
+          <input type="hidden" id="accId">
+          <label>名稱
+            <input type="text" id="accName" placeholder="例如：中信活儲" required>
+          </label>
+          <label>類型
+            <select id="accType">
+              <option value="現金">現金</option>
+              <option value="銀行">銀行</option>
+              <option value="行動支付">行動支付</option>
+              <option value="悠遊卡">悠遊卡</option>
+              <option value="投資">投資</option>
+            </select>
+          </label>
+          <label>目前餘額
+            <input type="number" id="accBalance" step="0.01" required>
+          </label>
+          <label>年利率 %（銀行適用，選填）
+            <input type="number" id="accRate" step="0.001" placeholder="例如 1.8">
+          </label>
+          <label class="full">備註
+            <input type="text" id="accNote" placeholder="選填">
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">儲存帳戶</button>
+            <button type="button" id="accCancel">清空表單</button>
+          </div>
+        </form>
+      </details>
+      <div class="item-list" id="accountsList"></div>
     </div>
 
     <!-- 利息紀錄 -->
     <div class="view" id="view-interest">
       <h2>利息紀錄</h2>
       <p class="hint">銀行真的撥利息給你時，在這裡新增一筆，系統會自動把金額加進該帳戶的餘額。</p>
-      <form class="entry" id="interestForm">
-        <label>帳戶
-          <select id="intAccount" required></select>
-        </label>
-        <label>入帳日期
-          <input type="date" id="intDate" required>
-        </label>
-        <label>金額
-          <input type="number" id="intAmount" step="0.01" required>
-        </label>
-        <label class="full">備註
-          <input type="text" id="intNote" placeholder="例如：3月活儲利息">
-        </label>
-        <div class="form-actions">
-          <button type="submit" class="primary">新增並加入餘額</button>
-        </div>
-      </form>
-      <table>
-        <thead><tr><th>日期</th><th>帳戶</th><th class="num">金額</th><th>備註</th><th>操作</th></tr></thead>
-        <tbody id="interestBody"></tbody>
-      </table>
+      <details class="entry-wrap" open id="interestDetails">
+        <summary><span class="plus">＋</span>新增利息入帳</summary>
+        <form class="entry" id="interestForm">
+          <label>帳戶
+            <select id="intAccount" required></select>
+          </label>
+          <label>入帳日期
+            <input type="date" id="intDate" required>
+          </label>
+          <label>金額
+            <input type="number" id="intAmount" step="0.01" required>
+          </label>
+          <label class="full">備註
+            <input type="text" id="intNote" placeholder="例如：3月活儲利息">
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">新增並加入餘額</button>
+          </div>
+        </form>
+      </details>
+      <div class="item-list" id="interestList"></div>
     </div>
 
     <!-- 負債 -->
     <div class="view" id="view-liabilities">
       <h2>負債（含國民年金未繳款）</h2>
-      <form class="entry" id="liabilityForm">
-        <input type="hidden" id="liaId">
-        <label>項目名稱
-          <input type="text" id="liaName" placeholder="例如：國民年金 3月" required>
-        </label>
-        <label>金額
-          <input type="number" id="liaAmount" step="0.01" required>
-        </label>
-        <label>繳費期限
-          <input type="date" id="liaDue">
-        </label>
-        <label>狀態
-          <select id="liaPaid">
-            <option value="false">未繳</option>
-            <option value="true">已繳</option>
-          </select>
-        </label>
-        <label class="full">備註
-          <input type="text" id="liaNote" placeholder="選填">
-        </label>
-        <div class="form-actions">
-          <button type="submit" class="primary">儲存項目</button>
-          <button type="button" id="liaCancel">清空表單</button>
-        </div>
-      </form>
-      <table>
-        <thead><tr><th>項目</th><th class="num">金額</th><th>期限</th><th>狀態</th><th>操作</th></tr></thead>
-        <tbody id="liabilitiesBody"></tbody>
-      </table>
+      <details class="entry-wrap" id="liabilityDetails">
+        <summary><span class="plus">＋</span>新增 / 編輯負債項目</summary>
+        <form class="entry" id="liabilityForm">
+          <input type="hidden" id="liaId">
+          <label>項目名稱
+            <input type="text" id="liaName" placeholder="例如：國民年金 3月" required>
+          </label>
+          <label>金額
+            <input type="number" id="liaAmount" step="0.01" required>
+          </label>
+          <label>繳費期限
+            <input type="date" id="liaDue">
+          </label>
+          <label>狀態
+            <select id="liaPaid">
+              <option value="false">未繳</option>
+              <option value="true">已繳</option>
+            </select>
+          </label>
+          <label class="full">備註
+            <input type="text" id="liaNote" placeholder="選填">
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">儲存項目</button>
+            <button type="button" id="liaCancel">清空表單</button>
+          </div>
+        </form>
+      </details>
+      <div class="item-list" id="liabilitiesList"></div>
     </div>
 
     <!-- 設定 -->
@@ -339,9 +432,44 @@
   </div>
 </div>
 
+<nav class="bottom-nav">
+  <div class="tabs" id="tabsBottom"></div>
+</nav>
+
 <script>
 const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+// ---------- Icons ----------
+const ICONS = {
+  dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>',
+  accounts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M16 14h2"/></svg>',
+  interest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15V9l3 2 3-2v6"/></svg>',
+  liabilities: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>'
+};
+const TAB_DEFS = [
+  { view:'dashboard', label:'總覽' },
+  { view:'accounts', label:'帳戶' },
+  { view:'interest', label:'利息' },
+  { view:'liabilities', label:'負債' },
+  { view:'settings', label:'設定' }
+];
+
+function buildTabs(container){
+  container.innerHTML = TAB_DEFS.map((t,i) =>
+    `<div class="tab${i===0?' active':''}" data-view="${t.view}">${ICONS[t.view]}<span>${t.label}</span></div>`
+  ).join('');
+}
+buildTabs($('#tabsTop'));
+buildTabs($('#tabsBottom'));
+
+function switchTab(view){
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+$$('.tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.view)));
 
 const cfg = {
   url: localStorage.getItem('fin_url') || '',
@@ -349,16 +477,6 @@ const cfg = {
 };
 
 let state = { accounts: [], liabilities: [], interest: [] };
-
-// ---------- Tabs ----------
-$$('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    $$('.tab').forEach(t => t.classList.remove('active'));
-    $$('.view').forEach(v => v.classList.remove('active'));
-    tab.classList.add('active');
-    $('#view-' + tab.dataset.view).classList.add('active');
-  });
-});
 
 // ---------- API ----------
 async function apiGet(sheet){
@@ -425,78 +543,111 @@ function renderDashboard(){
   const totalDebt = state.liabilities
     .filter(l => String(l.paid) !== 'true')
     .reduce((s,l) => s + (Number(l.amount)||0), 0);
+  const net = totalAssets - totalDebt;
+
+  $('#netHeroValue').textContent = '$' + fmt(net);
+  $('#netHeroAssets').textContent = '$' + fmt(totalAssets);
+  $('#netHeroDebt').textContent = '$' + fmt(totalDebt);
 
   const grid = $('#summaryGrid');
-  grid.innerHTML = '';
-  Object.entries(byType).forEach(([type, val]) => {
-    grid.innerHTML += `<div class="summary-card"><div class="label">${type}</div><div class="value">$${fmt(val)}</div></div>`;
-  });
-  grid.innerHTML += `<div class="summary-card total"><div class="label">資產總計</div><div class="value">$${fmt(totalAssets)}</div></div>`;
-  grid.innerHTML += `<div class="summary-card debt"><div class="label">未繳負債</div><div class="value">$${fmt(totalDebt)}</div></div>`;
-  grid.innerHTML += `<div class="summary-card net"><div class="label">淨資產</div><div class="value">$${fmt(totalAssets-totalDebt)}</div></div>`;
+  grid.innerHTML = Object.entries(byType).map(([type, val]) =>
+    `<div class="summary-card"><div class="label">${type}</div><div class="value">$${fmt(val)}</div></div>`
+  ).join('');
 
-  const body = $('#dashboardAccountsBody');
-  body.innerHTML = state.accounts.length ? '' : `<tr><td colspan="3" class="empty">尚無帳戶，請到「帳戶」新增。</td></tr>`;
-  state.accounts.forEach(a => {
-    body.innerHTML += `<tr><td>${a.name}</td><td><span class="badge">${a.type}</span></td><td class="num">$${fmt(a.balance)}</td></tr>`;
-  });
+  const list = $('#dashboardAccountsList');
+  if(!state.accounts.length){
+    list.innerHTML = `<div class="empty">尚無帳戶，請到「帳戶」新增。</div>`;
+  } else {
+    list.innerHTML = state.accounts.map(a => `
+      <div class="item-card">
+        <div class="item-top">
+          <div><div class="item-name">${a.name}</div><span class="badge">${a.type}</span></div>
+          <div class="item-value">$${fmt(a.balance)}</div>
+        </div>
+      </div>`).join('');
+  }
 }
 
 function renderAccounts(){
-  const body = $('#accountsBody');
-  body.innerHTML = state.accounts.length ? '' : `<tr><td colspan="6" class="empty">尚無帳戶。</td></tr>`;
-  state.accounts.forEach(a => {
-    const rate = a.interestRate ? Number(a.interestRate) : 0;
-    const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
-    body.innerHTML += `<tr>
-      <td>${a.name}${a.note ? `<br><small style="color:var(--ink-soft)">${a.note}</small>`:''}</td>
-      <td><span class="badge">${a.type}</span></td>
-      <td class="num">$${fmt(a.balance)}</td>
-      <td>${rate ? rate + '%' : '—'}</td>
-      <td class="num">${est !== null ? '$'+fmt(est) : '—'}</td>
-      <td class="row-actions">
-        <button class="small" onclick="editAccount('${a.id}')">編輯</button>
-        <button class="small danger" onclick="deleteAccount('${a.id}')">刪除</button>
-      </td>
-    </tr>`;
-  });
+  const list = $('#accountsList');
+  if(!state.accounts.length){
+    list.innerHTML = `<div class="empty">尚無帳戶。</div>`;
+  } else {
+    list.innerHTML = state.accounts.map(a => {
+      const rate = a.interestRate ? Number(a.interestRate) : 0;
+      const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
+      return `<div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${a.name}</div>
+            <span class="badge">${a.type}</span>
+            ${a.note ? `<div class="item-note">${a.note}</div>` : ''}
+          </div>
+          <div class="item-value">$${fmt(a.balance)}</div>
+        </div>
+        ${rate ? `<div class="item-meta">
+          <span>年利率 <b>${rate}%</b></span>
+          <span>估算下期利息 <b>$${fmt(est)}</b></span>
+        </div>` : ''}
+        <div class="item-actions">
+          <button class="small" onclick="editAccount('${a.id}')">編輯</button>
+          <button class="small danger" onclick="deleteAccount('${a.id}')">刪除</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
 
   const sel = $('#intAccount');
   sel.innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
 }
 
 function renderInterest(){
-  const body = $('#interestBody');
+  const list = $('#interestList');
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
   const rows = [...state.interest].sort((a,b) => (a.date < b.date ? 1 : -1));
-  body.innerHTML = rows.length ? '' : `<tr><td colspan="5" class="empty">尚無利息紀錄。</td></tr>`;
-  rows.forEach(r => {
-    body.innerHTML += `<tr>
-      <td>${r.date}</td>
-      <td>${byId[r.accountId] || '（帳戶已刪除）'}</td>
-      <td class="num">$${fmt(r.amount)}</td>
-      <td>${r.note || ''}</td>
-      <td class="row-actions"><button class="small danger" onclick="deleteInterest('${r.id}')">刪除</button></td>
-    </tr>`;
-  });
+  if(!rows.length){
+    list.innerHTML = `<div class="empty">尚無利息紀錄。</div>`;
+  } else {
+    list.innerHTML = rows.map(r => `
+      <div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${byId[r.accountId] || '（帳戶已刪除）'}</div>
+            <div class="item-note">${r.date}${r.note ? ' · ' + r.note : ''}</div>
+          </div>
+          <div class="item-value">+$${fmt(r.amount)}</div>
+        </div>
+        <div class="item-actions">
+          <button class="small danger" onclick="deleteInterest('${r.id}')">刪除</button>
+        </div>
+      </div>`).join('');
+  }
 }
 
 function renderLiabilities(){
-  const body = $('#liabilitiesBody');
-  body.innerHTML = state.liabilities.length ? '' : `<tr><td colspan="5" class="empty">尚無負債項目。</td></tr>`;
-  state.liabilities.forEach(l => {
-    const paid = String(l.paid) === 'true';
-    body.innerHTML += `<tr>
-      <td>${l.name}${l.note ? `<br><small style="color:var(--ink-soft)">${l.note}</small>`:''}</td>
-      <td class="num">$${fmt(l.amount)}</td>
-      <td>${l.dueDate || '—'}</td>
-      <td><span class="badge" style="background:${paid ? '#d7e8dd' : '#f0d3ce'}; color:${paid ? 'var(--green)' : 'var(--red)'}">${paid ? '已繳' : '未繳'}</span></td>
-      <td class="row-actions">
-        <button class="small" onclick="editLiability('${l.id}')">編輯</button>
-        <button class="small danger" onclick="deleteLiability('${l.id}')">刪除</button>
-      </td>
-    </tr>`;
-  });
+  const list = $('#liabilitiesList');
+  if(!state.liabilities.length){
+    list.innerHTML = `<div class="empty">尚無負債項目。</div>`;
+  } else {
+    list.innerHTML = state.liabilities.map(l => {
+      const paid = String(l.paid) === 'true';
+      return `<div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${l.name}</div>
+            <span class="badge ${paid?'paid':'unpaid'}">${paid ? '已繳' : '未繳'}</span>
+            ${l.note ? `<div class="item-note">${l.note}</div>` : ''}
+          </div>
+          <div class="item-value">$${fmt(l.amount)}</div>
+        </div>
+        ${l.dueDate ? `<div class="item-meta"><span>期限 <b>${l.dueDate}</b></span></div>` : ''}
+        <div class="item-actions">
+          <button class="small" onclick="editLiability('${l.id}')">編輯</button>
+          <button class="small danger" onclick="deleteLiability('${l.id}')">刪除</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
 }
 
 // ---------- Accounts CRUD ----------
@@ -514,6 +665,7 @@ $('#accountForm').addEventListener('submit', async e => {
     if(data.id) await apiPost('update','accounts',data);
     else { delete data.id; await apiPost('add','accounts',data); }
     resetAccountForm();
+    $('#accountDetails').open = false;
     await loadAll();
   }catch(err){ alert('儲存失敗：' + err.message); }
 });
@@ -528,7 +680,8 @@ window.editAccount = id => {
   $('#accId').value=a.id; $('#accName').value=a.name; $('#accType').value=a.type;
   $('#accBalance').value=a.balance; $('#accRate').value=a.interestRate || '';
   $('#accNote').value=a.note || '';
-  $('#view-accounts .entry').scrollIntoView({behavior:'smooth'});
+  $('#accountDetails').open = true;
+  $('#accountDetails').scrollIntoView({behavior:'smooth', block:'start'});
 };
 window.deleteAccount = async id => {
   if(!confirm('確定刪除這個帳戶？')) return;
@@ -573,6 +726,7 @@ $('#liabilityForm').addEventListener('submit', async e => {
     if(data.id) await apiPost('update','liabilities',data);
     else { delete data.id; await apiPost('add','liabilities',data); }
     resetLiabilityForm();
+    $('#liabilityDetails').open = false;
     await loadAll();
   }catch(err){ alert('儲存失敗：' + err.message); }
 });
@@ -587,7 +741,8 @@ window.editLiability = id => {
   $('#liaId').value=l.id; $('#liaName').value=l.name; $('#liaAmount').value=l.amount;
   $('#liaDue').value=l.dueDate || ''; $('#liaPaid').value=String(l.paid);
   $('#liaNote').value=l.note || '';
-  $('#view-liabilities .entry').scrollIntoView({behavior:'smooth'});
+  $('#liabilityDetails').open = true;
+  $('#liabilityDetails').scrollIntoView({behavior:'smooth', block:'start'});
 };
 window.deleteLiability = async id => {
   if(!confirm('確定刪除這個負債項目？')) return;
