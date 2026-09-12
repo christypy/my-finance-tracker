@@ -76,8 +76,9 @@
     cursor:pointer;
     white-space:nowrap;
     opacity:.65;
-    transition:opacity .15s, background .15s;
+    transition:opacity .15s, background .15s, transform .1s;
   }
+  .tab:active{ transform:scale(.96); }
   .tab svg{width:16px;height:16px;flex:none;}
   .tab.active{
     background:var(--gold);
@@ -152,7 +153,9 @@
     border-radius:var(--radius-sm);
     padding:13px 14px;
     box-shadow:0 2px 6px rgba(24,42,74,.05);
+    transition:box-shadow .15s, transform .15s;
   }
+  #transactionsList .item-card:active{ transform:scale(.985); box-shadow:0 1px 3px rgba(24,42,74,.08); }
   .item-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
   .item-name{ font-weight:600; font-size:15px; }
   .item-note{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
@@ -208,10 +211,50 @@
     min-height:44px;
   }
   details.entry-wrap > summary::-webkit-details-marker{display:none;}
-  details.entry-wrap > summary .plus{font-size:17px; line-height:1;}
+  details.entry-wrap > summary .plus{font-size:17px; line-height:1; transition:transform .15s;}
   details.entry-wrap[open] > summary .plus{transform:rotate(45deg); display:inline-block;}
+  details.entry-wrap > summary:active{opacity:.85;}
+  form.entry{animation:fadein .18s ease;}
 
-  /* ---- 編輯記帳時固定在畫面下方：桌機、手機都適用，不管在哪個子分頁編輯 ---- */
+  /* ---- 記帳彈出視窗背後的半透明遮罩：點擊記帳才會出現，其餘時間只單純顯示紀錄清單 ---- */
+  .entry-backdrop{
+    position:fixed; inset:0;
+    background:rgba(9,14,28,.52);
+    backdrop-filter:blur(1px);
+    opacity:0; pointer-events:none;
+    transition:opacity .18s ease;
+    z-index:58;
+  }
+  body.tr-form-open .entry-backdrop{ opacity:1; pointer-events:auto; }
+  body.tr-form-open{ overflow:hidden; }
+
+  /* ---- 浮動「＋記帳」按鈕：手機/桌機都固定在畫面右下角，隨時可以點擊跳出記帳表單 ---- */
+  .fab{
+    position:fixed;
+    right:16px;
+    bottom:calc(var(--nav-h) + 16px);
+    width:56px; height:56px;
+    min-height:auto;
+    padding:0;
+    border:none;
+    border-radius:50%;
+    background:var(--gold);
+    color:#241c08;
+    font-size:28px;
+    font-weight:700;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 10px 26px rgba(0,0,0,.4);
+    z-index:56;
+    transition:transform .15s, opacity .15s;
+  }
+  .fab:active{ transform:scale(.92); }
+  body.tr-form-open .fab{ opacity:0; pointer-events:none; transform:scale(.8); }
+  @media (min-width:681px){ .fab{ right:26px; bottom:26px; } }
+
+  /* ---- 記帳表單以彈出視窗方式顯示：不管是新增還是編輯，點擊才會跳出，其餘時候只看到紀錄清單 ---- */
   details.entry-wrap.editing{
     position:fixed;
     left:10px;
@@ -226,7 +269,9 @@
     border-radius:var(--radius);
     box-shadow:0 -14px 34px rgba(0,0,0,.5);
     overflow:hidden;
+    animation:popupIn .2s ease;
   }
+  @keyframes popupIn{ from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:none;} }
   details.entry-wrap.editing > summary{
     border-radius:var(--radius) var(--radius) 0 0;
     flex:none;
@@ -452,6 +497,7 @@
 
   /* ---- 主類別 / 子類別 選單 ---- */
   .cat-select-row{ grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .cat-add-option{ color:var(--gold); font-style:italic; }
 
   /* ---- 統計：期間左右切換 ---- */
   .period-nav{ display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
@@ -705,9 +751,9 @@
       <!-- 記帳：紀錄（含新增/編輯記帳與轉帳） -->
       <div id="trSub-records">
         <div id="recurringBanner"></div>
-        <p class="hint">支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。</p>
-        <details class="entry-wrap" open id="trDetails">
-          <summary><span class="plus">＋</span>新增 / 編輯記帳</summary>
+        <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。</p>
+        <details class="entry-wrap" id="trDetails">
+          <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
           <form class="entry" id="trForm">
             <input type="hidden" id="trId">
             <div class="full type-toggle">
@@ -1029,6 +1075,8 @@
 <nav class="bottom-nav">
   <div class="tabs" id="tabsBottom"></div>
 </nav>
+<div class="entry-backdrop" id="trFormBackdrop"></div>
+<button type="button" class="fab" id="trFab" aria-label="新增記帳" style="display:none;">＋</button>
 <div id="busyToast"><span class="spinner"></span><span id="busyToastText">處理中…</span></div>
 
 <script>
@@ -1079,14 +1127,13 @@ function buildTabs(container){
 }
 buildTabs($('#tabsTop'));
 buildTabs($('#tabsBottom'));
+updateTrFabVisibility();
 
 function switchTab(view){
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
-  if(view === 'transactions'){
-    // 切到「記帳」分頁時，直接展開新增記帳表單，不用再點一次「＋新增／編輯記帳」
-    $('#trDetails').open = true;
-  }
+  // 切換分頁只單純顯示紀錄清單，記帳表單保持收合，要點擊「記帳」（或右下角浮動按鈕）才會跳出
+  updateTrFabVisibility();
   window.scrollTo({top:0, behavior:'smooth'});
 }
 $$('.tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.view)));
@@ -1638,24 +1685,68 @@ function renderTransactions(){
   }).join('');
 }
 
+// ---- 主類別 / 子類別選單共用邏輯：兩個特殊選項讓使用者不用跳去「類別設定」，
+// 記帳（或固定項目）當下就能直接新增主類別／子類別 ----
+const CAT_ADD_MAIN = '__add_main__';
+const CAT_ADD_SUB = '__add_sub__';
+function populateCategorySelect_(selEl, names, selected){
+  selEl.innerHTML = names.map(c => `<option value="${c}">${c}</option>`).join('') +
+    `<option value="${CAT_ADD_MAIN}" class="cat-add-option">＋ 新增主類別…</option>`;
+  const value = (selected && names.includes(selected)) ? selected : (names[0] || '');
+  selEl.value = value;
+  selEl.dataset.prev = value;
+  return value;
+}
+function populateSubcategorySelect_(selEl, subs, selectedSub){
+  selEl.innerHTML = `<option value="">不指定</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('') +
+    `<option value="${CAT_ADD_SUB}" class="cat-add-option">＋ 新增子類別…</option>`;
+  const value = (selectedSub && subs.includes(selectedSub)) ? selectedSub : '';
+  selEl.value = value;
+  selEl.dataset.prev = value;
+  return value;
+}
+// 把「主類別／子類別新增」的選單邏輯綁到一組選單上（記帳表單、固定項目表單都會用到）
+function bindInlineCategoryCreation_(mainSel, subSel, typeGetter, populateMainFn, populateSubFn){
+  mainSel.addEventListener('change', () => {
+    const type = typeGetter();
+    if(mainSel.value === CAT_ADD_MAIN){
+      const name = (prompt('請輸入新的主類別名稱：') || '').trim();
+      if(name){
+        if(!getCategoryNames(type).includes(name)) addMainCategory(type, name);
+        populateMainFn(type, name);
+      } else {
+        mainSel.value = mainSel.dataset.prev || '';
+      }
+      return;
+    }
+    mainSel.dataset.prev = mainSel.value;
+    populateSubFn(type, mainSel.value);
+  });
+  subSel.addEventListener('change', () => {
+    const type = typeGetter();
+    const mainName = mainSel.value;
+    if(subSel.value === CAT_ADD_SUB){
+      const name = (prompt('請輸入新的子類別名稱：') || '').trim();
+      if(name){
+        if(!getSubcategories(type, mainName).includes(name)) addSubCategory(type, mainName, name);
+        populateSubFn(type, mainName, name);
+      } else {
+        subSel.value = subSel.dataset.prev || '';
+      }
+      return;
+    }
+    subSel.dataset.prev = subSel.value;
+  });
+}
+
 function populateTrCategories(type, selected, selectedSub){
-  const sel = $('#trCategory');
-  const names = getCategoryNames(type);
-  sel.innerHTML = names.map(c => `<option value="${c}">${c}</option>`).join('');
-  if(selected && names.includes(selected)) sel.value = selected;
-  else if(names.length) sel.value = names[0];
-  populateTrSubcategories(type, sel.value, selectedSub);
+  const value = populateCategorySelect_($('#trCategory'), getCategoryNames(type), selected);
+  populateTrSubcategories(type, value, selectedSub);
 }
 function populateTrSubcategories(type, mainName, selectedSub){
-  const sel = $('#trSubcategory');
-  const subs = getSubcategories(type, mainName);
-  sel.innerHTML = `<option value="">不指定</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('');
-  if(selectedSub && subs.includes(selectedSub)) sel.value = selectedSub;
-  else sel.value = '';
+  populateSubcategorySelect_($('#trSubcategory'), getSubcategories(type, mainName), selectedSub);
 }
-$('#trCategory').addEventListener('change', () => {
-  populateTrSubcategories($('#trType').value, $('#trCategory').value);
-});
+bindInlineCategoryCreation_($('#trCategory'), $('#trSubcategory'), () => $('#trType').value, populateTrCategories, populateTrSubcategories);
 $$('#trForm .quick-amount-row button').forEach(btn => {
   btn.addEventListener('click', () => {
     const input = $('#trAmount');
@@ -2275,6 +2366,14 @@ $('#distYearInput').addEventListener('change', renderDistribution);
 $('#distCategoryInput').addEventListener('change', renderDistribution);
 $('#distSubcategoryInput').addEventListener('change', renderDistribution);
 
+// 浮動「＋記帳」按鈕：只有在「記帳」分頁且停留在「記帳」子分頁時才顯示，
+// 其他分頁/子分頁看不到，避免點了按鈕卻不知道跳去哪裡
+function updateTrFabVisibility(){
+  const transactionsActive = $('#view-transactions').classList.contains('active');
+  const recordsSubActive = $('#trSub-records').style.display !== 'none';
+  $('#trFab').style.display = (transactionsActive && recordsSubActive) ? 'flex' : 'none';
+}
+
 // 記帳頁：記帳（含轉帳）/ 共同帳本 / 固定項目 / 統計分析 / 匯入 / 類別設定 子分頁切換
 const TR_SUBS = ['records','ledger','recurring','stats','import','categories'];
 $('#trSubNav').addEventListener('click', e => {
@@ -2286,7 +2385,7 @@ $('#trSubNav').addEventListener('click', e => {
   if(btn.dataset.sub === 'ledger') renderLedger();
   if(btn.dataset.sub === 'recurring') renderRecurring();
   if(btn.dataset.sub === 'categories') renderCategories();
-  if(btn.dataset.sub === 'records') $('#trDetails').open = true;
+  updateTrFabVisibility();
 });
 window.goToRecurringTab = function(){
   const btn = $('#trSubNav button[data-sub="recurring"]');
@@ -2541,6 +2640,25 @@ function restoreTrDetailsHome_(){
   }
 }
 
+// ---- 記帳表單「點擊才跳出」：預設收合、只顯示紀錄清單，點「記帳」摘要列或
+// 右下角浮動按鈕才會以彈出視窗顯示表單；收合時自動清空、恢復成「新增」狀態 ----
+$('#trDetails').addEventListener('toggle', () => {
+  const open = $('#trDetails').open;
+  document.body.classList.toggle('tr-form-open', open);
+  $('#trDetails').classList.toggle('editing', open);
+  if(open){
+    moveTrDetailsToOverlay_();
+    setTimeout(() => $('#trAmount').focus(), 150);
+  } else {
+    resetTransactionForm();
+  }
+});
+$('#trFab').addEventListener('click', () => {
+  if($('#trDetails').open){ $('#trAmount').focus(); return; }
+  $('#trDetails').open = true;
+});
+$('#trFormBackdrop').addEventListener('click', () => { $('#trDetails').open = false; });
+
 function resetTransactionForm(){
   $('#trId').value = '';
   $('#trDate').value = new Date().toISOString().slice(0,10);
@@ -2553,7 +2671,7 @@ function resetTransactionForm(){
   $('#trPayer').value = 'me';
   $('#trSplitMode').value = 'split';
   setTrType('expense');
-  $('#trDetails').classList.remove('editing');
+  $('#trFormTitle').textContent = '新增記帳';
   // 編輯表單存檔/取消後，一律搬回「記帳」分頁原本的位置
   restoreTrDetailsHome_();
 }
@@ -2580,9 +2698,9 @@ window.editTransaction = id => {
   $('#trNote').value = t.note || '';
   // 編輯時一律把表單搬到最上層、固定浮在畫面下方——不管目前在哪個子分頁、
   // 不管是電腦還是手機，都不用捲動或切分頁
+  $('#trFormTitle').textContent = '編輯記帳';
   moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
-  $('#trDetails').classList.add('editing');
 };
 window.deleteTransaction = async id => {
   if(!confirm('確定刪除這筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。')) return;
@@ -2602,23 +2720,13 @@ function currentMonthStr(){
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 }
 function populateRecCategories(type, selected, selectedSub){
-  const sel = $('#recCategory');
-  const names = getCategoryNames(type);
-  sel.innerHTML = names.map(c => `<option value="${c}">${c}</option>`).join('');
-  if(selected && names.includes(selected)) sel.value = selected;
-  else if(names.length) sel.value = names[0];
-  populateRecSubcategories(type, sel.value, selectedSub);
+  const value = populateCategorySelect_($('#recCategory'), getCategoryNames(type), selected);
+  populateRecSubcategories(type, value, selectedSub);
 }
 function populateRecSubcategories(type, mainName, selectedSub){
-  const sel = $('#recSubcategory');
-  const subs = getSubcategories(type, mainName);
-  sel.innerHTML = `<option value="">不指定</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('');
-  if(selectedSub && subs.includes(selectedSub)) sel.value = selectedSub;
-  else sel.value = '';
+  populateSubcategorySelect_($('#recSubcategory'), getSubcategories(type, mainName), selectedSub);
 }
-$('#recCategory').addEventListener('change', () => {
-  populateRecSubcategories($('#recType').value, $('#recCategory').value);
-});
+bindInlineCategoryCreation_($('#recCategory'), $('#recSubcategory'), () => $('#recType').value, populateRecCategories, populateRecSubcategories);
 function setRecType(type, selectedCategory, selectedSub){
   $('#recType').value = type;
   $$('#recForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.rectype === type));
