@@ -325,6 +325,26 @@
   .filter-row label{ display:flex; align-items:center; gap:6px; }
   .filter-row input[type="checkbox"]{ min-height:auto; width:16px; height:16px; padding:0; }
 
+  /* ---- 記帳：日曆篩選 ---- */
+  .calendar-wrap{ background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm); padding:12px 10px; margin-bottom:16px; box-shadow:0 2px 6px rgba(24,42,74,.05); }
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .cal-nav-btn{ border:none; background:var(--ink); color:var(--paper); width:30px; height:30px; min-height:auto; border-radius:50%; font-size:15px; padding:0; line-height:1; }
+  .cal-month-label{ font-family:'Roboto Slab', serif; font-size:14px; color:var(--ink); }
+  .cal-weekdays{ display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:11px; color:var(--ink-soft); margin-bottom:4px; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-day{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+    min-height:38px; padding:4px 0;
+    background:var(--paper); border:1px solid var(--paper-line); border-radius:8px;
+    font-family:'Noto Sans TC', sans-serif; font-size:12.5px; color:var(--ink);
+    cursor:pointer; min-width:0;
+  }
+  .cal-day-empty{ visibility:hidden; border:none; background:none; }
+  .cal-day.today{ border-color:var(--gold); border-width:1.5px; }
+  .cal-day.selected{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .cal-day .cal-dot{ width:5px; height:5px; border-radius:50%; background:var(--red); }
+  .cal-day.selected .cal-dot{ background:var(--gold-soft); }
+
   .type-toggle{ display:flex; gap:8px; }
   .type-toggle button{ flex:1; }
   .type-toggle button.active.income{ background:var(--green); color:#fff; border-color:var(--green); }
@@ -761,8 +781,16 @@
           </form>
         </details>
         <div class="filter-row">
-          <label>月份 <input type="month" id="trFilterMonth"></label>
-          <label><input type="checkbox" id="trShowAll"> 顯示全部</label>
+          <label><input type="checkbox" id="trShowAll"> 顯示全部（不篩選日期）</label>
+        </div>
+        <div class="calendar-wrap" id="trCalendarWrap">
+          <div class="cal-nav">
+            <button type="button" class="cal-nav-btn" id="calPrevBtn" aria-label="上個月">‹</button>
+            <div class="cal-month-label" id="calMonthLabel"></div>
+            <button type="button" class="cal-nav-btn" id="calNextBtn" aria-label="下個月">›</button>
+          </div>
+          <div class="cal-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+          <div class="cal-grid" id="calGrid"></div>
         </div>
         <div class="item-list" id="transactionsList"></div>
       </div>
@@ -1460,19 +1488,97 @@ function renderLiabilities(){
   }
 }
 
+// ---------- 記帳：日曆篩選 ----------
+// 有紀錄的日期下方會顯示一個點；預設顯示整個月，點某一天可以只看當天的記帳，
+// 再點一次同一天或勾選「顯示全部」可以取消篩選。手機上用點日期比切換月份輸入框好操作。
+let calYear, calMonth, calSelectedDate;
+(function initCalendarDefaults(){
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth(); // 0-11
+  calSelectedDate = null;
+})();
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+function renderCalendar(){
+  const wrap = $('#trCalendarWrap');
+  if(!wrap) return;
+  const showAll = $('#trShowAll').checked;
+  wrap.style.display = showAll ? 'none' : '';
+  if(showAll) return;
+
+  $('#calMonthLabel').textContent = `${calYear} 年 ${calMonth + 1} 月`;
+
+  const recordDates = new Set(state.transactions.map(t => t.date));
+  const first = new Date(calYear, calMonth, 1);
+  const startOffset = first.getDay(); // 0=週日
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  let cellsHtml = '';
+  for(let i = 0; i < startOffset; i++){
+    cellsHtml += `<div class="cal-day cal-day-empty"></div>`;
+  }
+  for(let d = 1; d <= daysInMonth; d++){
+    const dateStr = `${calYear}-${pad2(calMonth + 1)}-${pad2(d)}`;
+    const hasRecord = recordDates.has(dateStr);
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === calSelectedDate;
+    cellsHtml += `<button type="button" class="cal-day${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}" data-date="${dateStr}">
+      <span>${d}</span>
+      <span class="cal-dot" style="opacity:${hasRecord ? 1 : 0}"></span>
+    </button>`;
+  }
+  $('#calGrid').innerHTML = cellsHtml;
+}
+$('#calGrid').addEventListener('click', e => {
+  const btn = e.target.closest('.cal-day[data-date]');
+  if(!btn) return;
+  const date = btn.dataset.date;
+  calSelectedDate = (calSelectedDate === date) ? null : date;
+  renderCalendar();
+  renderTransactions();
+});
+$('#calPrevBtn').addEventListener('click', () => {
+  calMonth--;
+  if(calMonth < 0){ calMonth = 11; calYear--; }
+  calSelectedDate = null;
+  renderCalendar();
+  renderTransactions();
+});
+$('#calNextBtn').addEventListener('click', () => {
+  calMonth++;
+  if(calMonth > 11){ calMonth = 0; calYear++; }
+  calSelectedDate = null;
+  renderCalendar();
+  renderTransactions();
+});
+$('#trShowAll').addEventListener('change', () => {
+  renderCalendar();
+  renderTransactions();
+});
+
 function renderTransactions(){
+  renderCalendar();
   const list = $('#transactionsList');
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
   const showAll = $('#trShowAll').checked;
-  const month = $('#trFilterMonth').value; // 'YYYY-MM'
   let rows = state.transactions.slice();
-  if(!showAll && month){
-    rows = rows.filter(t => (t.date || '').startsWith(month));
+  let emptyMsg = '尚無記帳紀錄。';
+  if(!showAll){
+    if(calSelectedDate){
+      rows = rows.filter(t => t.date === calSelectedDate);
+      emptyMsg = '這天尚無記帳紀錄。';
+    } else {
+      const monthStr = `${calYear}-${pad2(calMonth + 1)}`;
+      rows = rows.filter(t => (t.date || '').startsWith(monthStr));
+      emptyMsg = '這個月尚無記帳紀錄。';
+    }
   }
   rows.sort((a,b) => (a.date < b.date ? 1 : -1));
 
   if(!rows.length){
-    list.innerHTML = `<div class="empty">${showAll ? '尚無記帳紀錄。' : '這個月尚無記帳紀錄。'}</div>`;
+    list.innerHTML = `<div class="empty">${emptyMsg}</div>`;
     return;
   }
   list.innerHTML = rows.map(t => {
@@ -2297,7 +2403,6 @@ window.deleteLiability = async id => {
 (function initTrDefaults(){
   const now = new Date();
   $('#trDate').value = now.toISOString().slice(0,10);
-  $('#trFilterMonth').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   populateTrCategories('expense');
 })();
 
@@ -2307,12 +2412,6 @@ $$('#trForm .type-toggle button').forEach(btn => {
 
 $('#trShared').addEventListener('change', () => {
   $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
-});
-
-$('#trFilterMonth').addEventListener('change', renderTransactions);
-$('#trShowAll').addEventListener('change', () => {
-  $('#trFilterMonth').disabled = $('#trShowAll').checked;
-  renderTransactions();
 });
 
 // 記帳新增/編輯/刪除都是「一次 exec 內同時處理記帳列 + 帳戶餘額」的複合動作（見 Code.gs 的
@@ -2781,9 +2880,19 @@ function renderLedger(){
         <div class="item-value">$${fmt(t.amount)}</div>
       </div>
       <div class="item-meta"><span>${direction} <b>$${fmt(owed)}</b></span></div>
+      <div class="item-actions">
+        <button class="small" onclick="editLedgerItem('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+      </div>
     </div>`;
   }).join('');
 }
+// 從共同帳本清單直接編輯：切到「記帳」子分頁並帶出該筆記帳的編輯表單
+window.editLedgerItem = id => {
+  const btn = $('#trSubNav button[data-sub="records"]');
+  if(btn) btn.click();
+  editTransaction(id);
+};
 $('#ledgerSettleBtn').addEventListener('click', async () => {
   const items = ledgerUnsettledItems();
   if(!items.length){ alert('目前沒有需要結算的項目。'); return; }
