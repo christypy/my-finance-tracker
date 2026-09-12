@@ -773,6 +773,7 @@
                   </select>
                 </label>
               </div>
+              <p class="hint" id="trAdvanceHint" style="display:none; margin-top:6px;">全額代墊的品項不用選主/子類別，會直接統一存成「代墊」方便之後辨識。</p>
             </div>
             <div class="form-actions">
               <button type="submit" class="primary">儲存記帳</button>
@@ -1666,6 +1667,18 @@ $$('#trForm .quick-amount-row button').forEach(btn => {
   });
 });
 
+// 「全額代墊（全部算對方的）」的品項，主類別不用選、直接統一顯示/存成「代墊」，
+// 方便之後在記帳清單或匯出時一眼看出這筆是代墊而不是自己的支出分類
+const ADVANCE_CATEGORY_NAME = '代墊';
+function isAdvanceMode_(){
+  return $('#trType').value !== 'transfer' && $('#trShared').checked && $('#trSplitMode').value === 'advance';
+}
+function syncCatRowVisibility(){
+  const advance = isAdvanceMode_();
+  $('#trCatRow').style.display = ($('#trType').value === 'transfer' || advance) ? 'none' : '';
+  const hint = $('#trAdvanceHint');
+  if(hint) hint.style.display = advance ? '' : 'none';
+}
 function setTrType(type, selectedCategory, selectedSub){
   $('#trType').value = type;
   $$('#trForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
@@ -1683,6 +1696,7 @@ function setTrType(type, selectedCategory, selectedSub){
     $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
     populateTrCategories(type, selectedCategory, selectedSub);
   }
+  syncCatRowVisibility();
 }
 
 // ---------- 記帳統計分析 ----------
@@ -2432,7 +2446,9 @@ $$('#trForm .type-toggle button').forEach(btn => {
 
 $('#trShared').addEventListener('change', () => {
   $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
+  syncCatRowVisibility();
 });
+$('#trSplitMode').addEventListener('change', syncCatRowVisibility);
 
 // 記帳新增/編輯/刪除都是「一次 exec 內同時處理記帳列 + 帳戶餘額」的複合動作（見 Code.gs 的
 // addTransactionTx / updateTransactionTx / deleteTransactionTx），比以前「新增記帳→更新帳戶
@@ -2465,17 +2481,20 @@ $('#trForm').addEventListener('submit', async e => {
     };
   } else {
     const shared = $('#trShared').checked;
+    const splitMode = shared ? $('#trSplitMode').value : 'personal';
+    const isAdvance = splitMode === 'advance';
     data = {
       id,
       date: $('#trDate').value,
       type,
-      category: $('#trCategory').value,
-      subcategory: $('#trSubcategory').value,
+      // 全額代墊的品項主類別統一存成「代墊」，不用另外選類別
+      category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#trCategory').value,
+      subcategory: isAdvance ? '' : $('#trSubcategory').value,
       amount,
       accountId,
       note: $('#trNote').value,
       payer: shared ? $('#trPayer').value : 'me',
-      splitMode: shared ? $('#trSplitMode').value : 'personal',
+      splitMode,
       settled: false
     };
   }
@@ -2556,6 +2575,7 @@ window.editTransaction = id => {
     $('#trLedgerFields').style.display = shared ? '' : 'none';
     $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
     $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+    syncCatRowVisibility();
   }
   $('#trNote').value = t.note || '';
   // 編輯時一律把表單搬到最上層、固定浮在畫面下方——不管目前在哪個子分頁、
