@@ -367,6 +367,9 @@
   .period-row{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
   .period-row input, .period-row select{ min-height:38px; padding:7px 10px; width:auto; }
   .filter-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; font-size:13px; color:var(--ink-soft); }
+  .tr-search-row{ display:flex; gap:8px; margin-bottom:14px; }
+  .tr-search-row input[type="search"]{ flex:1; min-width:0; }
+  .tr-search-row button{ flex:none; }
   .filter-row label{ display:flex; align-items:center; gap:6px; }
   .filter-row input[type="checkbox"]{ min-height:auto; width:16px; height:16px; padding:0; }
 
@@ -836,6 +839,10 @@
             </div>
           </form>
         </details>
+        <div class="tr-search-row" id="trSearchRow">
+          <input type="search" id="trSearchInput" placeholder="搜尋記帳（名稱、類別、備註、金額、帳戶…）">
+          <button type="button" id="trSearchClear" class="small" style="display:none;">清除</button>
+        </div>
         <div class="calendar-wrap" id="trCalendarWrap">
           <div class="cal-nav">
             <button type="button" class="cal-nav-btn" id="calPrevBtn" aria-label="上個月">‹</button>
@@ -1673,6 +1680,14 @@ function needsFullHistoryFor(year, month){
   const monthStr = `${year}-${pad2(month + 1)}`;
   return monthStr < state.transactionsSince.slice(0, 7);
 }
+$('#trSearchInput').addEventListener('input', () => {
+  renderTransactions();
+});
+$('#trSearchClear').addEventListener('click', () => {
+  $('#trSearchInput').value = '';
+  renderTransactions();
+  $('#trSearchInput').focus();
+});
 $('#calGrid').addEventListener('click', e => {
   const btn = e.target.closest('.cal-day[data-date]');
   if(!btn) return;
@@ -1698,21 +1713,46 @@ $('#calNextBtn').addEventListener('click', () => {
   if(needsFullHistoryFor(calYear, calMonth)) ensureFullTransactionsLoaded();
 });
 
+// 記帳搜尋：比對名稱/類別/子類別/備註/日期/帳戶名稱/金額，不分大小寫。
+// 有輸入搜尋字串時會忽略日曆篩選（改成搜尋全部已載入的記帳），並且順便
+// 確保完整歷史都已經載入，這樣才搜得到 3 個月以前的舊紀錄。
+function transactionMatchesSearch_(t, term, byId){
+  const typeLabel = t.type === 'expense' ? '支出' : t.type === 'income' ? '收入' : t.type === 'transfer' ? '轉帳' : t.type === 'settlement' ? '結算' : '';
+  const accName = t.accountId ? (byId[t.accountId] || '') : '';
+  const toAccName = t.toAccountId ? (byId[t.toAccountId] || '') : '';
+  const haystack = [t.note, t.category, t.subcategory, t.date, accName, toAccName, typeLabel, t.amount]
+    .filter(v => v !== undefined && v !== null && v !== '')
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(term);
+}
 function renderTransactions(){
   renderCalendar();
   const list = $('#transactionsList');
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
-  let rows = state.transactions.slice();
+  const rawSearch = ($('#trSearchInput').value || '').trim();
+  const searchTerm = rawSearch.toLowerCase();
+  const searching = searchTerm.length > 0;
+  $('#trCalendarWrap').style.display = searching ? 'none' : '';
+  $('#trSearchClear').style.display = searching ? '' : 'none';
+
+  let rows;
   let emptyMsg;
-  if(calSelectedDate){
-    rows = rows.filter(t => t.date === calSelectedDate);
+  if(searching){
+    if(!state.transactionsFullyLoaded) ensureFullTransactionsLoaded();
+    rows = state.transactions.filter(t => transactionMatchesSearch_(t, searchTerm, byId));
+    emptyMsg = state.transactionsFullyLoaded
+      ? `找不到符合「${escapeHtml(rawSearch)}」的記帳紀錄。`
+      : `搜尋中，正在補齊完整記帳歷史…`;
+  } else if(calSelectedDate){
+    rows = state.transactions.filter(t => t.date === calSelectedDate);
     emptyMsg = '這天尚無記帳紀錄。';
   } else {
     const monthStr = `${calYear}-${pad2(calMonth + 1)}`;
-    rows = rows.filter(t => (t.date || '').startsWith(monthStr));
+    rows = state.transactions.filter(t => (t.date || '').startsWith(monthStr));
     emptyMsg = '這個月尚無記帳紀錄。';
   }
-  rows.sort((a,b) => (a.date < b.date ? 1 : -1));
+  rows = [...rows].sort((a,b) => (a.date < b.date ? 1 : -1));
 
   if(!rows.length){
     list.innerHTML = `<div class="empty">${emptyMsg}</div>`;
