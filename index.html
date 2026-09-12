@@ -160,6 +160,7 @@
   .item-meta{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px; font-size:12px; color:var(--ink-soft); }
   .item-meta span b{ color:var(--ink); font-family:'Roboto Slab', serif; }
   .item-actions{ display:flex; gap:8px; margin-top:10px; }
+  #transactionsList .item-card{ cursor:pointer; }
 
   .badge{
     display:inline-block;
@@ -704,7 +705,7 @@
       <!-- 記帳：紀錄（含新增/編輯記帳與轉帳） -->
       <div id="trSub-records">
         <div id="recurringBanner"></div>
-        <p class="hint">支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。</p>
+        <p class="hint">支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。</p>
         <details class="entry-wrap" open id="trDetails">
           <summary><span class="plus">＋</span>新增 / 編輯記帳</summary>
           <form class="entry" id="trForm">
@@ -779,9 +780,6 @@
             </div>
           </form>
         </details>
-        <div class="filter-row">
-          <label><input type="checkbox" id="trShowAll"> 顯示全部（不篩選日期）</label>
-        </div>
         <div class="calendar-wrap" id="trCalendarWrap">
           <div class="cal-nav">
             <button type="button" class="cal-nav-btn" id="calPrevBtn" aria-label="上個月">‹</button>
@@ -1502,9 +1500,6 @@ function pad2(n){ return String(n).padStart(2,'0'); }
 function renderCalendar(){
   const wrap = $('#trCalendarWrap');
   if(!wrap) return;
-  const showAll = $('#trShowAll').checked;
-  wrap.style.display = showAll ? 'none' : '';
-  if(showAll) return;
 
   $('#calMonthLabel').textContent = `${calYear} 年 ${calMonth + 1} 月`;
 
@@ -1552,27 +1547,20 @@ $('#calNextBtn').addEventListener('click', () => {
   renderCalendar();
   renderTransactions();
 });
-$('#trShowAll').addEventListener('change', () => {
-  renderCalendar();
-  renderTransactions();
-});
 
 function renderTransactions(){
   renderCalendar();
   const list = $('#transactionsList');
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
-  const showAll = $('#trShowAll').checked;
   let rows = state.transactions.slice();
-  let emptyMsg = '尚無記帳紀錄。';
-  if(!showAll){
-    if(calSelectedDate){
-      rows = rows.filter(t => t.date === calSelectedDate);
-      emptyMsg = '這天尚無記帳紀錄。';
-    } else {
-      const monthStr = `${calYear}-${pad2(calMonth + 1)}`;
-      rows = rows.filter(t => (t.date || '').startsWith(monthStr));
-      emptyMsg = '這個月尚無記帳紀錄。';
-    }
+  let emptyMsg;
+  if(calSelectedDate){
+    rows = rows.filter(t => t.date === calSelectedDate);
+    emptyMsg = '這天尚無記帳紀錄。';
+  } else {
+    const monthStr = `${calYear}-${pad2(calMonth + 1)}`;
+    rows = rows.filter(t => (t.date || '').startsWith(monthStr));
+    emptyMsg = '這個月尚無記帳紀錄。';
   }
   rows.sort((a,b) => (a.date < b.date ? 1 : -1));
 
@@ -1581,14 +1569,19 @@ function renderTransactions(){
     return;
   }
   list.innerHTML = rows.map(t => {
+    const catLabel = `${t.category || '其他'}${t.subcategory ? ' · ' + t.subcategory : ''}`;
     if(t.type === 'transfer'){
       const fromName = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '（未指定）';
       const toName = t.toAccountId ? (byId[t.toAccountId] || '（帳戶已刪除）') : '（未指定）';
-      return `<div class="item-card">
+      const transferLabel = `<span class="badge">轉帳</span> ${fromName} → ${toName}`;
+      const primary = t.note ? t.note : transferLabel;
+      const metaParts = [t.date];
+      if(t.note) metaParts.push(transferLabel);
+      return `<div class="item-card" ondblclick="if(!event.target.closest('.item-actions')) editTransaction('${t.id}')">
         <div class="item-top">
           <div>
-            <div class="item-name"><span class="badge">轉帳</span> ${fromName} → ${toName}</div>
-            <div class="item-note">${t.date}${t.note ? ' · ' + t.note : ''}</div>
+            <div class="item-name">${primary}</div>
+            <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
           </div>
           <div class="item-value">$${fmt(t.amount)}</div>
         </div>
@@ -1600,11 +1593,15 @@ function renderTransactions(){
     }
     const isExpense = t.type === 'expense';
     const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '';
-    return `<div class="item-card">
+    const primary = t.note ? t.note : catLabel;
+    const metaParts = [t.date];
+    if(t.note) metaParts.push(catLabel);
+    if(acc) metaParts.push(acc);
+    return `<div class="item-card" ondblclick="if(!event.target.closest('.item-actions')) editTransaction('${t.id}')">
       <div class="item-top">
         <div>
-          <div class="item-name">${t.category || '其他'}${t.subcategory ? ' · ' + t.subcategory : ''}</div>
-          <div class="item-note">${t.date}${acc ? ' · ' + acc : ''}${t.note ? ' · ' + t.note : ''}</div>
+          <div class="item-name">${primary}</div>
+          <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
         </div>
         <div class="item-value ${isExpense ? 'expense' : 'income'}">${isExpense ? '-' : '+'}$${fmt(t.amount)}</div>
       </div>
