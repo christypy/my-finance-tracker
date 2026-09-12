@@ -210,6 +210,33 @@
   details.entry-wrap > summary .plus{font-size:17px; line-height:1;}
   details.entry-wrap[open] > summary .plus{transform:rotate(45deg); display:inline-block;}
 
+  /* ---- 編輯記帳時固定在畫面下方，手機不用捲回最上面 ---- */
+  @media (max-width:680px){
+    details.entry-wrap.editing{
+      position:fixed;
+      left:10px;
+      right:10px;
+      bottom:calc(var(--nav-h) + 10px);
+      margin:0;
+      z-index:60;
+      max-height:72vh;
+      display:flex;
+      flex-direction:column;
+      border-radius:var(--radius);
+      box-shadow:0 -14px 34px rgba(0,0,0,.5);
+      overflow:hidden;
+    }
+    details.entry-wrap.editing > summary{
+      border-radius:var(--radius) var(--radius) 0 0;
+      flex:none;
+    }
+    details.entry-wrap.editing > form.entry{
+      overflow-y:auto;
+      border-radius:0 0 var(--radius) var(--radius);
+      margin-top:0;
+    }
+  }
+
   form.entry{
     background:var(--card);
     border:1px solid var(--paper-line);
@@ -302,6 +329,7 @@
   .type-toggle button{ flex:1; }
   .type-toggle button.active.income{ background:var(--green); color:#fff; border-color:var(--green); }
   .type-toggle button.active.expense{ background:var(--red); color:#fff; border-color:var(--red); }
+  .type-toggle button.active.transfer{ background:var(--gold); color:#241c08; border-color:var(--gold); }
 
   .item-value.income{ color:var(--green); }
   .item-value.expense{ color:var(--red); }
@@ -527,8 +555,9 @@
 
   <div class="page">
 
-    <!-- 總覽 -->
-    <div class="view active" id="view-dashboard">
+    <!-- 總覽（含帳戶管理） -->
+    <div class="view" id="view-dashboard">
+      <h2>總覽</h2>
       <div class="net-hero">
         <div class="label">淨資產</div>
         <div class="value" id="netHeroValue">$0</div>
@@ -538,16 +567,8 @@
         </div>
       </div>
       <div class="summary-grid" id="summaryGrid"></div>
-      <div class="dash-list-head">
-        <h2 id="dashboardAccountsTitle">帳戶一覽</h2>
-        <button type="button" class="dash-list-reset" id="dashboardFilterReset" style="display:none;">顯示全部</button>
-      </div>
-      <div class="item-list" id="dashboardAccountsList"></div>
-    </div>
 
-    <!-- 帳戶 -->
-    <div class="view" id="view-accounts">
-      <h2>帳戶</h2>
+      <h2 style="font-size:15px;">帳戶管理</h2>
       <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。銀行帳戶可填年利率，用來估算利息（實際入帳請到「利息紀錄」新增）。</p>
       <details class="entry-wrap" id="accountDetails">
         <summary><span class="plus">＋</span>新增 / 編輯帳戶</summary>
@@ -580,7 +601,12 @@
           </div>
         </form>
       </details>
-      <div class="item-list" id="accountsList"></div>
+
+      <div class="dash-list-head">
+        <h2 id="dashboardAccountsTitle">帳戶一覽</h2>
+        <button type="button" class="dash-list-reset" id="dashboardFilterReset" style="display:none;">顯示全部</button>
+      </div>
+      <div class="item-list" id="dashboardAccountsList"></div>
     </div>
 
     <!-- 利息紀錄 -->
@@ -645,28 +671,29 @@
     </div>
 
     <!-- 記帳 -->
-    <div class="view" id="view-transactions">
+    <div class="view active" id="view-transactions">
       <h2>記帳</h2>
       <div class="segmented" id="trSubNav">
-        <button type="button" class="active" data-sub="records">紀錄</button>
+        <button type="button" class="active" data-sub="records">記帳</button>
         <button type="button" data-sub="ledger">共同帳本</button>
-        <button type="button" data-sub="transfer">轉帳</button>
         <button type="button" data-sub="recurring">固定項目</button>
         <button type="button" data-sub="stats">統計分析</button>
         <button type="button" data-sub="import">匯入CSV</button>
         <button type="button" data-sub="categories">類別設定</button>
       </div>
 
-      <!-- 記帳：紀錄 -->
+      <!-- 記帳：紀錄（含新增/編輯記帳與轉帳） -->
       <div id="trSub-records">
         <div id="recurringBanner"></div>
-        <details class="entry-wrap" id="trDetails">
+        <p class="hint">支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。</p>
+        <details class="entry-wrap" open id="trDetails">
           <summary><span class="plus">＋</span>新增 / 編輯記帳</summary>
           <form class="entry" id="trForm">
             <input type="hidden" id="trId">
             <div class="full type-toggle">
               <button type="button" class="expense active" data-type="expense">支出</button>
               <button type="button" class="income" data-type="income">收入</button>
+              <button type="button" class="transfer" data-type="transfer">轉帳</button>
             </div>
             <input type="hidden" id="trType" value="expense">
             <div class="amount-hero">
@@ -683,7 +710,7 @@
                 <button type="button" class="clear" data-qadd="clear">清空</button>
               </div>
             </div>
-            <div class="cat-select-row">
+            <div class="cat-select-row" id="trCatRow">
               <label>主類別
                 <select id="trCategory"></select>
               </label>
@@ -694,15 +721,20 @@
             <label>日期
               <input type="date" id="trDate" required>
             </label>
-            <label>帳戶（選填，會自動增減餘額）
+            <label id="trAccountWrap"><span id="trAccountLabel">帳戶（選填，會自動增減餘額）</span>
               <select id="trAccount">
                 <option value="">不指定</option>
+              </select>
+            </label>
+            <label class="full" id="trTransferToWrap" style="display:none;">到（轉入帳戶）
+              <select id="trToAccount">
+                <option value="">請選擇</option>
               </select>
             </label>
             <label class="full">備註
               <input type="text" id="trNote" placeholder="選填">
             </label>
-            <div class="full checkbox-row">
+            <div class="full checkbox-row" id="trSharedRow">
               <input type="checkbox" id="trShared">
               <label for="trShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
             </div>
@@ -748,40 +780,6 @@
         </div>
         <h2 style="font-size:15px;">未結算明細</h2>
         <div class="item-list" id="ledgerList"></div>
-      </div>
-
-      <!-- 記帳：轉帳 -->
-      <div id="trSub-transfer" style="display:none;">
-        <p class="hint">帳戶之間互相轉移金額，例如現金存入悠遊卡、提領現金、儲值行動支付等。轉帳不會計入收入／支出統計，只會同時調整兩個帳戶的餘額。</p>
-        <details class="entry-wrap" open id="trfDetails">
-          <summary><span class="plus">＋</span>新增轉帳</summary>
-          <form class="entry" id="trfForm">
-            <label>從（轉出帳戶）
-              <select id="trfFrom" required>
-                <option value="">請選擇</option>
-              </select>
-            </label>
-            <label>到（轉入帳戶）
-              <select id="trfTo" required>
-                <option value="">請選擇</option>
-              </select>
-            </label>
-            <label>金額
-              <input type="number" id="trfAmount" step="0.01" min="0" required>
-            </label>
-            <label>日期
-              <input type="date" id="trfDate" required>
-            </label>
-            <label class="full">備註
-              <input type="text" id="trfNote" placeholder="選填，例如：提領現金">
-            </label>
-            <div class="form-actions">
-              <button type="submit" class="primary">儲存轉帳</button>
-              <button type="button" id="trfCancel">清空表單</button>
-            </div>
-          </form>
-        </details>
-        <div class="item-list" id="transfersList"></div>
       </div>
 
       <!-- 記帳：固定項目 -->
@@ -1041,9 +1039,8 @@ const ICONS = {
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>'
 };
 const TAB_DEFS = [
-  { view:'dashboard', label:'總覽' },
-  { view:'accounts', label:'帳戶' },
   { view:'transactions', label:'記帳' },
+  { view:'dashboard', label:'總覽' },
   { view:'interest', label:'利息' },
   { view:'liabilities', label:'負債' },
   { view:'settings', label:'設定' }
@@ -1281,12 +1278,11 @@ function removeLocal(key, id){
 // ---------- Render ----------
 function renderAll(){
   renderDashboard();
-  renderAccounts();
+  renderAccountSelects();
   renderInterest();
   renderLiabilities();
   renderTransactions();
   renderLedger();
-  renderTransfers();
   renderRecurring();
   renderStats();
   renderCategories();
@@ -1333,6 +1329,15 @@ function renderDashboard(){
     });
   });
 
+  renderAccountsList();
+}
+$('#dashboardFilterReset').addEventListener('click', () => {
+  dashboardFilterType = null;
+  renderDashboard();
+});
+
+// 總覽頁的「帳戶一覽」：含新增/編輯/刪除操作，並支援依類型篩選
+function renderAccountsList(){
   const list = $('#dashboardAccountsList');
   const titleEl = $('#dashboardAccountsTitle');
   const resetBtn = $('#dashboardFilterReset');
@@ -1344,31 +1349,11 @@ function renderDashboard(){
   resetBtn.style.display = dashboardFilterType ? '' : 'none';
 
   if(!state.accounts.length){
-    list.innerHTML = `<div class="empty">尚無帳戶，請到「帳戶」新增。</div>`;
+    list.innerHTML = `<div class="empty">尚無帳戶，請在上方「新增 / 編輯帳戶」新增。</div>`;
   } else if(!accountsToShow.length){
     list.innerHTML = `<div class="empty">這個類型尚無帳戶。</div>`;
   } else {
     const sortedAccounts = [...accountsToShow].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
-    list.innerHTML = sortedAccounts.map(a => `
-      <div class="item-card">
-        <div class="item-top">
-          <div><div class="item-name">${a.name}</div><span class="badge">${a.type}</span></div>
-          <div class="item-value">$${fmt(a.balance)}</div>
-        </div>
-      </div>`).join('');
-  }
-}
-$('#dashboardFilterReset').addEventListener('click', () => {
-  dashboardFilterType = null;
-  renderDashboard();
-});
-
-function renderAccounts(){
-  const list = $('#accountsList');
-  if(!state.accounts.length){
-    list.innerHTML = `<div class="empty">尚無帳戶。</div>`;
-  } else {
-    const sortedAccounts = [...state.accounts].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
     list.innerHTML = sortedAccounts.map(a => {
       const rate = a.interestRate ? Number(a.interestRate) : 0;
       const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
@@ -1392,7 +1377,10 @@ function renderAccounts(){
       </div>`;
     }).join('');
   }
+}
 
+// 各表單的帳戶下拉選單（記帳、轉帳、利息、固定項目共用）
+function renderAccountSelects(){
   const orderedAccounts = sortAccountsForSelect(state.accounts);
   const optionsHtml = orderedAccounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
 
@@ -1414,15 +1402,12 @@ function renderAccounts(){
   recSel.innerHTML = `<option value="">不指定</option>` + optionsHtml;
   recSel.value = keepRecVal;
 
-  // 轉帳表單的「從」「到」帳戶選單
-  const trfFrom = $('#trfFrom');
-  const trfTo = $('#trfTo');
-  if(trfFrom && trfTo){
-    const keepFrom = trfFrom.value, keepTo = trfTo.value;
-    trfFrom.innerHTML = `<option value="">請選擇</option>` + optionsHtml;
-    trfTo.innerHTML = `<option value="">請選擇</option>` + optionsHtml;
-    trfFrom.value = keepFrom;
-    trfTo.value = keepTo;
+  // 記帳表單「轉帳」類型的「到（轉入帳戶）」選單
+  const trToSel = $('#trToAccount');
+  if(trToSel){
+    const keepTo = trToSel.value;
+    trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtml;
+    trToSel.value = keepTo;
   }
 }
 
@@ -1480,7 +1465,7 @@ function renderTransactions(){
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
   const showAll = $('#trShowAll').checked;
   const month = $('#trFilterMonth').value; // 'YYYY-MM'
-  let rows = state.transactions.filter(t => t.type !== 'transfer');
+  let rows = state.transactions.slice();
   if(!showAll && month){
     rows = rows.filter(t => (t.date || '').startsWith(month));
   }
@@ -1491,6 +1476,23 @@ function renderTransactions(){
     return;
   }
   list.innerHTML = rows.map(t => {
+    if(t.type === 'transfer'){
+      const fromName = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '（未指定）';
+      const toName = t.toAccountId ? (byId[t.toAccountId] || '（帳戶已刪除）') : '（未指定）';
+      return `<div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name"><span class="badge">轉帳</span> ${fromName} → ${toName}</div>
+            <div class="item-note">${t.date}${t.note ? ' · ' + t.note : ''}</div>
+          </div>
+          <div class="item-value">$${fmt(t.amount)}</div>
+        </div>
+        <div class="item-actions">
+          <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
+          <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+        </div>
+      </div>`;
+    }
     const isExpense = t.type === 'expense';
     const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '';
     return `<div class="item-card">
@@ -1540,8 +1542,21 @@ $$('#trForm .quick-amount-row button').forEach(btn => {
 
 function setTrType(type, selectedCategory, selectedSub){
   $('#trType').value = type;
-  $$('.type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
-  populateTrCategories(type, selectedCategory, selectedSub);
+  $$('#trForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  const isTransfer = type === 'transfer';
+  $('#trCatRow').style.display = isTransfer ? 'none' : '';
+  $('#trSharedRow').style.display = isTransfer ? 'none' : '';
+  $('#trTransferToWrap').style.display = isTransfer ? '' : 'none';
+  $('#trAccountLabel').textContent = isTransfer ? '從（轉出帳戶）' : '帳戶（選填，會自動增減餘額）';
+  $('#trAccount').required = isTransfer;
+  $('#trToAccount').required = isTransfer;
+  if(isTransfer){
+    $('#trShared').checked = false;
+    $('#trLedgerFields').style.display = 'none';
+  } else {
+    $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
+    populateTrCategories(type, selectedCategory, selectedSub);
+  }
 }
 
 // ---------- 記帳統計分析 ----------
@@ -2120,8 +2135,8 @@ $('#distYearInput').addEventListener('change', renderDistribution);
 $('#distCategoryInput').addEventListener('change', renderDistribution);
 $('#distSubcategoryInput').addEventListener('change', renderDistribution);
 
-// 記帳頁：紀錄 / 共同帳本 / 固定項目 / 統計分析 / 匯入 / 類別設定 子分頁切換
-const TR_SUBS = ['records','ledger','transfer','recurring','stats','import','categories'];
+// 記帳頁：記帳（含轉帳）/ 共同帳本 / 固定項目 / 統計分析 / 匯入 / 類別設定 子分頁切換
+const TR_SUBS = ['records','ledger','recurring','stats','import','categories'];
 $('#trSubNav').addEventListener('click', e => {
   const btn = e.target.closest('button[data-sub]');
   if(!btn) return;
@@ -2286,7 +2301,7 @@ window.deleteLiability = async id => {
   populateTrCategories('expense');
 })();
 
-$$('.type-toggle button').forEach(btn => {
+$$('#trForm .type-toggle button').forEach(btn => {
   btn.addEventListener('click', () => setTrType(btn.dataset.type));
 });
 
@@ -2309,20 +2324,42 @@ $('#trForm').addEventListener('submit', async e => {
   const type = $('#trType').value;
   const amount = parseFloat($('#trAmount').value) || 0;
   const accountId = $('#trAccount').value;
-  const shared = $('#trShared').checked;
-  const data = {
-    id,
-    date: $('#trDate').value,
-    type,
-    category: $('#trCategory').value,
-    subcategory: $('#trSubcategory').value,
-    amount,
-    accountId,
-    note: $('#trNote').value,
-    payer: shared ? $('#trPayer').value : 'me',
-    splitMode: shared ? $('#trSplitMode').value : 'personal',
-    settled: false
-  };
+  let data;
+  if(type === 'transfer'){
+    const toAccountId = $('#trToAccount').value;
+    if(!accountId || !toAccountId){ alert('請選擇轉出與轉入帳戶。'); return; }
+    if(accountId === toAccountId){ alert('轉出與轉入帳戶不能是同一個。'); return; }
+    if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
+    data = {
+      id,
+      date: $('#trDate').value,
+      type: 'transfer',
+      category: '轉帳',
+      subcategory: '',
+      amount,
+      accountId,
+      toAccountId,
+      note: $('#trNote').value,
+      payer: 'me',
+      splitMode: 'personal',
+      settled: false
+    };
+  } else {
+    const shared = $('#trShared').checked;
+    data = {
+      id,
+      date: $('#trDate').value,
+      type,
+      category: $('#trCategory').value,
+      subcategory: $('#trSubcategory').value,
+      amount,
+      accountId,
+      note: $('#trNote').value,
+      payer: shared ? $('#trPayer').value : 'me',
+      splitMode: shared ? $('#trSplitMode').value : 'personal',
+      settled: false
+    };
+  }
   try{
     await runBusy(async () => {
       let result;
@@ -2348,12 +2385,14 @@ function resetTransactionForm(){
   $('#trDate').value = new Date().toISOString().slice(0,10);
   $('#trAmount').value = '';
   $('#trAccount').value = defaultCashAccountId();
+  $('#trToAccount').value = '';
   $('#trNote').value = '';
   $('#trShared').checked = false;
   $('#trLedgerFields').style.display = 'none';
   $('#trPayer').value = 'me';
   $('#trSplitMode').value = 'split';
   setTrType('expense');
+  $('#trDetails').classList.remove('editing');
 }
 window.editTransaction = id => {
   const t = state.transactions.find(x => x.id === id);
@@ -2361,24 +2400,31 @@ window.editTransaction = id => {
   $('#trId').value = t.id;
   $('#trDate').value = t.date;
   $('#trAmount').value = t.amount;
-  setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
-  $('#trAccount').value = t.accountId || '';
+  if(t.type === 'transfer'){
+    setTrType('transfer');
+    $('#trAccount').value = t.accountId || '';
+    $('#trToAccount').value = t.toAccountId || '';
+  } else {
+    setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
+    $('#trAccount').value = t.accountId || '';
+    const shared = t.splitMode && t.splitMode !== 'personal';
+    $('#trShared').checked = shared;
+    $('#trLedgerFields').style.display = shared ? '' : 'none';
+    $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+    $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  }
   $('#trNote').value = t.note || '';
-  const shared = t.splitMode && t.splitMode !== 'personal';
-  $('#trShared').checked = shared;
-  $('#trLedgerFields').style.display = shared ? '' : 'none';
-  $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
-  $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
   $('#trDetails').open = true;
-  $('#trDetails').scrollIntoView({behavior:'smooth', block:'start'});
+  // 固定在畫面下方，手機編輯時不用捲回最上面
+  $('#trDetails').classList.add('editing');
 };
 window.deleteTransaction = async id => {
-  if(!confirm('確定刪除這筆記帳？若有連結帳戶，餘額會自動還原。')) return;
+  if(!confirm('確定刪除這筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。')) return;
   try{
     await runBusy(async () => {
       const result = await apiPost('deleteTransactionTx','transactions',{id});
       removeLocal('transactions', id);
-      if(result.account) upsertLocal('accounts', result.account);
+      (result.accounts || (result.account ? [result.account] : [])).forEach(acc => upsertLocal('accounts', acc));
       renderAll();
     }, '刪除中…');
   }catch(err){ alert('刪除失敗：' + err.message); }
@@ -2753,96 +2799,6 @@ $('#ledgerSettleBtn').addEventListener('click', async () => {
     }, '結算中…');
   }catch(err){ alert('結算失敗：' + err.message); }
 });
-
-// ---------- 帳戶轉帳（現金↔悠遊卡、提領、儲值…） ----------
-// 轉帳用 type:'transfer' 存成一筆 Transactions 紀錄，accountId 是轉出帳戶、
-// toAccountId 是轉入帳戶；後端 addTransactionTx/updateTransactionTx/deleteTransactionTx
-// 會同時調整兩個帳戶的餘額，且不會計入收入／支出統計（統計只看 expense/income）。
-(function initTransferDefaults(){
-  $('#trfDate').value = new Date().toISOString().slice(0,10);
-})();
-
-function transfersList(){
-  return state.transactions.filter(t => t.type === 'transfer').sort((a,b) => (a.date < b.date ? 1 : -1));
-}
-
-function renderTransfers(){
-  const list = $('#transfersList');
-  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
-  const rows = transfersList();
-  if(!rows.length){
-    list.innerHTML = `<div class="empty">尚無轉帳紀錄。</div>`;
-    return;
-  }
-  list.innerHTML = rows.map(t => {
-    const fromName = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '（未指定）';
-    const toName = t.toAccountId ? (byId[t.toAccountId] || '（帳戶已刪除）') : '（未指定）';
-    return `<div class="item-card">
-      <div class="item-top">
-        <div>
-          <div class="item-name">${fromName} → ${toName}</div>
-          <div class="item-note">${t.date}${t.note ? ' · ' + t.note : ''}</div>
-        </div>
-        <div class="item-value">$${fmt(t.amount)}</div>
-      </div>
-      <div class="item-actions">
-        <button class="small danger" onclick="deleteTransfer('${t.id}')">刪除</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-$('#trfForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const fromId = $('#trfFrom').value;
-  const toId = $('#trfTo').value;
-  const amount = parseFloat($('#trfAmount').value) || 0;
-  if(!fromId || !toId){ alert('請選擇轉出與轉入帳戶。'); return; }
-  if(fromId === toId){ alert('轉出與轉入帳戶不能是同一個。'); return; }
-  if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
-  const data = {
-    date: $('#trfDate').value,
-    type: 'transfer',
-    category: '轉帳',
-    subcategory: '',
-    amount,
-    accountId: fromId,
-    toAccountId: toId,
-    note: $('#trfNote').value,
-    payer: 'me',
-    splitMode: 'personal',
-    settled: false
-  };
-  try{
-    await runBusy(async () => {
-      const result = await apiPost('addTransactionTx','transactions',data);
-      upsertLocal('transactions', result.transaction);
-      (result.accounts || (result.account ? [result.account] : [])).forEach(acc => upsertLocal('accounts', acc));
-      resetTransferForm();
-      $('#trfDetails').open = false;
-      renderAll();
-    }, '儲存中…');
-  }catch(err){ alert('儲存失敗：' + err.message); }
-});
-$('#trfCancel').addEventListener('click', resetTransferForm);
-function resetTransferForm(){
-  $('#trfFrom').value = '';
-  $('#trfTo').value = '';
-  $('#trfAmount').value = '';
-  $('#trfDate').value = new Date().toISOString().slice(0,10);
-  $('#trfNote').value = '';
-}
-window.deleteTransfer = async id => {
-  if(!confirm('確定刪除這筆轉帳？兩個帳戶的餘額會自動還原。')) return;
-  try{
-    await runBusy(async () => {
-      const result = await apiPost('deleteTransactionTx','transactions',{id});
-      removeLocal('transactions', id);
-      (result.accounts || (result.account ? [result.account] : [])).forEach(acc => upsertLocal('accounts', acc));
-      renderAll();
-    }, '刪除中…');
-  }catch(err){ alert('刪除失敗：' + err.message); }
-};
 
 // ---------- 匯入 CSV ----------
 // 純前端解析 CSV（支援雙引號欄位），對應欄位後用批次寫入（batchAddTransactions），
