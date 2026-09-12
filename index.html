@@ -210,37 +210,8 @@
   details.entry-wrap > summary .plus{font-size:17px; line-height:1;}
   details.entry-wrap[open] > summary .plus{transform:rotate(45deg); display:inline-block;}
 
-  /* ---- 編輯記帳時固定在畫面下方，手機不用捲回最上面 ---- */
-  @media (max-width:680px){
-    details.entry-wrap.editing{
-      position:fixed;
-      left:10px;
-      right:10px;
-      bottom:calc(var(--nav-h) + 10px);
-      margin:0;
-      z-index:60;
-      max-height:72vh;
-      display:flex;
-      flex-direction:column;
-      border-radius:var(--radius);
-      box-shadow:0 -14px 34px rgba(0,0,0,.5);
-      overflow:hidden;
-    }
-    details.entry-wrap.editing > summary{
-      border-radius:var(--radius) var(--radius) 0 0;
-      flex:none;
-    }
-    details.entry-wrap.editing > form.entry{
-      overflow-y:auto;
-      border-radius:0 0 var(--radius) var(--radius);
-      margin-top:0;
-    }
-  }
-
-  /* ---- 從「共同帳本」等其他子分頁點編輯時，表單直接浮在畫面下方，
-     不切換分頁，桌機/手機都適用（跟上面手機專用的 .editing 不同，
-     這個不受螢幕寬度限制） ---- */
-  details.entry-wrap.editing.overlay-edit{
+  /* ---- 編輯記帳時固定在畫面下方：桌機、手機都適用，不管在哪個子分頁編輯 ---- */
+  details.entry-wrap.editing{
     position:fixed;
     left:10px;
     right:10px;
@@ -255,11 +226,11 @@
     box-shadow:0 -14px 34px rgba(0,0,0,.5);
     overflow:hidden;
   }
-  details.entry-wrap.editing.overlay-edit > summary{
+  details.entry-wrap.editing > summary{
     border-radius:var(--radius) var(--radius) 0 0;
     flex:none;
   }
-  details.entry-wrap.editing.overlay-edit > form.entry{
+  details.entry-wrap.editing > form.entry{
     overflow-y:auto;
     border-radius:0 0 var(--radius) var(--radius);
     margin-top:0;
@@ -840,7 +811,7 @@
 
       <!-- 記帳：固定項目 -->
       <div id="trSub-recurring" style="display:none;">
-        <p class="hint">設定每個月都要繳的房租、健保費、訂閱費用等固定項目。之後每個月只要打開「記帳」，就會看到本月尚未加入的固定項目，一鍵就能加進記帳紀錄（不會重複加入）。</p>
+        <p class="hint">設定每個月都要繳的房租、健保費、訂閱費用等固定項目，「啟用」勾選的項目就是每個月要自動加入的支出/收入，不用每次重打名稱、金額。若已請開發者在 Apps Script 設定自動觸發（執行一次 setupMonthlyRecurringTrigger），啟用中的項目會在每月 1 號凌晨自動加進記帳；沒設定的話，打開本頁會看到本月尚未加入的項目，一鍵就能手動加進記帳紀錄（不會重複加入）。</p>
         <details class="entry-wrap" id="recDetails">
           <summary><span class="plus">＋</span>新增 / 編輯固定項目</summary>
           <form class="entry" id="recForm">
@@ -2519,18 +2490,12 @@ const trDetailsHome_ = { parent: null, nextSibling: null };
   trDetailsHome_.parent = el.parentNode;
   trDetailsHome_.nextSibling = el.nextSibling;
 })();
-function currentTrSub_(){
-  const btn = $('#trSubNav button.active');
-  return btn ? btn.dataset.sub : 'records';
-}
 function moveTrDetailsToOverlay_(){
   const el = $('#trDetails');
   if(el.parentNode !== document.body) document.body.appendChild(el);
-  el.classList.add('overlay-edit');
 }
 function restoreTrDetailsHome_(){
   const el = $('#trDetails');
-  el.classList.remove('overlay-edit');
   if(trDetailsHome_.parent && el.parentNode !== trDetailsHome_.parent){
     trDetailsHome_.parent.insertBefore(el, trDetailsHome_.nextSibling);
   }
@@ -2549,8 +2514,8 @@ function resetTransactionForm(){
   $('#trSplitMode').value = 'split';
   setTrType('expense');
   $('#trDetails').classList.remove('editing');
-  // 如果表單目前是從其他分頁浮上來編輯，存檔/取消後要搬回「記帳」分頁原本的位置
-  if(currentTrSub_() !== 'records') restoreTrDetailsHome_();
+  // 編輯表單存檔/取消後，一律搬回「記帳」分頁原本的位置
+  restoreTrDetailsHome_();
 }
 window.editTransaction = id => {
   const t = state.transactions.find(x => x.id === id);
@@ -2572,15 +2537,11 @@ window.editTransaction = id => {
     $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
   }
   $('#trNote').value = t.note || '';
-  // 如果目前不在「記帳」子分頁（例如從共同帳本點編輯），把表單暫時搬到
-  // 最上層浮在畫面下方，不用先切回「記帳」分頁
-  if(currentTrSub_() !== 'records') moveTrDetailsToOverlay_();
+  // 編輯時一律把表單搬到最上層、固定浮在畫面下方——不管目前在哪個子分頁、
+  // 不管是電腦還是手機，都不用捲動或切分頁
+  moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
-  // 固定在畫面下方，編輯時不用捲回最上面
   $('#trDetails').classList.add('editing');
-  if(currentTrSub_() !== 'records'){
-    $('#trDetails').scrollIntoView({ block: 'nearest' });
-  }
 };
 window.deleteTransaction = async id => {
   if(!confirm('確定刪除這筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。')) return;

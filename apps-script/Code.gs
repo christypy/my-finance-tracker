@@ -365,6 +365,42 @@ function runRecurringTemplates_(month, ids) {
   return { created: created, accounts: accountsTouched, skipped: pending.length - toRun.length };
 }
 
+// ---------- 固定項目「勾選啟用＝每月一開始自動新增」的自動觸發 ----------
+// 前端「固定項目」頁面的手動加入按鈕，需要使用者自己打開網頁才會執行；
+// 如果希望勾選「啟用」的固定項目每個月一開始就自動出現在記帳紀錄，不用
+// 手動點，需要靠 Google 的時間驅動觸發器，在背景自動呼叫這支函式。
+//
+// 設定方式（只需要做一次）：
+// 1. 在 Apps Script 編輯器上方的函式下拉選單，選擇 setupMonthlyRecurringTrigger
+// 2. 按「執行」，第一次會跳出 Google 授權視窗，照著同意即可
+// 3. 之後每個月 1 號凌晨，Google 會自動在背景執行 autoAddMonthlyRecurring，
+//    把所有啟用中、當月還沒加入的固定項目自動加進記帳紀錄（重複執行也不會
+//    重複新增，邏輯跟手動按「一鍵加入」是共用的）
+// 如果之後想取消自動新增，執行 removeMonthlyRecurringTrigger 即可。
+function autoAddMonthlyRecurring() {
+  const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+  const month = Utilities.formatDate(new Date(), tz, 'yyyy-MM');
+  return runRecurringTemplates_(month, null);
+}
+
+function setupMonthlyRecurringTrigger() {
+  removeMonthlyRecurringTrigger();
+  ScriptApp.newTrigger('autoAddMonthlyRecurring')
+    .timeBased()
+    .onMonthDay(1)
+    .atHour(1)
+    .create();
+  return '已設定：每月 1 號凌晨會自動把啟用中的固定項目加入記帳。';
+}
+
+function removeMonthlyRecurringTrigger() {
+  ScriptApp.getProjectTriggers().forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'autoAddMonthlyRecurring') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+}
+
 function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
