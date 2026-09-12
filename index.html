@@ -237,6 +237,34 @@
     }
   }
 
+  /* ---- 從「共同帳本」等其他子分頁點編輯時，表單直接浮在畫面下方，
+     不切換分頁，桌機/手機都適用（跟上面手機專用的 .editing 不同，
+     這個不受螢幕寬度限制） ---- */
+  details.entry-wrap.editing.overlay-edit{
+    position:fixed;
+    left:10px;
+    right:10px;
+    bottom:calc(var(--nav-h) + 10px);
+    margin:0 auto;
+    max-width:520px;
+    z-index:60;
+    max-height:72vh;
+    display:flex;
+    flex-direction:column;
+    border-radius:var(--radius);
+    box-shadow:0 -14px 34px rgba(0,0,0,.5);
+    overflow:hidden;
+  }
+  details.entry-wrap.editing.overlay-edit > summary{
+    border-radius:var(--radius) var(--radius) 0 0;
+    flex:none;
+  }
+  details.entry-wrap.editing.overlay-edit > form.entry{
+    overflow-y:auto;
+    border-radius:0 0 var(--radius) var(--radius);
+    margin-top:0;
+  }
+
   form.entry{
     background:var(--card);
     border:1px solid var(--paper-line);
@@ -2479,6 +2507,35 @@ $('#trForm').addEventListener('submit', async e => {
   }catch(err){ alert('儲存失敗：' + err.message); }
 });
 $('#trCancel').addEventListener('click', resetTransactionForm);
+
+// ---- 讓「記帳」編輯表單可以浮在其他子分頁上方使用 ----
+// trDetails 原本只存在於「記帳」子分頁（trSub-records）裡面，其他子分頁
+// （例如共同帳本）display:none 時會把它一起藏起來，所以之前只能先切分頁
+// 才看得到編輯表單。這裡記住它原本在 DOM 裡的位置，需要跨分頁編輯時暫時
+// 把它搬到 body 最後面（不受任何子分頁 display:none 影響），編輯完再搬回去。
+const trDetailsHome_ = { parent: null, nextSibling: null };
+(function rememberTrDetailsHome_(){
+  const el = $('#trDetails');
+  trDetailsHome_.parent = el.parentNode;
+  trDetailsHome_.nextSibling = el.nextSibling;
+})();
+function currentTrSub_(){
+  const btn = $('#trSubNav button.active');
+  return btn ? btn.dataset.sub : 'records';
+}
+function moveTrDetailsToOverlay_(){
+  const el = $('#trDetails');
+  if(el.parentNode !== document.body) document.body.appendChild(el);
+  el.classList.add('overlay-edit');
+}
+function restoreTrDetailsHome_(){
+  const el = $('#trDetails');
+  el.classList.remove('overlay-edit');
+  if(trDetailsHome_.parent && el.parentNode !== trDetailsHome_.parent){
+    trDetailsHome_.parent.insertBefore(el, trDetailsHome_.nextSibling);
+  }
+}
+
 function resetTransactionForm(){
   $('#trId').value = '';
   $('#trDate').value = new Date().toISOString().slice(0,10);
@@ -2492,6 +2549,8 @@ function resetTransactionForm(){
   $('#trSplitMode').value = 'split';
   setTrType('expense');
   $('#trDetails').classList.remove('editing');
+  // 如果表單目前是從其他分頁浮上來編輯，存檔/取消後要搬回「記帳」分頁原本的位置
+  if(currentTrSub_() !== 'records') restoreTrDetailsHome_();
 }
 window.editTransaction = id => {
   const t = state.transactions.find(x => x.id === id);
@@ -2513,9 +2572,15 @@ window.editTransaction = id => {
     $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
   }
   $('#trNote').value = t.note || '';
+  // 如果目前不在「記帳」子分頁（例如從共同帳本點編輯），把表單暫時搬到
+  // 最上層浮在畫面下方，不用先切回「記帳」分頁
+  if(currentTrSub_() !== 'records') moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
-  // 固定在畫面下方，手機編輯時不用捲回最上面
+  // 固定在畫面下方，編輯時不用捲回最上面
   $('#trDetails').classList.add('editing');
+  if(currentTrSub_() !== 'records'){
+    $('#trDetails').scrollIntoView({ block: 'nearest' });
+  }
 };
 window.deleteTransaction = async id => {
   if(!confirm('確定刪除這筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。')) return;
@@ -2887,10 +2952,9 @@ function renderLedger(){
     </div>`;
   }).join('');
 }
-// 從共同帳本清單直接編輯：切到「記帳」子分頁並帶出該筆記帳的編輯表單
+// 從共同帳本清單直接編輯：表單會直接浮在「共同帳本」分頁下方填寫，
+// 不用切到「記帳」分頁，手機共同編輯時比較方便
 window.editLedgerItem = id => {
-  const btn = $('#trSubNav button[data-sub="records"]');
-  if(btn) btn.click();
   editTransaction(id);
 };
 $('#ledgerSettleBtn').addEventListener('click', async () => {

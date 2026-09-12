@@ -62,10 +62,46 @@ function getSheet_(key) {
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAMES[key]);
     sheet.appendRow(SHEET_HEADERS[key]);
+    setDateColumnsAsPlainText_(sheet, key);
   } else {
     ensureHeaders_(sheet, SHEET_HEADERS[key]);
   }
   return sheet;
+}
+
+// 把 date/dueDate 欄位整欄格式設成「純文字」，這樣之後不管是程式寫入
+// 還是使用者在試算表上手動輸入 "2025-08-19"，都不會被 Sheets 自動轉成
+// 日期型別（也就不會再有雙擊跳出日期選擇器、但前端日曆讀不到的落差）。
+// 只有新建立的表會自動套用；既有的表格如果想順便修正，
+// 可以到 Apps Script 編輯器手動執行一次 fixExistingDateColumns() 函式。
+function setDateColumnsAsPlainText_(sheet, key) {
+  const headers = SHEET_HEADERS[key];
+  DATE_ONLY_FIELDS_.forEach(col => {
+    const idx = headers.indexOf(col);
+    if (idx !== -1) {
+      sheet.getRange(1, idx + 1, sheet.getMaxRows(), 1).setNumberFormat('@');
+    }
+  });
+}
+
+// 手動一次性修正：把既有表格中已經被 Sheets 自動轉成「日期」型別的
+// date/dueDate 欄位，改回純文字（不影響顯示出來的日期內容，只是型別）。
+// 用法：Apps Script 編輯器上方選這個函式名稱，按「執行」一次即可，
+// 不需要每次讀取都跑，跑一次之後欄位格式就會固定是文字。
+function fixExistingDateColumns() {
+  ['transactions', 'liabilities'].forEach(key => {
+    const sheet = getSheet_(key);
+    const headers = SHEET_HEADERS[key];
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) { setDateColumnsAsPlainText_(sheet, key); return; }
+    DATE_ONLY_FIELDS_.forEach(col => {
+      const idx = headers.indexOf(col);
+      if (idx === -1) return;
+      const range = sheet.getRange(2, idx + 1, lastRow - 1, 1);
+      const values = range.getValues().map(row => [normalizeCellValue_(col, row[0])]);
+      range.setNumberFormat('@').setValues(values);
+    });
+  });
 }
 
 // 如果表格是舊版本、欄位比目前定義的少（例如舊的 Transactions 表沒有 payer/splitMode/settled），
@@ -84,6 +120,32 @@ function checkToken_(token) {
   return real && token && real === token;
 }
 
+// Google 試算表有個很容易踩到的陷阱：即使是程式（setValues）寫入的純文字，
+// 只要字串長得像日期（例如 "2025-08-19"），只要那個儲存格格式是「自動」，
+// Sheets 就會自動幫你轉成「日期」型別，跟在 UI 上手動輸入日期、雙擊儲存格
+// 會跳出日期選擇器是同一件事。updatedAt 因為存的是完整 ISO 時間戳記
+// （2026-09-11T08:01:44.374Z），格式不吻合日期格式，才會維持文字。
+// 這會導致 getValues() 讀回來的 date/dueDate 不是 "2025-08-19" 字串，
+// 而是一個 Date 物件；之後 JSON.stringify 會把它轉成
+// "2025-08-18T16:00:00.000Z" 這種帶時區、甚至日期會位移一天的格式，
+// 跟前端日曆用字串比對 (t.date === '2025-08-19') 當然對不起來，
+// 這就是「試算表明明有資料，日曆卻是空的」的真正原因。
+// 這裡統一在讀取時把日期欄位轉回試算表所在時區的 yyyy-MM-dd 純文字，
+// 不管儲存格底層是文字還是日期型別，前端拿到的永遠是一致的格式。
+const DATE_ONLY_FIELDS_ = ['date', 'dueDate'];
+function normalizeCellValue_(header, value) {
+  if (value instanceof Date) {
+    const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+    if (DATE_ONLY_FIELDS_.indexOf(header) !== -1) {
+      return Utilities.formatDate(value, tz, 'yyyy-MM-dd');
+    }
+    // 其他欄位（理論上不該是日期型別，但保險起見）轉成 ISO 字串，避免
+    // JSON.stringify 直接輸出 Date 物件造成奇怪格式。
+    return Utilities.formatDate(value, tz, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  }
+  return value;
+}
+
 function readAll_(key) {
   const sheet = getSheet_(key);
   const values = sheet.getDataRange().getValues();
@@ -93,7 +155,7 @@ function readAll_(key) {
     .filter(r => r[0] !== '' && r[0] !== null)
     .map(r => {
       const obj = {};
-      headers.forEach((h, i) => (obj[h] = r[i]));
+      headers.forEach((h, i) => (obj[h] = normalizeCellValue_(h, r[i])));
       return obj;
     });
 }
@@ -109,7 +171,7 @@ function findRowIndexById_(sheet, id) {
 function readRowObj_(sheet, rowIndex, headers) {
   const values = sheet.getRange(rowIndex, 1, 1, headers.length).getValues()[0];
   const obj = {};
-  headers.forEach((h, i) => (obj[h] = values[i]));
+  headers.forEach((h, i) => (obj[h] = normalizeCellValue_(h, values[i])));
   return obj;
 }
 
