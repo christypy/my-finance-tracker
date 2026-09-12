@@ -215,9 +215,17 @@ function deleteRow_(key, id) {
 
 // ---------- 記帳＋帳戶餘額 複合操作（一次 exec 內完成，減少來回） ----------
 
-function txDelta_(type, amount) {
+// type 'settlement'（共同帳本結算轉帳）用 payer 決定方向：
+// payer 'partner' = 對方轉錢給你 → 帳戶餘額增加；payer 'me'（或未指定）= 你轉給對方 → 帳戶餘額減少。
+// 跟一般 expense/income 走同一套 applyBalanceEffect_/addTransactionTx_/updateTransactionTx_/
+// deleteTransactionTx_ 複合流程，這樣之後編輯或刪除這筆結算紀錄時，餘額也會正確地一起還原/調整，
+// 不需要另外寫一套專屬的餘額調整邏輯。
+function txDelta_(type, amount, payer) {
   const amt = Number(amount) || 0;
-  return type === 'expense' ? -amt : (type === 'income' ? amt : 0);
+  if (type === 'expense') return -amt;
+  if (type === 'income') return amt;
+  if (type === 'settlement') return payer === 'partner' ? amt : -amt;
+  return 0;
 }
 
 function adjustAccountBalance_(accountId, delta) {
@@ -235,7 +243,7 @@ function adjustAccountBalance_(accountId, delta) {
 }
 
 // 統一處理一筆記帳對帳戶餘額的影響：
-// - expense/income：只影響 accountId 一個帳戶（原本邏輯）
+// - expense/income/settlement：只影響 accountId 一個帳戶（原本邏輯）
 // - transfer：同時影響 accountId（轉出，扣款）與 toAccountId（轉入，入帳）兩個帳戶
 // sign = 1 表示套用這筆紀錄的效果；sign = -1 表示反向還原（編輯前/刪除時用）
 function applyBalanceEffect_(data, sign) {
@@ -251,7 +259,7 @@ function applyBalanceEffect_(data, sign) {
       if (acc2) touched.push(acc2);
     }
   } else if (data.accountId) {
-    const acc = adjustAccountBalance_(data.accountId, txDelta_(data.type, data.amount) * sign);
+    const acc = adjustAccountBalance_(data.accountId, txDelta_(data.type, data.amount, data.payer) * sign);
     if (acc) touched.push(acc);
   }
   return touched;
@@ -305,7 +313,11 @@ function batchAdd_(key, rows) {
   return { count: matrix.length };
 }
 
-// 共同帳本結算：把指定的記帳列標記為已結算，一次 exec 內完成
+// 共同帳本結算：把指定的記帳列標記為已結算，一次 exec 內完成；
+// 如果有帶 settlementData（使用者選了「轉帳帳戶」），會額外新增一筆
+// type:'settlement' 的記帳紀錄，並透過 addTransactionTx_ 走一般記帳的
+// 複合流程，自動把這筆金額計入所選帳戶的餘額——之後如果要編輯/刪除這筆
+// 結算紀錄，餘額也會透過同一套流程正確地跟著調整/還原。
 function settleLedger_(ids, settlementData) {
   const sheet = getSheet_('transactions');
   const headers = SHEET_HEADERS.transactions;
@@ -323,10 +335,13 @@ function settleLedger_(ids, settlementData) {
     }
   }
   let settlement = null;
+  let account = null;
   if (settlementData) {
-    settlement = addRow_('transactions', settlementData);
+    const result = addTransactionTx_(settlementData);
+    settlement = result.transaction;
+    account = result.account;
   }
-  return { updated: updated, settlement: settlement };
+  return { updated: updated, settlement: settlement, account: account };
 }
 
 // ---------- 固定項目（房租/健保費/訂閱費用...）自動加入本月記帳 ----------

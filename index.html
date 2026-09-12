@@ -435,6 +435,15 @@
   .ledger-hero .label{font-size:12px; color:var(--gold-soft); letter-spacing:.03em;}
   .ledger-hero .value{font-family:'Roboto Slab', serif; font-size:26px; margin-top:4px;}
   .ledger-hero .hint2{font-size:12px; color:#cdd7ef; margin-top:8px; line-height:1.6;}
+  #ledgerSettleAccountWrap{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+    font-size:12px;
+    color:var(--ink-soft);
+    font-weight:500;
+    margin-bottom:14px;
+  }
 
   .import-steps{ display:flex; flex-direction:column; gap:14px; }
 
@@ -841,12 +850,17 @@
 
       <!-- 記帳：共同帳本 -->
       <div id="trSub-ledger" style="display:none;">
-        <p class="hint">記帳時勾選「共同帳本項目」並選擇誰先付款、怎麼分攤，這裡會自動幫你算出目前誰欠誰多少，等金額大到可以一次轉帳時再按「結算」。</p>
+        <p class="hint">記帳時勾選「共同帳本項目」並選擇誰先付款、怎麼分攤，這裡會自動幫你算出目前誰欠誰多少，等金額大到可以一次轉帳時再按「結算」。結算時選擇這筆轉帳實際入帳/出帳的帳戶，系統會把餘額一次更新好，不用自己手動再去調整帳戶。</p>
         <div class="ledger-hero">
           <div class="label">目前帳本餘額</div>
           <div class="value" id="ledgerBalanceValue">打平了</div>
           <div class="hint2" id="ledgerBalanceHint">尚無未結算的共同帳本紀錄。</div>
         </div>
+        <label id="ledgerSettleAccountWrap">轉帳帳戶（結算時會自動增減這個帳戶的餘額）
+          <select id="ledgerSettleAccount">
+            <option value="">不指定（只標記已結算，不更新帳戶餘額）</option>
+          </select>
+        </label>
         <div class="form-actions" style="margin-bottom:16px;">
           <button type="button" class="primary" id="ledgerSettleBtn">結算 / 標記已轉帳完成</button>
         </div>
@@ -1529,6 +1543,19 @@ function renderAccountSelects(){
     trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtml;
     trToSel.value = keepTo;
   }
+
+  // 共同帳本「結算」用的轉帳帳戶選單：預設帶入現金帳戶，選了之後結算時
+  // 會自動把這筆結算金額計入該帳戶餘額，不用自己手動再調整
+  const ledgerSel = $('#ledgerSettleAccount');
+  if(ledgerSel){
+    const keepLedger = ledgerSel.value;
+    ledgerSel.innerHTML = `<option value="">不指定（只標記已結算，不更新帳戶餘額）</option>` + optionsHtml;
+    ledgerSel.value = keepLedger;
+    if(!ledgerSel.value){
+      const cashId = defaultCashAccountId();
+      if(cashId) ledgerSel.value = cashId;
+    }
+  }
 }
 
 function renderInterest(){
@@ -1683,6 +1710,27 @@ function renderTransactions(){
         <div class="item-actions">
           <button class="small" onclick="continueTransaction('${t.id}')">再記一筆</button>
           <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
+          <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+        </div>
+      </div>`;
+    }
+    if(t.type === 'settlement'){
+      // 共同帳本「結算」自動產生的轉帳紀錄：不算收支，也不能用一般記帳表單編輯
+      // （payer 'partner' = 對方轉給你、帳戶餘額增加；'me' = 你轉給對方、餘額減少）
+      const accName = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '（未指定帳戶）';
+      const isIn = t.payer === 'partner';
+      const directionLabel = isIn ? '對方轉入' : '轉給對方';
+      const primary = t.note || '共同帳本結算';
+      const metaParts = [t.date, `<span class="badge">結算</span> ${directionLabel} · ${accName}`];
+      return `<div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${primary}</div>
+            <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
+          </div>
+          <div class="item-value ${isIn ? 'income' : 'expense'}">${isIn ? '+' : '-'}$${fmt(t.amount)}</div>
+        </div>
+        <div class="item-actions">
           <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
         </div>
       </div>`;
@@ -3178,13 +3226,39 @@ $('#ledgerSettleBtn').addEventListener('click', async () => {
   const items = ledgerUnsettledItems();
   if(!items.length){ alert('目前沒有需要結算的項目。'); return; }
   const balance = ledgerBalance(items);
+  const accountId = $('#ledgerSettleAccount').value;
+  const accountName = accountId ? (state.accounts.find(a => a.id === accountId) || {}).name : '';
   const who = balance > 0 ? '對方轉給你' : balance < 0 ? '你轉給對方' : '不用轉帳';
-  if(!confirm(`共 ${items.length} 筆未結算項目，結果為 ${who} $${fmt(Math.abs(balance))}。\n確定這筆錢已經轉帳完成，把這些項目標記為已結算嗎？`)) return;
+  const amount = Math.abs(balance);
+  let confirmMsg = `共 ${items.length} 筆未結算項目，結果為 ${who} $${fmt(amount)}。\n確定這筆錢已經轉帳完成，把這些項目標記為已結算嗎？`;
+  if(amount >= 0.01){
+    confirmMsg += accountId
+      ? `\n同時會把這筆金額計入帳戶「${accountName}」的餘額。`
+      : `\n（尚未選擇轉帳帳戶，只會標記已結算，不會更動任何帳戶餘額。）`;
+  }
+  if(!confirm(confirmMsg)) return;
+  // 金額有餘額且使用者有選帳戶時，額外新增一筆 type:'settlement' 的記帳紀錄，
+  // 讓這筆結算轉帳也會反映在帳戶餘額與記帳清單上；payer 用來決定金額方向：
+  // 'partner' = 對方轉給你（餘額增加），'me' = 你轉給對方（餘額減少）。
+  const settlement = (accountId && amount >= 0.01) ? {
+    date: new Date().toISOString().slice(0,10),
+    type: 'settlement',
+    category: '共同帳本結算',
+    subcategory: '',
+    amount,
+    accountId,
+    note: who,
+    payer: balance > 0 ? 'partner' : 'me',
+    splitMode: 'personal',
+    settled: true
+  } : null;
   try{
     await runBusy(async () => {
       const ids = items.map(t => t.id);
-      await apiPost('settleLedger','transactions',{ ids });
+      const result = await apiPost('settleLedger','transactions',{ ids, settlement });
       items.forEach(t => { t.settled = true; });
+      if(result.settlement) upsertLocal('transactions', result.settlement);
+      if(result.account) upsertLocal('accounts', result.account);
       renderAll();
     }, '結算中…');
   }catch(err){ alert('結算失敗：' + err.message); }
