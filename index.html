@@ -1180,7 +1180,7 @@ const cfg = {
   token: localStorage.getItem('fin_token') || ''
 };
 
-let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], transactionsFullyLoaded: false };
+let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], transactionsFullyLoaded: false, transactionsSince: null };
 
 // 記帳品項（主類別 + 子類別，依收入/支出分開）。使用者可以在「類別設定」子分頁
 // 新增/編輯/刪除主類別與子類別，存放在 localStorage（不會影響已經記過的舊資料）。
@@ -1327,9 +1327,9 @@ async function apiPost(action, sheet, data){
 
 // 記帳紀錄累積久了會很大量，一次全部載入常常是「載入資料中」卡很久的主因。
 // 這裡先只跟後端要最近 3 個月的記帳（帳戶/負債/利息/固定項目資料量小，一樣一次全拿），
-// 讓畫面能很快顯示出來；載完之後在背景默默補齊完整歷史紀錄（統計分析、
-// 共同帳本結算、日曆較舊月份的標記都需要完整資料），補齊後悄悄重新整理畫面，
-// 不會再讓使用者一開始就等整包資料下載完成。
+// 讓畫面能很快顯示出來、可以馬上開始記帳；完整歷史紀錄（統計分析、共同帳本、
+// 日曆翻到比較舊的月份）改成「真的要用到才載入」，不會一進畫面就自動在背景
+// 多打一次很花時間的完整資料請求，讓一開始進來、單純想記一筆帳的情境變快。
 const INITIAL_LOAD_RECENT_MONTHS = 3;
 async function loadAll(){
   if(!cfg.url || !cfg.token){
@@ -1346,29 +1346,40 @@ async function loadAll(){
       state.transactions = all.transactions;
       state.recurring = all.recurring || [];
       state.transactionsFullyLoaded = !all.transactionsTruncated;
+      state.transactionsSince = all.transactionsSince || null;
       renderAll();
     }, '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
-    loadFullTransactionsInBackground();
   }catch(err){
     $('#cfgStatus').textContent = '連線失敗：' + err.message;
     $('#cfgStatus').className = 'status err';
   }
 }
 
-// 背景補齊完整記帳歷史（不鎖畫面、失敗也不用彈錯誤訊息打擾使用者，
-// 之後重新整理頁面或切換分頁時會再自然觸發一次載入）
-async function loadFullTransactionsInBackground(){
+// 補齊完整記帳歷史：只有真的需要完整資料的地方（統計分析、共同帳本、
+// 日曆翻到比 transactionsSince 更舊的月份）才會呼叫，且同時間只會真的打一次
+// 請求（用 fullTransactionsLoadPromise 擋住重複觸發），載入時用 runBusy
+// 顯示一下小提示，載完會自動重新整理畫面。
+let fullTransactionsLoadPromise = null;
+async function ensureFullTransactionsLoaded(){
   if(state.transactionsFullyLoaded) return;
-  try{
-    const full = await apiGet('transactions');
-    state.transactions = full;
-    state.transactionsFullyLoaded = true;
-    renderAll();
-  }catch(err){
-    console.warn('背景補齊完整記帳紀錄失敗：', err);
-  }
+  if(fullTransactionsLoadPromise) return fullTransactionsLoadPromise;
+  fullTransactionsLoadPromise = (async () => {
+    try{
+      await runBusy(async () => {
+        const full = await apiGet('transactions');
+        state.transactions = full;
+        state.transactionsFullyLoaded = true;
+      }, '補齊完整記帳歷史中…');
+      renderAll();
+    }catch(err){
+      console.warn('補齊完整記帳紀錄失敗：', err);
+    }finally{
+      fullTransactionsLoadPromise = null;
+    }
+  })();
+  return fullTransactionsLoadPromise;
 }
 
 function fmt(n){
@@ -1518,8 +1529,15 @@ function renderAccountSelects(){
   const orderedAccounts = sortAccountsForSelect(state.accounts);
   const optionsHtml = orderedAccounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
 
+  // 利息紀錄只會發生在銀行帳戶，選單只顯示「銀行」類型帳戶，不用在一堆
+  // 現金／行動支付／悠遊卡帳戶裡面找
+  const bankAccounts = orderedAccounts.filter(a => a.type === '銀行');
   const sel = $('#intAccount');
-  sel.innerHTML = optionsHtml;
+  const keepIntVal = sel.value;
+  sel.innerHTML = bankAccounts.length
+    ? bankAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('')
+    : `<option value="">尚無銀行帳戶</option>`;
+  if(bankAccounts.some(a => a.id === keepIntVal)) sel.value = keepIntVal;
 
   const trSel = $('#trAccount');
   const keepVal = trSel.value;
@@ -1647,6 +1665,14 @@ function renderCalendar(){
   }
   $('#calGrid').innerHTML = cellsHtml;
 }
+// 日曆翻頁如果翻到比目前已載入資料還早的月份（transactionsSince 之前），
+// 代表那個月份的記帳可能還沒載入，先補齊完整歷史再重新渲染，
+// 避免翻到舊月份卻誤以為「這個月都沒記帳」
+function needsFullHistoryFor(year, month){
+  if(state.transactionsFullyLoaded || !state.transactionsSince) return false;
+  const monthStr = `${year}-${pad2(month + 1)}`;
+  return monthStr < state.transactionsSince.slice(0, 7);
+}
 $('#calGrid').addEventListener('click', e => {
   const btn = e.target.closest('.cal-day[data-date]');
   if(!btn) return;
@@ -1661,6 +1687,7 @@ $('#calPrevBtn').addEventListener('click', () => {
   calSelectedDate = null;
   renderCalendar();
   renderTransactions();
+  if(needsFullHistoryFor(calYear, calMonth)) ensureFullTransactionsLoaded();
 });
 $('#calNextBtn').addEventListener('click', () => {
   calMonth++;
@@ -1668,6 +1695,7 @@ $('#calNextBtn').addEventListener('click', () => {
   calSelectedDate = null;
   renderCalendar();
   renderTransactions();
+  if(needsFullHistoryFor(calYear, calMonth)) ensureFullTransactionsLoaded();
 });
 
 function renderTransactions(){
@@ -2455,11 +2483,17 @@ function updateTrFabVisibility(){
 
 // 記帳頁：記帳（含轉帳）/ 共同帳本 / 固定項目 / 統計分析 / 匯入 / 類別設定 子分頁切換
 const TR_SUBS = ['records','ledger','recurring','stats','import','categories'];
-$('#trSubNav').addEventListener('click', e => {
+// 這幾個分頁需要看到完整記帳歷史（不只最近 3 個月）才會算得準：
+// 共同帳本可能有超過 3 個月還沒結算的舊項目、統計分析的「跟平均比」也需要更久以前的資料。
+const TR_SUBS_NEED_FULL_HISTORY = ['ledger', 'stats'];
+$('#trSubNav').addEventListener('click', async e => {
   const btn = e.target.closest('button[data-sub]');
   if(!btn) return;
   $$('#trSubNav button').forEach(b => b.classList.toggle('active', b === btn));
   TR_SUBS.forEach(sub => { $('#trSub-' + sub).style.display = (sub === btn.dataset.sub) ? '' : 'none'; });
+  if(TR_SUBS_NEED_FULL_HISTORY.includes(btn.dataset.sub) && !state.transactionsFullyLoaded){
+    await ensureFullTransactionsLoaded();
+  }
   if(btn.dataset.sub === 'stats') renderStats();
   if(btn.dataset.sub === 'ledger') renderLedger();
   if(btn.dataset.sub === 'recurring') renderRecurring();
