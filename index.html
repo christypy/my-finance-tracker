@@ -1777,7 +1777,6 @@ function renderTransactions(){
           <div class="item-value">$${fmt(t.amount)}</div>
         </div>
         <div class="item-actions">
-          <button class="small" onclick="continueTransaction('${t.id}')">再記一筆</button>
           <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
           <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
         </div>
@@ -1819,7 +1818,6 @@ function renderTransactions(){
         <div class="item-value ${isExpense ? 'expense' : 'income'}">${isExpense ? '-' : '+'}$${fmt(t.amount)}</div>
       </div>
       <div class="item-actions">
-        <button class="small" onclick="continueTransaction('${t.id}')">再記一筆</button>
         <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
         <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
       </div>
@@ -2868,35 +2866,6 @@ window.editTransaction = id => {
   // 不管是電腦還是手機，都不用捲動或切分頁
   $('#trFormTitle').textContent = '編輯記帳';
   $('#trSaveContinue').style.display = 'none'; // 編輯既有記帳時不適用批量連續新增
-  moveTrDetailsToOverlay_();
-  $('#trDetails').open = true;
-};
-// 「再記一筆」：沿用同一筆記帳的日期、主類別、子類別（轉帳則沿用轉出/轉入帳戶），
-// 名稱與金額留空，只要重新打這兩項就能快速記下同類型的另一筆（例如同一天分兩次買飲料）。
-// 這一律是「新增」而不是編輯原本那筆，所以 trId 保持空白。
-window.continueTransaction = id => {
-  const t = state.transactions.find(x => x.id === id);
-  if(!t) return;
-  $('#trId').value = '';
-  $('#trDate').value = t.date;
-  $('#trAmount').value = '';
-  $('#trNote').value = '';
-  if(t.type === 'transfer'){
-    setTrType('transfer');
-    $('#trAccount').value = t.accountId || '';
-    $('#trToAccount').value = t.toAccountId || '';
-  } else {
-    setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
-    $('#trAccount').value = t.accountId || '';
-    const shared = t.splitMode && t.splitMode !== 'personal';
-    $('#trShared').checked = shared;
-    $('#trLedgerFields').style.display = shared ? '' : 'none';
-    $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
-    $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
-    syncCatRowVisibility();
-  }
-  $('#trFormTitle').textContent = '新增記帳（已帶入同樣日期／類別）';
-  $('#trSaveContinue').style.display = ''; // 這一律是新增，可以繼續用批量記帳按鈕
   moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
 };
