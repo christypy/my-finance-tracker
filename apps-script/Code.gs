@@ -413,16 +413,34 @@ function doGet(e) {
 
     const sheetKey = e.parameter.sheet; // accounts | liabilities | interest | transactions | all
 
-    // 一次回傳四張表，前端首次載入只需 1 次 HTTP 請求，減少等待時間
+    // 一次回傳四張表，前端首次載入只需 1 次 HTTP 請求，減少等待時間。
+    // 記帳紀錄（Transactions）累積久了資料量會很大，如果帶了 recentMonths 參數，
+    // 就只回傳最近 N 個月的記帳，讓第一次載入的畫面能更快顯示出來；
+    // 前端之後會在背景另外用 sheet=transactions 補齊完整歷史紀錄。
     if (sheetKey === 'all') {
+      let transactions = readAll_('transactions');
+      let truncated = false;
+      let since = null;
+      const recentMonths = parseInt(e.parameter.recentMonths, 10);
+      if (recentMonths && recentMonths > 0) {
+        const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - recentMonths);
+        since = Utilities.formatDate(cutoff, tz, 'yyyy-MM-dd');
+        const fullCount = transactions.length;
+        transactions = transactions.filter(t => (t.date || '') >= since);
+        truncated = transactions.length < fullCount;
+      }
       return jsonOut_({
         ok: true,
         data: {
           accounts: readAll_('accounts'),
           liabilities: readAll_('liabilities'),
           interest: readAll_('interest'),
-          transactions: readAll_('transactions'),
-          recurring: readAll_('recurring')
+          transactions: transactions,
+          recurring: readAll_('recurring'),
+          transactionsTruncated: truncated,
+          transactionsSince: since
         }
       });
     }

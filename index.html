@@ -1095,7 +1095,7 @@ const cfg = {
   token: localStorage.getItem('fin_token') || ''
 };
 
-let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [] };
+let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], transactionsFullyLoaded: false };
 
 // 記帳品項（主類別 + 子類別，依收入/支出分開）。使用者可以在「類別設定」子分頁
 // 新增/編輯/刪除主類別與子類別，存放在 localStorage（不會影響已經記過的舊資料）。
@@ -1219,8 +1219,11 @@ const CATEGORIES = {
 };
 
 // ---------- API ----------
-async function apiGet(sheet){
-  const url = `${cfg.url}?token=${encodeURIComponent(cfg.token)}&sheet=${sheet}`;
+async function apiGet(sheet, params){
+  let url = `${cfg.url}?token=${encodeURIComponent(cfg.token)}&sheet=${sheet}`;
+  if(params){
+    Object.keys(params).forEach(k => { url += `&${k}=${encodeURIComponent(params[k])}`; });
+  }
   const res = await fetch(url);
   const json = await res.json();
   if(!json.ok) throw new Error(json.error || '讀取失敗');
@@ -1237,6 +1240,12 @@ async function apiPost(action, sheet, data){
   return json.data;
 }
 
+// 記帳紀錄累積久了會很大量，一次全部載入常常是「載入資料中」卡很久的主因。
+// 這裡先只跟後端要最近 3 個月的記帳（帳戶/負債/利息/固定項目資料量小，一樣一次全拿），
+// 讓畫面能很快顯示出來；載完之後在背景默默補齊完整歷史紀錄（統計分析、
+// 共同帳本結算、日曆較舊月份的標記都需要完整資料），補齊後悄悄重新整理畫面，
+// 不會再讓使用者一開始就等整包資料下載完成。
+const INITIAL_LOAD_RECENT_MONTHS = 3;
 async function loadAll(){
   if(!cfg.url || !cfg.token){
     $('#cfgStatus').textContent = '尚未設定，請先到「設定」填入網址與密鑰。';
@@ -1244,21 +1253,36 @@ async function loadAll(){
     return;
   }
   try{
-    // 一次請求拿回四張表（sheet=all），比分開四個請求更快、也更省 Apps Script 的執行額度
     await runBusy(async () => {
-      const all = await apiGet('all');
+      const all = await apiGet('all', { recentMonths: INITIAL_LOAD_RECENT_MONTHS });
       state.accounts = all.accounts;
       state.liabilities = all.liabilities;
       state.interest = all.interest;
       state.transactions = all.transactions;
       state.recurring = all.recurring || [];
+      state.transactionsFullyLoaded = !all.transactionsTruncated;
       renderAll();
     }, '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
+    loadFullTransactionsInBackground();
   }catch(err){
     $('#cfgStatus').textContent = '連線失敗：' + err.message;
     $('#cfgStatus').className = 'status err';
+  }
+}
+
+// 背景補齊完整記帳歷史（不鎖畫面、失敗也不用彈錯誤訊息打擾使用者，
+// 之後重新整理頁面或切換分頁時會再自然觸發一次載入）
+async function loadFullTransactionsInBackground(){
+  if(state.transactionsFullyLoaded) return;
+  try{
+    const full = await apiGet('transactions');
+    state.transactions = full;
+    state.transactionsFullyLoaded = true;
+    renderAll();
+  }catch(err){
+    console.warn('背景補齊完整記帳紀錄失敗：', err);
   }
 }
 
@@ -3053,6 +3077,7 @@ $('#csvImportBtn').addEventListener('click', async () => {
       state.interest = all.interest;
       state.transactions = all.transactions;
       state.recurring = all.recurring || [];
+      state.transactionsFullyLoaded = true;
       renderAll();
     }, '匯入中…（資料量大可能需要一點時間）');
     $('#csvStatus').textContent = `匯入完成，共新增 ${mapped.length} 筆記帳。`;
