@@ -856,7 +856,7 @@
 
       <!-- 記帳：固定項目 -->
       <div id="trSub-recurring" style="display:none;">
-        <p class="hint">設定每個月都要繳的房租、健保費、訂閱費用等固定項目，「啟用」勾選的項目就是每個月要自動加入的支出/收入，不用每次重打名稱、金額。若已請開發者在 Apps Script 設定自動觸發（執行一次 setupMonthlyRecurringTrigger），啟用中的項目會在每月 1 號凌晨自動加進記帳；沒設定的話，打開本頁會看到本月尚未加入的項目，一鍵就能手動加進記帳紀錄（不會重複加入）。</p>
+        <p class="hint">設定每個月都要繳的房租、健保費、訂閱費用等固定項目，「啟用」勾選的項目就是每個月要自動加入的支出/收入，不用每次重打名稱、金額。固定項目也可以勾選「共同帳本項目」，設定誰先付、怎麼分攤——這筆設定會一直保留在範本裡，每次加入記帳時都原封不動帶過去，等於是「保留這筆紀錄，只有日期會變，其他都不變」，方便快速新增記帳。若已請開發者在 Apps Script 設定自動觸發（執行一次 setupMonthlyRecurringTrigger），啟用中的項目會在每月 1 號凌晨自動加進記帳；沒設定的話，打開本頁會看到本月尚未加入的項目，一鍵就能手動加進記帳紀錄（不會重複加入）。</p>
         <details class="entry-wrap" id="recDetails">
           <summary><span class="plus">＋</span>新增 / 編輯固定項目</summary>
           <form class="entry" id="recForm">
@@ -869,12 +869,14 @@
             <label>名稱
               <input type="text" id="recName" placeholder="例如：房租、健保費、Netflix 訂閱" required>
             </label>
-            <label>主類別
-              <select id="recCategory"></select>
-            </label>
-            <label>子類別（選填）
-              <select id="recSubcategory"><option value="">不指定</option></select>
-            </label>
+            <div class="cat-select-row" id="recCatRow">
+              <label>主類別
+                <select id="recCategory"></select>
+              </label>
+              <label>子類別（選填）
+                <select id="recSubcategory"><option value="">不指定</option></select>
+              </label>
+            </div>
             <label>金額
               <input type="number" id="recAmount" step="0.01" min="0" required>
             </label>
@@ -889,6 +891,27 @@
             <label class="full">備註
               <input type="text" id="recNote" placeholder="選填">
             </label>
+            <div class="full checkbox-row" id="recSharedRow">
+              <input type="checkbox" id="recShared">
+              <label for="recShared" style="margin:0;">這也是跟另一半的共同帳本項目（需要分攤或代墊）</label>
+            </div>
+            <div class="full" id="recLedgerFields" style="display:none;">
+              <div class="map-grid">
+                <label>誰先付款
+                  <select id="recPayer">
+                    <option value="me">我先付</option>
+                    <option value="partner">對方先付</option>
+                  </select>
+                </label>
+                <label>分攤方式
+                  <select id="recSplitMode">
+                    <option value="split">平分（各一半）</option>
+                    <option value="advance">全額代墊</option>
+                  </select>
+                </label>
+              </div>
+              <p class="hint" id="recAdvanceHint" style="display:none; margin-top:6px;">全額代墊的品項不用選主/子類別，會直接統一存成「代墊」。加入記帳時，這些設定會原封不動帶到那一筆記帳紀錄，等於保留這筆紀錄、只改日期。</p>
+            </div>
             <div class="full checkbox-row">
               <input type="checkbox" id="recActive" checked>
               <label for="recActive" style="margin:0;">啟用（會出現在每月待加入清單）</label>
@@ -2773,6 +2796,23 @@ $$('#recForm .type-toggle button').forEach(btn => {
 });
 (function initRecDefaults(){ populateRecCategories('expense'); })();
 
+// 固定項目也可能是共同帳本項目（例如房租、訂閱費用是跟另一半分攤或代墊），
+// 這裡的顯示/隱藏、全額代墊的類別欄位隱藏邏輯，跟記帳表單（trForm）的
+// isAdvanceMode_ / syncCatRowVisibility 是同一套規則
+function isRecAdvanceMode_(){
+  return $('#recShared').checked && $('#recSplitMode').value === 'advance';
+}
+function syncRecCatRowVisibility(){
+  const advance = isRecAdvanceMode_();
+  $('#recCatRow').style.display = advance ? 'none' : '';
+  $('#recAdvanceHint').style.display = advance ? '' : 'none';
+}
+$('#recShared').addEventListener('change', () => {
+  $('#recLedgerFields').style.display = $('#recShared').checked ? '' : 'none';
+  syncRecCatRowVisibility();
+});
+$('#recSplitMode').addEventListener('change', syncRecCatRowVisibility);
+
 // 找出目前這個月，啟用中但還沒被加入記帳的固定項目
 function pendingRecurringForMonth(month){
   const doneIds = new Set(
@@ -2809,7 +2849,7 @@ function renderRecurringPending(){
   wrap.innerHTML = pending.map(t => `
     <div class="recurring-pending-item">
       <label><input type="checkbox" class="recPendingCheck" value="${t.id}" checked>
-        ${t.name}（${t.category || ''}）$${fmt(t.amount)}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}
+        ${t.name}（${t.category || ''}）$${fmt(t.amount)}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}${recSharedLabel_(t)}
       </label>
     </div>`).join('') +
     `<div class="form-actions" style="margin-top:10px;">
@@ -2832,6 +2872,17 @@ async function runSelectedRecurring(){
   }catch(err){ alert('加入失敗：' + err.message); }
 }
 
+// 固定項目若是共同帳本項目，在清單/待加入列表上標示誰付、怎麼分攤，
+// 方便一眼看出「這筆固定項目加入記帳時會自動算進共同帳本」
+function recIsShared_(t){
+  return t.splitMode === 'split' || t.splitMode === 'advance';
+}
+function recSharedLabel_(t){
+  if(!recIsShared_(t)) return '';
+  const payerLabel = t.payer === 'partner' ? '對方付' : '我付';
+  const modeLabel = t.splitMode === 'advance' ? '全額代墊' : '平分';
+  return ` · 共同帳本（${payerLabel}・${modeLabel}）`;
+}
 function renderRecurring(){
   renderRecurringBanner();
   renderRecurringPending();
@@ -2844,12 +2895,14 @@ function renderRecurring(){
   list.innerHTML = state.recurring.map(t => {
     const active = String(t.active) !== 'false';
     const isExpense = t.type !== 'income';
+    const shared = recIsShared_(t);
     return `<div class="item-card">
       <div class="item-top">
         <div>
           <div class="item-name">${t.name}</div>
           <span class="badge ${active ? 'paid' : 'unpaid'}">${active ? '啟用中' : '已停用'}</span>
-          <div class="item-note">${t.category || ''}${t.subcategory ? ' · ' + t.subcategory : ''}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}${t.accountId ? ' · ' + (byId[t.accountId] || '（帳戶已刪除）') : ''}${t.note ? ' · ' + t.note : ''}</div>
+          ${shared ? '<span class="badge">共同帳本</span>' : ''}
+          <div class="item-note">${t.category || ''}${t.subcategory ? ' · ' + t.subcategory : ''}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}${t.accountId ? ' · ' + (byId[t.accountId] || '（帳戶已刪除）') : ''}${t.note ? ' · ' + t.note : ''}${recSharedLabel_(t)}</div>
         </div>
         <div class="item-value ${isExpense ? 'expense' : 'income'}">${isExpense ? '-' : '+'}$${fmt(t.amount)}</div>
       </div>
@@ -2863,17 +2916,24 @@ function renderRecurring(){
 
 $('#recForm').addEventListener('submit', async e => {
   e.preventDefault();
+  const shared = $('#recShared').checked;
+  const splitMode = shared ? $('#recSplitMode').value : 'personal';
+  const isAdvance = splitMode === 'advance';
   const data = {
     id: $('#recId').value || undefined,
     name: $('#recName').value,
     type: $('#recType').value,
-    category: $('#recCategory').value,
-    subcategory: $('#recSubcategory').value,
+    // 全額代墊的固定項目跟記帳表單一樣，主類別統一存成「代墊」，
+    // 這樣加入記帳時才會原封不動長得一樣
+    category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#recCategory').value,
+    subcategory: isAdvance ? '' : $('#recSubcategory').value,
     amount: parseFloat($('#recAmount').value) || 0,
     accountId: $('#recAccount').value,
     dayOfMonth: $('#recDay').value ? parseInt($('#recDay').value, 10) : '',
     note: $('#recNote').value,
-    active: $('#recActive').checked
+    active: $('#recActive').checked,
+    payer: shared ? $('#recPayer').value : 'me',
+    splitMode: splitMode
   };
   try{
     await runBusy(async () => {
@@ -2892,7 +2952,12 @@ function resetRecurringForm(){
   $('#recId').value=''; $('#recName').value=''; $('#recAmount').value='';
   $('#recAccount').value=''; $('#recDay').value=''; $('#recNote').value='';
   $('#recActive').checked = true;
+  $('#recShared').checked = false;
+  $('#recLedgerFields').style.display = 'none';
+  $('#recPayer').value = 'me';
+  $('#recSplitMode').value = 'split';
   setRecType('expense');
+  syncRecCatRowVisibility();
 }
 window.editRecurring = id => {
   const t = state.recurring.find(x => x.id === id);
@@ -2905,6 +2970,12 @@ window.editRecurring = id => {
   $('#recDay').value = t.dayOfMonth || '';
   $('#recNote').value = t.note || '';
   $('#recActive').checked = String(t.active) !== 'false';
+  const shared = recIsShared_(t);
+  $('#recShared').checked = shared;
+  $('#recLedgerFields').style.display = shared ? '' : 'none';
+  $('#recPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+  $('#recSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  syncRecCatRowVisibility();
   $('#recDetails').open = true;
   $('#recDetails').scrollIntoView({behavior:'smooth', block:'start'});
 };

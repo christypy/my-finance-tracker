@@ -23,6 +23,10 @@
  * - CSV 匯入、共同帳本結算都是一次 exec 內用陣列批次寫入，不會一筆一筆來回。
  */
 
+// 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
+// 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
+const ADVANCE_CATEGORY_NAME_ = '代墊';
+
 const SHEET_NAMES = {
   accounts: 'Accounts',
   liabilities: 'Liabilities',
@@ -53,7 +57,11 @@ const SHEET_HEADERS = {
   //   dayOfMonth 每月幾號要繳（1-28，僅供提醒顯示用，不會自動觸發）
   //   active     是否啟用，停用的範本不會出現在「本月待加入」清單
   //   subcategory 子類別（選填，新增於陣列最後面）
-  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory']
+  //   payer      共同帳本用：'me'（我）| 'partner'（對方）先付款，跟記帳同義（新增於陣列最後面）
+  //   splitMode  共同帳本用：'personal'（個人，不分攤）| 'split'（平分50/50）| 'advance'（全額代墊算對方的）
+  //              （新增於陣列最後面）；這筆範本被加入記帳時，payer/splitMode 會原封不動帶到
+  //              產生出來的記帳紀錄，等同「保留這筆紀錄、只有日期會變」
+  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode']
 };
 
 function getSheet_(key) {
@@ -346,16 +354,24 @@ function runRecurringTemplates_(month, ids) {
   toRun.forEach(tpl => {
     const day = Math.min(Math.max(parseInt(tpl.dayOfMonth, 10) || 1, 1), 28);
     const date = month + '-' + String(day).padStart(2, '0');
+    // 固定項目也可能是共同帳本項目：payer/splitMode 直接沿用範本設定，
+    // 等同「保留這筆紀錄，只有日期會變，其他都不變」，不管是手動按「加入」
+    // 還是每月自動觸發都一樣。舊範本沒有設定過 payer/splitMode 時，預設
+    // 跟以前一樣是「我先付／個人不分攤」，行為不會改變。
+    const payer = tpl.payer === 'partner' ? 'partner' : 'me';
+    const splitMode = (tpl.splitMode === 'split' || tpl.splitMode === 'advance') ? tpl.splitMode : 'personal';
+    const isAdvance = splitMode === 'advance';
     const result = addTransactionTx_({
       date: date,
       type: tpl.type || 'expense',
-      category: tpl.category || tpl.name,
-      subcategory: tpl.subcategory || '',
+      // 全額代墊的品項跟一般記帳表單一樣，主類別統一存成「代墊」
+      category: isAdvance ? ADVANCE_CATEGORY_NAME_ : (tpl.category || tpl.name),
+      subcategory: isAdvance ? '' : (tpl.subcategory || ''),
       amount: Number(tpl.amount) || 0,
       accountId: tpl.accountId || '',
       note: tpl.note || tpl.name,
-      payer: 'me',
-      splitMode: 'personal',
+      payer: payer,
+      splitMode: splitMode,
       settled: false,
       recurringId: tpl.id
     });
