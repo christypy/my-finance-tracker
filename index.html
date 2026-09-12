@@ -450,7 +450,7 @@
 
   .import-steps{ display:flex; flex-direction:column; gap:14px; }
 
-  /* ---- 固定項目提醒 banner ---- */
+  /* ---- 模板提醒 banner ---- */
   .recurring-banner{
     background:var(--gold-soft); border:1px solid var(--gold); color:#5a4413;
     border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:16px;
@@ -506,6 +506,17 @@
     border-color:rgba(228,213,164,.5); color:var(--gold-soft); background:rgba(255,255,255,.06);
   }
   .quick-amount-row button.clear{ color:#f0c7c2; border-color:rgba(240,199,194,.5); }
+
+  /* ---- 記帳表單：模板快速選擇 ---- */
+  .tpl-quick-row{ display:flex; flex-direction:column; gap:8px; }
+  .tpl-quick-row label{ font-size:12px; color:var(--ink-soft); font-weight:500; display:flex; flex-direction:column; gap:5px; }
+  .tpl-chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .tpl-chip{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:999px;
+    padding:7px 14px; font-size:12.5px; color:var(--ink); min-height:auto;
+  }
+  .tpl-chip .tpl-chip-amt{ color:var(--ink-soft); margin-left:4px; }
+  .tpl-chip-empty{ font-size:12.5px; color:var(--ink-soft); }
 
   /* ---- 主類別 / 子類別 選單 ---- */
   .cat-select-row{ grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
@@ -754,7 +765,7 @@
       <div class="segmented" id="trSubNav">
         <button type="button" class="active" data-sub="records">記帳</button>
         <button type="button" data-sub="ledger">共同帳本</button>
-        <button type="button" data-sub="recurring">固定項目</button>
+        <button type="button" data-sub="recurring">模板</button>
         <button type="button" data-sub="stats">統計分析</button>
         <button type="button" data-sub="import">匯入CSV</button>
         <button type="button" data-sub="categories">類別設定</button>
@@ -763,7 +774,7 @@
       <!-- 記帳：紀錄（含新增/編輯記帳與轉帳） -->
       <div id="trSub-records">
         <div id="recurringBanner"></div>
-        <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。</p>
+        <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。常記的項目（例如某個固定會買的東西）可以按「存成模板」存起來，下次表單最上面會出現這個模板，點一下就能帶入內容，只要調整日期或金額就能存檔；模板也能到下方「模板」分頁集中管理，或設成每月自動加入。</p>
         <details class="entry-wrap" id="trDetails">
           <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
           <form class="entry" id="trForm">
@@ -774,6 +785,12 @@
               <button type="button" class="transfer" data-type="transfer">轉帳</button>
             </div>
             <input type="hidden" id="trType" value="expense">
+            <div class="full tpl-quick-row" id="trTemplateRow" style="display:none;">
+              <label style="margin:0;">從模板快速記帳（點一下帶入內容，再依實際狀況調整日期或金額）
+                <input type="search" id="trTemplateSearch" placeholder="搜尋模板名稱…">
+              </label>
+              <div class="tpl-chip-row" id="trTemplateChips"></div>
+            </div>
             <div class="amount-hero">
               <div class="amount-label">金額</div>
               <div class="amount-input-row">
@@ -836,6 +853,7 @@
             <div class="form-actions">
               <button type="submit" class="primary">儲存記帳</button>
               <button type="submit" id="trSaveContinue">儲存並記下一筆</button>
+              <button type="button" id="trSaveAsTemplate">存成模板</button>
               <button type="button" id="trCancel">清空表單</button>
             </div>
           </form>
@@ -876,11 +894,11 @@
         <div class="item-list" id="ledgerList"></div>
       </div>
 
-      <!-- 記帳：固定項目 -->
+      <!-- 記帳：模板 -->
       <div id="trSub-recurring" style="display:none;">
-        <p class="hint">設定每個月都要繳的房租、健保費、訂閱費用等固定項目，「啟用」勾選的項目就是每個月要自動加入的支出/收入，不用每次重打名稱、金額。固定項目也可以勾選「共同帳本項目」，設定誰先付、怎麼分攤——這筆設定會一直保留在範本裡，每次加入記帳時都原封不動帶過去，等於是「保留這筆紀錄，只有日期會變，其他都不變」，方便快速新增記帳。若已請開發者在 Apps Script 設定自動觸發（執行一次 setupMonthlyRecurringTrigger），啟用中的項目會在每月 1 號凌晨自動加進記帳；沒設定的話，打開本頁會看到本月尚未加入的項目，一鍵就能手動加進記帳紀錄（不會重複加入）。</p>
+        <p class="hint">「模板」就是把常用的記帳內容（名稱、類別、金額、帳戶…）存起來，日後在「新增記帳」表單最上面點一下模板就能直接帶入，只要調整日期或微調金額、名稱就能存檔，不用每次重打。想把現有的模板設成每個月都會自動出現的固定支出（房租、健保費、訂閱費用等），把下面「啟用」打勾即可——啟用中的模板會出現在下方「本月待加入」清單，一鍵就能加進本月記帳（不會重複加入）；若已請開發者在 Apps Script 設定自動觸發（執行一次 setupMonthlyRecurringTrigger），啟用中的模板還會在每月 1 號凌晨自動加進記帳，不用手動點。共同帳本項目（需要分攤或代墊）也可以存成模板，設定會原封不動保留，每次用這個模板記帳時都一樣，只有日期會變。</p>
         <details class="entry-wrap" id="recDetails">
-          <summary><span class="plus">＋</span>新增 / 編輯固定項目</summary>
+          <summary><span class="plus">＋</span>新增 / 編輯模板</summary>
           <form class="entry" id="recForm">
             <input type="hidden" id="recId">
             <div class="full type-toggle">
@@ -935,18 +953,18 @@
               <p class="hint" id="recAdvanceHint" style="display:none; margin-top:6px;">全額代墊的品項不用選主/子類別，會直接統一存成「代墊」。加入記帳時，這些設定會原封不動帶到那一筆記帳紀錄，等於保留這筆紀錄、只改日期。</p>
             </div>
             <div class="full checkbox-row">
-              <input type="checkbox" id="recActive" checked>
-              <label for="recActive" style="margin:0;">啟用（會出現在每月待加入清單）</label>
+              <input type="checkbox" id="recActive">
+              <label for="recActive" style="margin:0;">每月自動出現在「本月待加入」清單（房租、訂閱費這類固定帳單才需要勾選；只是想要快速記帳用的模板不用勾）</label>
             </div>
             <div class="form-actions">
-              <button type="submit" class="primary">儲存固定項目</button>
+              <button type="submit" class="primary">儲存模板</button>
               <button type="button" id="recCancel">清空表單</button>
             </div>
           </form>
         </details>
         <h2 style="font-size:15px;">本月待加入</h2>
         <div id="recurringPendingList"></div>
-        <h2 style="font-size:15px;">所有固定項目</h2>
+        <h2 style="font-size:15px;">所有模板</h2>
         <div class="item-list" id="recurringList"></div>
       </div>
 
@@ -993,7 +1011,7 @@
         <!-- ④ 固定 vs 彈性支出 -->
         <div class="stat-section">
           <h3>固定支出 vs 彈性支出</h3>
-          <p class="hint" style="margin-bottom:10px;">固定支出＝由「固定項目」自動加入的紀錄（房租、訂閱費等）；其餘算彈性花費，是比較能省的部分。</p>
+          <p class="hint" style="margin-bottom:10px;">固定支出＝由「模板」自動加入的紀錄（房租、訂閱費等）；其餘算彈性花費，是比較能省的部分。</p>
           <div id="statsFixedVsFlex"></div>
         </div>
 
@@ -1334,7 +1352,7 @@ async function apiPost(action, sheet, data){
 }
 
 // 記帳紀錄累積久了會很大量，一次全部載入常常是「載入資料中」卡很久的主因。
-// 這裡先只跟後端要最近 3 個月的記帳（帳戶/負債/利息/固定項目資料量小，一樣一次全拿），
+// 這裡先只跟後端要最近 3 個月的記帳（帳戶/負債/利息/模板資料量小，一樣一次全拿），
 // 讓畫面能很快顯示出來、可以馬上開始記帳；完整歷史紀錄（統計分析、共同帳本、
 // 日曆翻到比較舊的月份）改成「真的要用到才載入」，不會一進畫面就自動在背景
 // 多打一次很花時間的完整資料請求，讓一開始進來、單純想記一筆帳的情境變快。
@@ -1437,6 +1455,7 @@ function renderAll(){
   renderTransactions();
   renderLedger();
   renderRecurring();
+  renderTrTemplateChips();
   renderStats();
   renderCategories();
 }
@@ -1532,7 +1551,7 @@ function renderAccountsList(){
   }
 }
 
-// 各表單的帳戶下拉選單（記帳、轉帳、利息、固定項目共用）
+// 各表單的帳戶下拉選單（記帳、轉帳、利息、模板共用）
 function renderAccountSelects(){
   const orderedAccounts = sortAccountsForSelect(state.accounts);
   const optionsHtml = orderedAccounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
@@ -1826,7 +1845,7 @@ function renderTransactions(){
 }
 
 // ---- 主類別 / 子類別選單共用邏輯：兩個特殊選項讓使用者不用跳去「類別設定」，
-// 記帳（或固定項目）當下就能直接新增主類別／子類別 ----
+// 記帳（或模板）當下就能直接新增主類別／子類別 ----
 const CAT_ADD_MAIN = '__add_main__';
 const CAT_ADD_SUB = '__add_sub__';
 function populateCategorySelect_(selEl, names, selected){
@@ -1845,7 +1864,7 @@ function populateSubcategorySelect_(selEl, subs, selectedSub){
   selEl.dataset.prev = value;
   return value;
 }
-// 把「主類別／子類別新增」的選單邏輯綁到一組選單上（記帳表單、固定項目表單都會用到）
+// 把「主類別／子類別新增」的選單邏輯綁到一組選單上（記帳表單、模板表單都會用到）
 function bindInlineCategoryCreation_(mainSel, subSel, typeGetter, populateMainFn, populateSubFn){
   mainSel.addEventListener('change', () => {
     const type = typeGetter();
@@ -2520,7 +2539,7 @@ function updateTrFabVisibility(){
   $('#trFab').style.display = (transactionsActive && recordsSubActive) ? 'flex' : 'none';
 }
 
-// 記帳頁：記帳（含轉帳）/ 共同帳本 / 固定項目 / 統計分析 / 匯入 / 類別設定 子分頁切換
+// 記帳頁：記帳（含轉帳）/ 共同帳本 / 模板 / 統計分析 / 匯入 / 類別設定 子分頁切換
 const TR_SUBS = ['records','ledger','recurring','stats','import','categories'];
 // 這幾個分頁需要看到完整記帳歷史（不只最近 3 個月）才會算得準：
 // 共同帳本可能有超過 3 個月還沒結算的舊項目、統計分析的「跟平均比」也需要更久以前的資料。
@@ -2838,6 +2857,7 @@ function resetTransactionForm(){
   setTrType('expense');
   $('#trFormTitle').textContent = '新增記帳';
   $('#trSaveContinue').style.display = ''; // 新增模式才需要「儲存並記下一筆」
+  renderTrTemplateChips(); // 新增模式才顯示模板快速選擇（會依有沒有模板自動顯示/隱藏）
   // 編輯表單存檔/取消後，一律搬回「記帳」分頁原本的位置
   restoreTrDetailsHome_();
 }
@@ -2866,6 +2886,7 @@ window.editTransaction = id => {
   // 不管是電腦還是手機，都不用捲動或切分頁
   $('#trFormTitle').textContent = '編輯記帳';
   $('#trSaveContinue').style.display = 'none'; // 編輯既有記帳時不適用批量連續新增
+  $('#trTemplateRow').style.display = 'none'; // 編輯既有記帳時不能再套用模板（會被誤認成新增）
   moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
 };
@@ -2881,7 +2902,95 @@ window.deleteTransaction = async id => {
   }catch(err){ alert('刪除失敗：' + err.message); }
 };
 
-// ---------- 固定項目（房租/健保費/訂閱費用...每月自動填寫） ----------
+// ---------- 新增記帳表單：模板快速選擇／存成模板 ----------
+// 「模板」清單就是 state.recurring（跟「模板」分頁共用同一份資料），這裡只是
+// 在「新增記帳」表單最上面多顯示一排可以點的模板，點下去直接把常用內容
+// （類別、金額、帳戶、共同帳本設定…）帶入表單，日期維持原本表單上的值不動，
+// 使用者只要視情況調整日期、微調金額或名稱就能存檔，不用重新選一次類別。
+function renderTrTemplateChips(){
+  const row = $('#trTemplateRow');
+  const chips = $('#trTemplateChips');
+  if(!row || !chips) return;
+  if(!state.recurring.length){
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+  const keyword = ($('#trTemplateSearch').value || '').trim().toLowerCase();
+  const list = state.recurring.filter(t => !keyword || String(t.name || '').toLowerCase().includes(keyword));
+  if(!list.length){
+    chips.innerHTML = `<span class="tpl-chip-empty">查無符合的模板。</span>`;
+    return;
+  }
+  chips.innerHTML = list.map(t => {
+    const isExpense = t.type !== 'income';
+    return `<button type="button" class="tpl-chip" onclick="applyTemplateToTr('${t.id}')">${escapeHtml(t.name)}<span class="tpl-chip-amt">${isExpense ? '-' : '+'}$${fmt(t.amount)}</span></button>`;
+  }).join('');
+}
+$('#trTemplateSearch').addEventListener('input', renderTrTemplateChips);
+
+// 點一下模板：一律當成「新增」（trId 清空），把模板存的內容帶入表單；
+// 沿用跟「編輯記帳」/共同帳本相同的一套顯示/隱藏邏輯。
+window.applyTemplateToTr = id => {
+  const t = state.recurring.find(x => x.id === id);
+  if(!t) return;
+  $('#trId').value = '';
+  setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
+  $('#trAmount').value = t.amount || '';
+  $('#trAccount').value = t.accountId || '';
+  // 跟「模板」自動加入記帳時（runRecurringTemplates_）同一套規則：
+  // 優先用模板的備註，沒有的話用模板名稱當作這筆記帳的名稱。
+  $('#trNote').value = t.note || t.name || '';
+  const shared = recIsShared_(t);
+  $('#trShared').checked = shared;
+  $('#trLedgerFields').style.display = shared ? '' : 'none';
+  $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+  $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  syncCatRowVisibility();
+  $('#trFormTitle').textContent = `新增記帳（已帶入模板：${t.name}）`;
+  $('#trSaveContinue').style.display = ''; // 這一律是新增，可以繼續用批量記帳按鈕
+  setTimeout(() => $('#trAmount').focus(), 50);
+};
+
+// 「存成模板」：把目前表單正在打的內容（不含日期）存成一筆新的模板，
+// 預設「每月自動出現在待加入清單」不勾選——單純要留著下次快速記帳用的模板，
+// 不會平白無故每個月都跳出來提醒；如果之後想改成每月固定帳單，可以到
+// 「模板」分頁把那個模板的「啟用」打勾。
+$('#trSaveAsTemplate').addEventListener('click', async () => {
+  const type = $('#trType').value;
+  if(type === 'transfer'){ alert('轉帳沒辦法存成模板，模板只適用於支出／收入。'); return; }
+  const shared = $('#trShared').checked;
+  const splitMode = shared ? $('#trSplitMode').value : 'personal';
+  const isAdvance = splitMode === 'advance';
+  const defaultName = $('#trNote').value.trim();
+  const name = prompt('這個模板要取什麼名字？（下次記帳時會顯示這個名字）', defaultName);
+  if(name === null) return; // 使用者取消
+  if(!name.trim()){ alert('請輸入模板名稱。'); return; }
+  const data = {
+    name: name.trim(),
+    type,
+    category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#trCategory').value,
+    subcategory: isAdvance ? '' : $('#trSubcategory').value,
+    amount: parseFloat($('#trAmount').value) || 0,
+    accountId: $('#trAccount').value,
+    dayOfMonth: '',
+    note: '',
+    active: false,
+    payer: shared ? $('#trPayer').value : 'me',
+    splitMode
+  };
+  try{
+    await runBusy(async () => {
+      const saved = await apiPost('add','recurring',data);
+      upsertLocal('recurring', saved);
+      renderTrTemplateChips();
+      renderRecurring();
+    }, '存成模板中…');
+  }catch(err){ alert('存成模板失敗：' + err.message); return; }
+  alert(`已存成模板「${data.name}」，下次在「新增記帳」表單最上面就能點它快速帶入。`);
+});
+
+// ---------- 模板（房租/健保費/訂閱費用...每月自動填寫） ----------
 function currentMonthStr(){
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -2904,7 +3013,7 @@ $$('#recForm .type-toggle button').forEach(btn => {
 });
 (function initRecDefaults(){ populateRecCategories('expense'); })();
 
-// 固定項目也可能是共同帳本項目（例如房租、訂閱費用是跟另一半分攤或代墊），
+// 模板也可能是共同帳本項目（例如房租、訂閱費用是跟另一半分攤或代墊），
 // 這裡的顯示/隱藏、全額代墊的類別欄位隱藏邏輯，跟記帳表單（trForm）的
 // isAdvanceMode_ / syncCatRowVisibility 是同一套規則
 function isRecAdvanceMode_(){
@@ -2921,7 +3030,7 @@ $('#recShared').addEventListener('change', () => {
 });
 $('#recSplitMode').addEventListener('change', syncRecCatRowVisibility);
 
-// 找出目前這個月，啟用中但還沒被加入記帳的固定項目
+// 找出目前這個月，啟用中但還沒被加入記帳的模板
 function pendingRecurringForMonth(month){
   const doneIds = new Set(
     state.transactions.filter(t => (t.date||'').slice(0,7) === month && t.recurringId).map(t => String(t.recurringId))
@@ -2935,9 +3044,9 @@ function renderRecurringBanner(){
   const pending = pendingRecurringForMonth(month);
   if(!pending.length){ el.innerHTML = ''; return; }
   el.innerHTML = `<div class="recurring-banner">
-    <div><b>本月（${month}）有 ${pending.length} 筆固定項目還沒加入記帳：</b>${pending.map(t=>t.name).join('、')}</div>
+    <div><b>本月（${month}）有 ${pending.length} 筆模板還沒加入記帳：</b>${pending.map(t=>t.name).join('、')}</div>
     <div class="form-actions">
-      <button type="button" class="primary small" onclick="goToRecurringTab()">前往「固定項目」加入</button>
+      <button type="button" class="primary small" onclick="goToRecurringTab()">前往「模板」加入</button>
     </div>
   </div>`;
 }
@@ -2947,11 +3056,11 @@ function renderRecurringPending(){
   const month = currentMonthStr();
   const pending = pendingRecurringForMonth(month);
   if(!state.recurring.length){
-    wrap.innerHTML = `<div class="empty">尚未設定任何固定項目。</div>`;
+    wrap.innerHTML = `<div class="empty">尚未設定任何模板。</div>`;
     return;
   }
   if(!pending.length){
-    wrap.innerHTML = `<div class="empty">本月（${month}）的固定項目都已經加入記帳了。</div>`;
+    wrap.innerHTML = `<div class="empty">本月（${month}）的模板都已經加入記帳了。</div>`;
     return;
   }
   wrap.innerHTML = pending.map(t => `
@@ -2968,7 +3077,7 @@ function renderRecurringPending(){
 
 async function runSelectedRecurring(){
   const ids = $$('.recPendingCheck:checked').map(cb => cb.value);
-  if(!ids.length){ alert('請先勾選要加入的固定項目。'); return; }
+  if(!ids.length){ alert('請先勾選要加入的模板。'); return; }
   const month = currentMonthStr();
   try{
     await runBusy(async () => {
@@ -2980,8 +3089,8 @@ async function runSelectedRecurring(){
   }catch(err){ alert('加入失敗：' + err.message); }
 }
 
-// 固定項目若是共同帳本項目，在清單/待加入列表上標示誰付、怎麼分攤，
-// 方便一眼看出「這筆固定項目加入記帳時會自動算進共同帳本」
+// 模板若是共同帳本項目，在清單/待加入列表上標示誰付、怎麼分攤，
+// 方便一眼看出「這筆模板加入記帳時會自動算進共同帳本」
 function recIsShared_(t){
   return t.splitMode === 'split' || t.splitMode === 'advance';
 }
@@ -2996,7 +3105,7 @@ function renderRecurring(){
   renderRecurringPending();
   const list = $('#recurringList');
   if(!state.recurring.length){
-    list.innerHTML = `<div class="empty">尚未設定固定項目，點上方「＋新增／編輯固定項目」開始設定。</div>`;
+    list.innerHTML = `<div class="empty">尚未設定模板，點上方「＋新增／編輯模板」開始設定。</div>`;
     return;
   }
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
@@ -3008,7 +3117,7 @@ function renderRecurring(){
       <div class="item-top">
         <div>
           <div class="item-name">${t.name}</div>
-          <span class="badge ${active ? 'paid' : 'unpaid'}">${active ? '啟用中' : '已停用'}</span>
+          <span class="badge ${active ? 'paid' : 'unpaid'}">${active ? '每月自動加入' : '僅供快速記帳'}</span>
           ${shared ? '<span class="badge">共同帳本</span>' : ''}
           <div class="item-note">${t.category || ''}${t.subcategory ? ' · ' + t.subcategory : ''}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}${t.accountId ? ' · ' + (byId[t.accountId] || '（帳戶已刪除）') : ''}${t.note ? ' · ' + t.note : ''}${recSharedLabel_(t)}</div>
         </div>
@@ -3031,7 +3140,7 @@ $('#recForm').addEventListener('submit', async e => {
     id: $('#recId').value || undefined,
     name: $('#recName').value,
     type: $('#recType').value,
-    // 全額代墊的固定項目跟記帳表單一樣，主類別統一存成「代墊」，
+    // 全額代墊的模板跟記帳表單一樣，主類別統一存成「代墊」，
     // 這樣加入記帳時才會原封不動長得一樣
     category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#recCategory').value,
     subcategory: isAdvance ? '' : $('#recSubcategory').value,
@@ -3059,7 +3168,7 @@ $('#recCancel').addEventListener('click', resetRecurringForm);
 function resetRecurringForm(){
   $('#recId').value=''; $('#recName').value=''; $('#recAmount').value='';
   $('#recAccount').value=''; $('#recDay').value=''; $('#recNote').value='';
-  $('#recActive').checked = true;
+  $('#recActive').checked = false;
   $('#recShared').checked = false;
   $('#recLedgerFields').style.display = 'none';
   $('#recPayer').value = 'me';
@@ -3088,7 +3197,7 @@ window.editRecurring = id => {
   $('#recDetails').scrollIntoView({behavior:'smooth', block:'start'});
 };
 window.deleteRecurring = async id => {
-  if(!confirm('確定刪除這個固定項目？（已經加入過的記帳紀錄不會被刪除）')) return;
+  if(!confirm('確定刪除這個模板？（已經加入過的記帳紀錄不會被刪除）')) return;
   try{
     await runBusy(async () => {
       await apiPost('delete','recurring',{id});
