@@ -64,8 +64,19 @@ const SHEET_HEADERS = {
   recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode']
 };
 
+// 效能：同一次 doGet/doPost 執行內，常常會對同一張表重複呼叫 getSheet_
+// （例如 updateTransactionTx_ 跟它內部呼叫的 updateRow_ 都要用到 Transactions
+// 表）。快取起來可以省掉重複的 getSheetByName / ensureHeaders_（會讀一次表頭）
+// 呼叫；SpreadsheetApp.getActiveSpreadsheet() 也一起快取，理由相同。
+const sheetCache_ = {};
+let cachedSpreadsheet_ = null;
+function getSpreadsheet_() {
+  if (!cachedSpreadsheet_) cachedSpreadsheet_ = SpreadsheetApp.getActiveSpreadsheet();
+  return cachedSpreadsheet_;
+}
 function getSheet_(key) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (sheetCache_[key]) return sheetCache_[key];
+  const ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES[key]);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAMES[key]);
@@ -74,6 +85,7 @@ function getSheet_(key) {
   } else {
     ensureHeaders_(sheet, SHEET_HEADERS[key]);
   }
+  sheetCache_[key] = sheet;
   return sheet;
 }
 
@@ -143,7 +155,7 @@ function checkToken_(token) {
 const DATE_ONLY_FIELDS_ = ['date', 'dueDate'];
 function normalizeCellValue_(header, value) {
   if (value instanceof Date) {
-    const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+    const tz = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
     if (DATE_ONLY_FIELDS_.indexOf(header) !== -1) {
       return Utilities.formatDate(value, tz, 'yyyy-MM-dd');
     }
@@ -168,10 +180,17 @@ function readAll_(key) {
     });
 }
 
+// 效能重點：只讀第一欄（id）拿來比對就好，不要把整張表所有欄位都讀出來。
+// 記帳（Transactions）欄位多、資料量又會一直增加，原本每次「找這筆資料在
+// 第幾列」都要整張表（所有欄位）讀一次，資料筆數一多，光是找列號就會變成
+// 拖慢新增/編輯/刪除的主因；找列號其實只需要 id 這一欄。
 function findRowIndexById_(sheet, id) {
-  const values = sheet.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]) === String(id)) return i + 1; // 1-based row number
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return -1;
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const target = String(id);
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === target) return i + 2; // 1-based row number
   }
   return -1;
 }
@@ -194,10 +213,13 @@ function addRow_(key, data) {
   return data;
 }
 
-function updateRow_(key, data) {
+// knownRowIndex：如果呼叫端已經知道這筆資料在第幾列（例如
+// updateTransactionTx_ 為了先讀出舊資料，已經找過一次列號），就直接傳進來，
+// 不用再重新掃一次整張表找列號。
+function updateRow_(key, data, knownRowIndex) {
   const sheet = getSheet_(key);
   const headers = SHEET_HEADERS[key];
-  const rowIndex = findRowIndexById_(sheet, data.id);
+  const rowIndex = knownRowIndex || findRowIndexById_(sheet, data.id);
   if (rowIndex === -1) throw new Error('找不到這筆資料: ' + data.id);
   data.updatedAt = new Date().toISOString();
   const row = headers.map(h => (data[h] !== undefined ? data[h] : ''));
@@ -242,27 +264,37 @@ function adjustAccountBalance_(accountId, delta) {
   return obj;
 }
 
-// 統一處理一筆記帳對帳戶餘額的影響：
-// - expense/income/settlement：只影響 accountId 一個帳戶（原本邏輯）
+// 計算一筆記帳對帳戶餘額的影響，累加進 deltas（key 是 accountId，value 是
+// 淨變化金額），先不實際讀寫表格：
+// - expense/income/settlement：只影響 accountId 一個帳戶
 // - transfer：同時影響 accountId（轉出，扣款）與 toAccountId（轉入，入帳）兩個帳戶
 // sign = 1 表示套用這筆紀錄的效果；sign = -1 表示反向還原（編輯前/刪除時用）
-function applyBalanceEffect_(data, sign) {
-  const touched = [];
+function accumulateBalanceDelta_(data, sign, deltas) {
   if (data.type === 'transfer') {
     const amt = Number(data.amount) || 0;
-    if (data.accountId) {
-      const acc = adjustAccountBalance_(data.accountId, -amt * sign);
-      if (acc) touched.push(acc);
-    }
-    if (data.toAccountId) {
-      const acc2 = adjustAccountBalance_(data.toAccountId, amt * sign);
-      if (acc2) touched.push(acc2);
-    }
+    if (data.accountId) deltas[data.accountId] = (deltas[data.accountId] || 0) + (-amt * sign);
+    if (data.toAccountId) deltas[data.toAccountId] = (deltas[data.toAccountId] || 0) + (amt * sign);
   } else if (data.accountId) {
-    const acc = adjustAccountBalance_(data.accountId, txDelta_(data.type, data.amount, data.payer) * sign);
-    if (acc) touched.push(acc);
+    deltas[data.accountId] = (deltas[data.accountId] || 0) + txDelta_(data.type, data.amount, data.payer) * sign;
   }
+}
+
+// 把算好的「每個帳戶淨變化多少」實際讀寫進 Accounts 表，一個帳戶只讀寫一次。
+function applyBalanceDeltas_(deltas) {
+  const touched = [];
+  Object.keys(deltas).forEach(accountId => {
+    if (!deltas[accountId]) return; // 淨變化剛好是 0，這個帳戶完全不用動
+    const acc = adjustAccountBalance_(accountId, deltas[accountId]);
+    if (acc) touched.push(acc);
+  });
   return touched;
+}
+
+// 新增／刪除只有「一筆資料」要套用效果，直接算完就寫入。
+function applyBalanceEffect_(data, sign) {
+  const deltas = {};
+  accumulateBalanceDelta_(data, sign, deltas);
+  return applyBalanceDeltas_(deltas);
 }
 
 function addTransactionTx_(data) {
@@ -271,6 +303,12 @@ function addTransactionTx_(data) {
   return { transaction: tx, account: accountsTouched[0] || null, accounts: accountsTouched };
 }
 
+// 編輯記帳時，同一個帳戶常常同時出現在「舊資料要還原」跟「新資料要套用」兩邊
+// （例如只是改名稱/備註，帳戶、金額、類型完全沒變）。原本的作法是先把舊資料
+// 的效果反向套用（讀一次、寫一次），再把新資料的效果套用一次（又讀一次、寫
+// 一次），同一個帳戶等於重複讀寫兩趟。這裡改成把新舊兩筆資料的效果合併算成
+// 「每個帳戶淨變化多少」，淨變化是 0 的帳戶（最常見：只改了名稱／備註）就完
+// 全不用碰 Accounts 表，一般情況也是每個帳戶只讀寫一次，減少一半的表格存取。
 function updateTransactionTx_(data) {
   const sheet = getSheet_('transactions');
   const headers = SHEET_HEADERS.transactions;
@@ -278,9 +316,12 @@ function updateTransactionTx_(data) {
   if (rowIndex === -1) throw new Error('找不到這筆記帳: ' + data.id);
   const old = readRowObj_(sheet, rowIndex, headers);
 
-  const accountsTouched = applyBalanceEffect_(old, -1);
-  const tx = updateRow_('transactions', data);
-  applyBalanceEffect_(tx, 1).forEach(acc => accountsTouched.push(acc));
+  const tx = updateRow_('transactions', data, rowIndex);
+
+  const deltas = {};
+  accumulateBalanceDelta_(old, -1, deltas);
+  accumulateBalanceDelta_(tx, 1, deltas);
+  const accountsTouched = applyBalanceDeltas_(deltas);
   return { transaction: tx, accounts: accountsTouched };
 }
 
@@ -409,7 +450,7 @@ function runRecurringTemplates_(month, ids) {
 //    重複新增，邏輯跟手動按「一鍵加入」是共用的）
 // 如果之後想取消自動新增，執行 removeMonthlyRecurringTrigger 即可。
 function autoAddMonthlyRecurring() {
-  const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+  const tz = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
   const month = Utilities.formatDate(new Date(), tz, 'yyyy-MM');
   return runRecurringTemplates_(month, null);
 }
@@ -454,7 +495,7 @@ function doGet(e) {
       let since = null;
       const recentMonths = parseInt(e.parameter.recentMonths, 10);
       if (recentMonths && recentMonths > 0) {
-        const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+        const tz = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
         const cutoff = new Date();
         cutoff.setMonth(cutoff.getMonth() - recentMonths);
         since = Utilities.formatDate(cutoff, tz, 'yyyy-MM-dd');
