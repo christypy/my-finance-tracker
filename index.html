@@ -2206,7 +2206,13 @@ function renderStats(){
 
   const incomeTotal = rows.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const expenseTotal = rows.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
-  const net = incomeTotal - expenseTotal;
+  // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
+  // 沒有填帳戶的紀錄（多半是舊資料匯入，沒有對應到任何帳戶）只計入上面的收入／支出總額，
+  // 單純知道花了多少、賺了多少，但不會影響結餘這個數字。
+  const rowsWithAccount = rows.filter(t => t.accountId);
+  const incomeWithAccount = rowsWithAccount.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const expenseWithAccount = rowsWithAccount.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const net = incomeWithAccount - expenseWithAccount;
 
   // ① 本期關鍵指標：收支結餘之外，加上儲蓄率、日均花費、（未過完的期間）預估總支出
   const daysElapsed = Math.max(daysElapsedInPeriod(period, statsMode), 0);
@@ -2219,7 +2225,7 @@ function renderStats(){
   $('#statsSummaryGrid').innerHTML = `
     <div class="summary-card"><div class="label">收入</div><div class="value" style="color:var(--green)">$${fmt(incomeTotal)}</div></div>
     <div class="summary-card"><div class="label">支出</div><div class="value" style="color:var(--red)">$${fmt(expenseTotal)}</div></div>
-    <div class="summary-card"><div class="label">結餘</div><div class="value">$${fmt(net)}</div></div>
+    <div class="summary-card"><div class="label">結餘</div><div class="value">$${fmt(net)}</div><div style="font-size:10px;color:var(--ink-soft);margin-top:3px;">僅計入有填帳戶的紀錄</div></div>
     <div class="summary-card"><div class="label">儲蓄率</div><div class="value">${savingsRate === null ? '—' : fmt(savingsRate) + '%'}</div></div>
     <div class="summary-card"><div class="label">日均花費</div><div class="value">$${fmt(dailyAvg)}</div></div>
     ${projected !== null ? `<div class="summary-card"><div class="label">預估${statsMode==='month'?'月底':'年底'}總支出</div><div class="value" style="color:var(--red)">$${fmt(projected)}</div></div>` : ''}
