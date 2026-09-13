@@ -523,8 +523,16 @@
   .amount-hero input#trAmount{
     background:transparent; border:none; box-shadow:none; color:var(--paper);
     font-family:'Roboto Slab', serif; font-size:36px; padding:2px 0; min-height:auto; flex:1; width:100%;
+    -moz-appearance:textfield; /* Firefox：拿掉數字輸入框內建的上下增減箭頭 */
   }
   .amount-hero input#trAmount:focus{ box-shadow:none; }
+  /* Chrome / Safari / Edge：拿掉數字輸入框內建的上下增減箭頭，
+     避免點到箭頭就把金額加減 1，只能用手動輸入的方式改金額 */
+  .amount-hero input#trAmount::-webkit-outer-spin-button,
+  .amount-hero input#trAmount::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
 
   /* ---- 記帳表單：模板快速選擇 ---- */
   .tpl-quick-row{ display:flex; flex-direction:column; gap:8px; }
