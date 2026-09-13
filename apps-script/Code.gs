@@ -14,14 +14,32 @@
  *      https://script.google.com/macros/s/XXXXXXXX/exec
  *    這個網址 + SECRET_TOKEN 就是前端要用的兩個設定值。
  * 6. 之後每次修改這份程式碼，都要重新「管理部署作業」→ 編輯 → 新版本，
- *    網址才會套用最新程式碼。
+ *    網址才會套用最新程式碼。**光按編輯器上方的「儲存」不會生效**，
+ *    已經發布出去的網址仍然執行「上一次部署當下」的舊程式碼；如果前端
+ *    已經改成新版、但忘記在這裡部署新版本，就會出現「連線失敗／未知的
+ *    動作／未知的資料表」這類錯誤。改完程式碼後，記得同時更新下面的
+ *    BACKEND_VERSION 字串（例如改成今天的日期），前端「設定」頁會自動
+ *    比對前後端版本號，一眼就能看出是不是忘記部署新版本。
  *
  * 效能設計重點：
  * - doGet 支援 sheet=all，一次回傳四張表，前端首次載入只需 1 次 HTTP 請求。
  * - 記帳（新增/編輯/刪除）若有連結帳戶，會在同一次 exec 內同時寫入記帳列與
  *   調整帳戶餘額，前端不需要再額外呼叫一次「更新帳戶」。
  * - CSV 匯入、共同帳本結算都是一次 exec 內用陣列批次寫入，不會一筆一筆來回。
+ * - sheet=all 帶 recentMonths 時，只會先讀 Transactions 的「日期」這一欄
+ *   （單欄讀取很快）找出符合的資料從第幾列開始，再只讀那個範圍，不會像
+ *   之前一樣每次都把整張記帳表全部讀出來才篩選，記帳筆數愈多、效果愈明顯。
+ *
+ * 連線速度的提醒：Apps Script 網頁應用程式沒有常駐伺服器，每次呼叫都可能
+ * 要重新啟動執行環境（尤其是閒置一段時間後的第一次呼叫），這是 Google
+ * 平台本身的限制，跟這份程式碼無關，沒辦法完全避免，只能盡量減少每次
+ * 讀寫的資料量（見上面的效能設計重點）。
  */
+
+// 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
+// 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
+// FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
+const BACKEND_VERSION_ = '2026-09-13';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -473,7 +491,57 @@ function removeMonthlyRecurringTrigger() {
   });
 }
 
+// 效能優化：sheet=all 帶 recentMonths 時，以前的作法是 readAll_('transactions')
+// 把整張記帳表所有欄位都讀出來，才在記憶體裡篩選「最近 N 個月」，記帳筆數一多
+// （幾百上千筆之後）就會愈讀愈慢。這裡改成：
+// 1) 先只讀 id + date 這兩欄（通常相鄰，一次 Range 呼叫就能讀完，比讀全部欄位快很多），
+//    用來跳過空列（刪除後留下的空白列），並且找出「日期 >= since」最早出現在第幾列；
+// 2) 只針對那之後的列，才真的把全部欄位讀出來組成物件。
+// 這樣「最近 3 個月」在資料量很大時只需要讀最後一小段，而不是每次都整張表全讀。
+// since 為 null（沒有帶 recentMonths，例如背景補齊完整歷史）時，等同讀全部。
+function readTransactionsSince_(since) {
+  const sheet = getSheet_('transactions');
+  const headers = SHEET_HEADERS.transactions;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { rows: [], fullCount: 0 };
+
+  const idColIndex = headers.indexOf('id') + 1;
+  const dateColIndex = headers.indexOf('date') + 1;
+  const minCol = Math.min(idColIndex, dateColIndex);
+  const span = Math.abs(idColIndex - dateColIndex) + 1;
+  const idxValues = sheet.getRange(2, minCol, lastRow - 1, span).getValues();
+  const idOffset = idColIndex - minCol;
+  const dateOffset = dateColIndex - minCol;
+
+  let fullCount = 0;
+  let minMatchIdx = -1;
+  for (let i = 0; i < idxValues.length; i++) {
+    const idVal = idxValues[i][idOffset];
+    if (idVal === '' || idVal === null) continue; // 空列（刪除後留下的）跳過
+    fullCount++;
+    if (minMatchIdx === -1) {
+      const d = normalizeCellValue_('date', idxValues[i][dateOffset]);
+      if (!since || (d && d >= since)) minMatchIdx = i;
+    }
+  }
+  if (minMatchIdx === -1) return { rows: [], fullCount: fullCount };
+
+  const startRow = 2 + minMatchIdx;
+  const numRows = lastRow - startRow + 1;
+  const values = sheet.getRange(startRow, 1, numRows, headers.length).getValues();
+  const rows = [];
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
+    if (r[0] === '' || r[0] === null) continue;
+    const obj = {};
+    headers.forEach((h, hi) => { obj[h] = normalizeCellValue_(h, r[hi]); });
+    if (!since || (obj.date || '') >= since) rows.push(obj);
+  }
+  return { rows: rows, fullCount: fullCount };
+}
+
 function jsonOut_(obj) {
+  obj.version = BACKEND_VERSION_;
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
@@ -490,8 +558,6 @@ function doGet(e) {
     // 就只回傳最近 N 個月的記帳，讓第一次載入的畫面能更快顯示出來；
     // 前端之後會在背景另外用 sheet=transactions 補齊完整歷史紀錄。
     if (sheetKey === 'all') {
-      let transactions = readAll_('transactions');
-      let truncated = false;
       let since = null;
       const recentMonths = parseInt(e.parameter.recentMonths, 10);
       if (recentMonths && recentMonths > 0) {
@@ -499,17 +565,16 @@ function doGet(e) {
         const cutoff = new Date();
         cutoff.setMonth(cutoff.getMonth() - recentMonths);
         since = Utilities.formatDate(cutoff, tz, 'yyyy-MM-dd');
-        const fullCount = transactions.length;
-        transactions = transactions.filter(t => (t.date || '') >= since);
-        truncated = transactions.length < fullCount;
       }
+      const txResult = readTransactionsSince_(since);
+      const truncated = txResult.rows.length < txResult.fullCount;
       return jsonOut_({
         ok: true,
         data: {
           accounts: readAll_('accounts'),
           liabilities: readAll_('liabilities'),
           interest: readAll_('interest'),
-          transactions: transactions,
+          transactions: txResult.rows,
           recurring: readAll_('recurring'),
           transactionsTruncated: truncated,
           transactionsSince: since

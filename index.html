@@ -333,6 +333,8 @@
   .status{font-size:13px; margin-top:4px; padding:8px 10px; border-radius:var(--radius-sm);}
   .status.ok{color:var(--green); background:var(--green-bg);}
   .status.err{color:var(--red); background:var(--red-bg);}
+  .version-row{ display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--ink-soft); }
+  .version-row b{ color:var(--ink); font-family:'Roboto Slab', serif; font-size:13px; }
 
   /* ---- Bottom nav (mobile) ---- */
   .bottom-nav{
@@ -619,16 +621,6 @@
   .rank-mover.up{ color:var(--red); }
   .rank-mover.down{ color:var(--green); }
   .rank-mover.flat{ color:var(--ink-soft); }
-
-  /* ---- 統計分析：每日消費節奏 ---- */
-  .day-chart{ display:flex; align-items:flex-end; gap:2px; height:84px; background:var(--paper); border-radius:var(--radius-sm); padding:8px 6px 0; margin-bottom:8px; }
-  .day-bar{ flex:1; height:100%; display:flex; align-items:flex-end; min-width:3px; }
-  .day-bar-fill{ width:100%; background:var(--red); border-radius:2px 2px 0 0; min-height:0; }
-  .day-bar.weekend .day-bar-fill{ background:var(--gold); }
-  .day-bar.today{ outline:1.5px solid var(--ink); outline-offset:1px; border-radius:2px; }
-  .day-highlights{ display:flex; flex-direction:column; gap:6px; font-size:12.5px; }
-  .day-highlight-row{ display:flex; justify-content:space-between; color:var(--ink-soft); }
-  .day-highlight-row b{ color:var(--ink); font-family:'Roboto Slab', serif; font-weight:600; }
 
   @media (max-width:680px){
     .wrap{ padding:14px 10px calc(var(--nav-h) + 22px); }
@@ -1018,13 +1010,7 @@
           <div id="statsFixedVsFlex"></div>
         </div>
 
-        <!-- ⑤ 消費節奏：月模式看每日、年模式看每月 -->
-        <div class="stat-section" id="statsDailySection">
-          <h3>每日消費節奏</h3>
-          <div id="statsDailyChart"></div>
-          <p class="hint" style="margin:8px 0 10px;">紅色＝平日、金色＝週末；長條愈高代表當天花愈多。</p>
-          <div class="day-highlights" id="statsDailyHighlights"></div>
-        </div>
+        <!-- ⑤ 消費節奏：年模式看每月趨勢 -->
         <div class="stat-section" id="statsYearlyTrendSection" style="display:none;">
           <h3>年度每月支出趨勢</h3>
           <div id="statsYearlyTrend"></div>
@@ -1133,6 +1119,14 @@
         <button id="cfgSave" class="primary">儲存設定並重新連線</button>
         <div class="status" id="cfgStatus"></div>
       </div>
+
+      <h2 style="font-size:15px; margin-top:22px;">版本資訊</h2>
+      <p class="hint">改完 Apps Script 程式碼後，記得到「部署」→「管理部署作業」建立「新版本」，網址才會套用最新程式碼；這裡可以用來確認前端（這個網頁）跟後端（Apps Script）是不是同一個版本，避免改了程式碼卻忘記部署新版本，導致功能對不起來。</p>
+      <div class="settings-block">
+        <div class="version-row"><span>前端版本</span><b id="verFrontend">-</b></div>
+        <div class="version-row"><span>後端版本</span><b id="verBackend">尚未連線</b></div>
+        <div class="status" id="verStatus" style="display:none;"></div>
+      </div>
     </div>
 
   </div>
@@ -1208,6 +1202,26 @@ const cfg = {
   url: localStorage.getItem('fin_url') || '',
   token: localStorage.getItem('fin_token') || ''
 };
+
+// 前端版本號：每次你改完這個檔案、要重新上傳到 GitHub Pages 時，
+// 記得順手更新這個字串（例如改成今天的日期），才能在「設定」頁看出
+// 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
+const FRONTEND_VERSION = '2026-09-13';
+$('#verFrontend').textContent = FRONTEND_VERSION;
+// 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
+// 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
+function reportBackendVersion_(version){
+  if(!version) return;
+  $('#verBackend').textContent = version;
+  const statusEl = $('#verStatus');
+  if(version === FRONTEND_VERSION){
+    statusEl.style.display = 'none';
+  } else {
+    statusEl.textContent = `前端（${FRONTEND_VERSION}）與後端（${version}）版本不一致：請確認 Apps Script 是否已經部署「新版本」，或這個網頁是否為最新上傳的版本。`;
+    statusEl.className = 'status err';
+    statusEl.style.display = '';
+  }
+}
 
 let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], transactionsFullyLoaded: false, transactionsSince: null };
 
@@ -1340,6 +1354,7 @@ async function apiGet(sheet, params){
   }
   const res = await fetch(url);
   const json = await res.json();
+  reportBackendVersion_(json.version);
   if(!json.ok) throw new Error(json.error || '讀取失敗');
   return json.data;
 }
@@ -1350,6 +1365,7 @@ async function apiPost(action, sheet, data){
     body: JSON.stringify({ token: cfg.token, action, sheet, data })
   });
   const json = await res.json();
+  reportBackendVersion_(json.version);
   if(!json.ok) throw new Error(json.error || '操作失敗');
   return json.data;
 }
@@ -2310,51 +2326,6 @@ function totalDaysInPeriod(period, mode){
   const y = parseInt(period, 10) || 0;
   return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
 }
-function renderDailyRhythm(period){
-  const section = $('#statsDailySection');
-  if(statsMode !== 'month' || !period){
-    section.style.display = 'none';
-    return;
-  }
-  section.style.display = '';
-  const [y, m] = period.split('-').map(Number);
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const daily = Array(daysInMonth).fill(0);
-  state.transactions.forEach(t => {
-    if(t.type !== 'expense') return;
-    const d = t.date || '';
-    if(!d.startsWith(period)) return;
-    const day = parseInt(d.slice(8,10), 10);
-    if(day >= 1 && day <= daysInMonth) daily[day-1] += Number(t.amount) || 0;
-  });
-  const maxVal = Math.max(...daily, 0);
-  const now = new Date();
-  const isCurrentMonth = period === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const todayDay = isCurrentMonth ? now.getDate() : null;
-
-  $('#statsDailyChart').innerHTML = `<div class="day-chart">${daily.map((val, i) => {
-    const day = i + 1;
-    const pct = maxVal ? Math.round(val / maxVal * 100) : 0;
-    const dow = new Date(y, m - 1, day).getDay();
-    const weekend = dow === 0 || dow === 6;
-    const isToday = todayDay === day;
-    const height = val > 0 ? Math.max(pct, 4) : 0;
-    return `<div class="day-bar${weekend ? ' weekend' : ''}${isToday ? ' today' : ''}" title="${m}/${day}：$${fmt(val)}">
-      <div class="day-bar-fill" style="height:${height}%"></div>
-    </div>`;
-  }).join('')}</div>`;
-
-  const spendDays = daily.filter(v => v > 0).length;
-  const daysElapsed = Math.min(daysInMonth, daysElapsedInPeriod(period, 'month')) || daysInMonth;
-  const noSpendDays = daysElapsed - spendDays;
-  let maxDay = 0, maxDayVal = 0;
-  daily.forEach((v, i) => { if(v > maxDayVal){ maxDayVal = v; maxDay = i + 1; } });
-  $('#statsDailyHighlights').innerHTML = `
-    <div class="day-highlight-row"><span>花費最高的一天</span><b>${maxDayVal ? `${m}/${maxDay}（$${fmt(maxDayVal)}）` : '—'}</b></div>
-    <div class="day-highlight-row"><span>無消費天數</span><b>${Math.max(0, noSpendDays)} / ${daysElapsed} 天（已過的天數）</b></div>
-  `;
-}
-
 function renderStats(){
   populateStatsYearOptions();
   if(!$('#statsMonthInput').value){
@@ -2409,8 +2380,7 @@ function renderStats(){
   // ④ 固定 vs 彈性支出
   renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
 
-  // ⑤ 消費節奏：月模式顯示每日長條圖，年模式顯示每月趨勢
-  renderDailyRhythm(period);
+  // ⑤ 消費節奏：年模式顯示每月趨勢
   const trendSection = $('#statsYearlyTrendSection');
   if(statsMode === 'year' && period){
     trendSection.style.display = '';
