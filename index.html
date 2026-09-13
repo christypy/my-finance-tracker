@@ -1210,7 +1210,7 @@ const cfg = {
 // 前端版本號：每次你改完這個檔案、要重新上傳到 GitHub Pages 時，
 // 記得順手更新這個字串（例如改成今天的日期），才能在「設定」頁看出
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
-const FRONTEND_VERSION = '2026-09-13';
+const FRONTEND_VERSION = '2026-09-14';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -1227,10 +1227,18 @@ function reportBackendVersion_(version){
   }
 }
 
-let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], transactionsFullyLoaded: false, transactionsSince: null };
+let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null };
 
-// 記帳品項（主類別 + 子類別，依收入/支出分開）。使用者可以在「類別設定」子分頁
-// 新增/編輯/刪除主類別與子類別，存放在 localStorage（不會影響已經記過的舊資料）。
+// 記帳品項（主類別 + 子類別，依收入/支出分開）。
+// 這份清單現在存在後端試算表的「Categories」表（跟 Accounts/Transactions 一樣），
+// 換裝置、清瀏覽器快取都不會不見，也可以直接在試算表上看到。前端只在「一開始
+// 載入資料」（loadAll）時跟後端拿一次、存進 state.categories，之後新增/改名/刪除
+// 都是「呼叫後端 API 更新 → 順便同步更新 state.categories」，不會每次打開「類別
+// 設定」頁面就重新掃一次資料、也不需要等完整記帳歷史載入完才能用。
+//
+// DEFAULT_CATEGORY_TREE 只留著給「舊版用 localStorage 存過類別」的使用者做一次性
+// 搬移比對用（見 migrateLocalCategoriesIfNeeded_），新資料一律以後端 Categories
+// 表為準。
 const DEFAULT_CATEGORY_TREE = {
   expense: [
     { name:'餐飲', subs:['早餐','午餐','晚餐','飲料','消夜'] },
@@ -1252,13 +1260,16 @@ const DEFAULT_CATEGORY_TREE = {
     { name:'其他', subs:[] }
   ]
 };
+// 舊版 key（唯讀，只用來搬移一次，不會再寫入）
 const CAT_TREE_KEY = type => 'mybook_ledger_category_tree_' + type;
-const CAT_TREE_KEY_LEGACY_V2 = type => 'fin_category_tree_' + type; // 舊 key 名稱，用於自動搬遷（讀取用，不會再寫入）
-const CAT_LEGACY_KEY = type => 'fin_categories_' + type; // 更早期的舊版扁平類別清單，用於自動搬遷（讀取用，不會再寫入這個 key）
+const CAT_TREE_KEY_LEGACY_V2 = type => 'fin_category_tree_' + type;
+const CAT_LEGACY_KEY = type => 'fin_categories_' + type;
+const CATEGORY_MIGRATED_FLAG = 'mybook_ledger_category_migrated_to_sheet_v1';
 
-function cloneCategoryTree(tree){ return tree.map(m => ({ name: m.name, subs: [...(m.subs || [])] })); }
 
-function loadCategoryTree(type){
+// 讀舊版存在 localStorage 的類別樹（不會寫回任何 key，純粹讀取用來比對／搬移）。
+// 回傳 null 代表這個瀏覽器完全沒有舊版類別資料可以搬。
+function readLegacyLocalCategoryTree_(type){
   try{
     const raw = localStorage.getItem(CAT_TREE_KEY(type));
     if(raw){
@@ -1266,68 +1277,63 @@ function loadCategoryTree(type){
       if(Array.isArray(parsed)) return parsed;
     }
   }catch(e){}
-  // 新 key 底下還沒有資料時，先看看舊 key 名稱（'fin_category_tree_' + type）
-  // 底下是不是已經有使用者自訂過的類別樹，有的話直接搬過去，避免改 key 名稱
-  // 造成使用者原本的類別設定憑空消失。
   try{
     const legacyTreeRaw = localStorage.getItem(CAT_TREE_KEY_LEGACY_V2(type));
     if(legacyTreeRaw){
       const parsed = JSON.parse(legacyTreeRaw);
-      if(Array.isArray(parsed)){
-        saveCategoryTree(type, parsed);
-        localStorage.removeItem(CAT_TREE_KEY_LEGACY_V2(type));
-        return parsed;
-      }
+      if(Array.isArray(parsed)) return parsed;
     }
   }catch(e){}
-  // 尚未有新版資料：以預設類別為底，把舊版扁平清單（如果有）併入為主類別
-  const tree = cloneCategoryTree(DEFAULT_CATEGORY_TREE[type]);
   try{
     const legacyRaw = localStorage.getItem(CAT_LEGACY_KEY(type));
     if(legacyRaw){
       const legacyNames = JSON.parse(legacyRaw) || [];
-      legacyNames.forEach(name => {
-        if(name && !tree.some(m => m.name === name)) tree.push({ name, subs: [] });
-      });
+      if(legacyNames.length) return legacyNames.map(name => ({ name, subs: [] }));
     }
   }catch(e){}
-  saveCategoryTree(type, tree);
-  return tree;
+  return null;
 }
-function saveCategoryTree(type, tree){
-  localStorage.setItem(CAT_TREE_KEY(type), JSON.stringify(tree));
+
+// 第一次接上這個試算表時，如果偵測到這個瀏覽器有舊版（localStorage）自訂過的
+// 類別樹、而且內容跟預設清單不一樣，就整批搬到後端 Categories 表一次
+// （用 replaceCategoryTree 動作，一次 exec 內寫完該類型的所有列）。
+// 只會跑一次：搬完會記一個 flag，之後即使使用者又改了 localStorage 也不會再搬。
+async function migrateLocalCategoriesIfNeeded_(){
+  if(localStorage.getItem(CATEGORY_MIGRATED_FLAG)) return;
+  try{
+    for(const type of ['expense','income']){
+      const legacy = readLegacyLocalCategoryTree_(type);
+      if(!legacy || !legacy.length) continue;
+      const isSameAsDefault = JSON.stringify(legacy) === JSON.stringify(DEFAULT_CATEGORY_TREE[type]);
+      if(isSameAsDefault) continue; // 沒有自訂過，後端已經有一樣的預設清單，不用搬
+      await apiPost('replaceCategoryTree', null, { type, tree: legacy });
+    }
+  }catch(err){
+    console.warn('搬移舊版類別設定到試算表失敗，可以之後在「類別設定」頁手動調整：', err);
+  } finally {
+    localStorage.setItem(CATEGORY_MIGRATED_FLAG, '1');
+  }
 }
-function getCategoryTree(type){ return loadCategoryTree(type); }
+
+function getCategoryTree(type){ return (state.categories && state.categories[type]) || []; }
 function getCategoryNames(type){ return getCategoryTree(type).map(m => m.name); }
 function getSubcategories(type, mainName){
   const m = getCategoryTree(type).find(x => x.name === mainName);
   return m ? (m.subs || []) : [];
 }
-function addMainCategory(type, name){
+
+// 以下新增/改名/刪除都是「先呼叫後端、成功後才更新 state.categories」：
+// 失敗時（例如連線問題）不會誤動本機畫面，呼叫端記得要 try/catch 並提示使用者。
+async function addMainCategory(type, name){
   name = String(name || '').trim();
   if(!name) return false;
   const tree = getCategoryTree(type);
   if(tree.some(m => m.name === name)) return false;
+  await apiPost('addMainCategory', null, { type, name });
   tree.push({ name, subs: [] });
-  saveCategoryTree(type, tree);
   return true;
 }
-function renameMainCategory(type, oldName, newName){
-  newName = String(newName || '').trim();
-  if(!newName || newName === oldName) return false;
-  const tree = getCategoryTree(type);
-  if(tree.some(m => m.name === newName)) return false;
-  const m = tree.find(x => x.name === oldName);
-  if(!m) return false;
-  m.name = newName;
-  saveCategoryTree(type, tree);
-  return true;
-}
-function removeMainCategory(type, name){
-  const tree = getCategoryTree(type).filter(m => m.name !== name);
-  saveCategoryTree(type, tree);
-}
-function addSubCategory(type, mainName, subName){
+async function addSubCategory(type, mainName, subName){
   subName = String(subName || '').trim();
   if(!subName) return false;
   const tree = getCategoryTree(type);
@@ -1335,11 +1341,33 @@ function addSubCategory(type, mainName, subName){
   if(!m) return false;
   if(!m.subs) m.subs = [];
   if(m.subs.includes(subName)) return false;
+  await apiPost('addSubCategory', null, { type, mainName, subName });
   m.subs.push(subName);
-  saveCategoryTree(type, tree);
   return true;
 }
-function renameSubCategory(type, mainName, oldSub, newSub){
+// 重新命名主類別：後端會同時把 Categories 表跟過去已經記過的 Transactions／
+// RecurringTemplates 資料一起改成新名稱（見 Code.gs 的 renameMainCategory_ /
+// renameCategoryEverywhere_），這裡呼叫成功後，把記憶體裡目前已經載入的
+// 記帳/固定項目資料也同步改掉，畫面才會馬上反映新名稱（不用整批重新下載）。
+async function renameMainCategory(type, oldName, newName){
+  newName = String(newName || '').trim();
+  if(!newName || newName === oldName) return false;
+  const tree = getCategoryTree(type);
+  if(tree.some(m => m.name === newName)) return false;
+  const m = tree.find(x => x.name === oldName);
+  if(!m) return false;
+  await apiPost('renameMainCategory', null, { type, oldName, newName });
+  m.name = newName;
+  state.transactions.forEach(t => { if(t.type === type && t.category === oldName) t.category = newName; });
+  state.recurring.forEach(t => { if(t.type === type && t.category === oldName) t.category = newName; });
+  markAllDirty();
+  return true;
+}
+async function removeMainCategory(type, name){
+  await apiPost('removeMainCategory', null, { type, name });
+  state.categories[type] = getCategoryTree(type).filter(m => m.name !== name);
+}
+async function renameSubCategory(type, mainName, oldSub, newSub){
   newSub = String(newSub || '').trim();
   if(!newSub || newSub === oldSub) return false;
   const tree = getCategoryTree(type);
@@ -1348,16 +1376,18 @@ function renameSubCategory(type, mainName, oldSub, newSub){
   if(m.subs.includes(newSub)) return false;
   const idx = m.subs.indexOf(oldSub);
   if(idx === -1) return false;
+  await apiPost('renameSubCategory', null, { type, mainName, oldSub, newSub });
   m.subs[idx] = newSub;
-  saveCategoryTree(type, tree);
+  state.transactions.forEach(t => { if(t.type === type && t.category === mainName && t.subcategory === oldSub) t.subcategory = newSub; });
+  state.recurring.forEach(t => { if(t.type === type && t.category === mainName && t.subcategory === oldSub) t.subcategory = newSub; });
+  markAllDirty();
   return true;
 }
-function removeSubCategory(type, mainName, subName){
-  const tree = getCategoryTree(type);
-  const m = tree.find(x => x.name === mainName);
+async function removeSubCategory(type, mainName, subName){
+  await apiPost('removeSubCategory', null, { type, mainName, subName });
+  const m = getCategoryTree(type).find(x => x.name === mainName);
   if(!m) return;
   m.subs = (m.subs || []).filter(s => s !== subName);
-  saveCategoryTree(type, tree);
 }
 // 為了相容既有程式碼，保留 CATEGORIES 這個名字（取主類別名稱陣列，動態取值）
 const CATEGORIES = {
@@ -1409,12 +1439,19 @@ async function loadAll(){
       state.interest = all.interest;
       state.transactions = all.transactions;
       state.recurring = all.recurring || [];
+      state.categories = all.categories || { expense: [], income: [] };
       state.transactionsFullyLoaded = !all.transactionsTruncated;
       state.transactionsSince = all.transactionsSince || null;
       renderAll();
     }, '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
+    // 第一次接上這個試算表時，把舊版存在瀏覽器 localStorage 的自訂類別（如果有）
+    // 搬到後端 Categories 表一次；只會跑一次，不會拖慢之後每次的載入。
+    migrateLocalCategoriesIfNeeded_().then(() => {
+      if(dirty) dirty.categories = true;
+      renderVisibleSection();
+    });
     // 讓「記帳」清單先完整顯示、使用者可以馬上開始操作之後，才趁機在背景
     // 偷偷補齊完整記帳歷史，避免一進畫面就同時打兩個請求互相搶時間，
     // 拖慢最重要的「第一次看到畫面」這件事。
@@ -3259,10 +3296,16 @@ function renderCategories(){
   renderCategoryBlocks('income');
 }
 
-function handleAddMainCategory(type, inputSel){
+async function handleAddMainCategory(type, inputSel){
   const input = $(inputSel);
-  const ok = addMainCategory(type, input.value);
-  if(!ok){ alert('請輸入尚未存在的主類別名稱。'); return; }
+  const name = input.value;
+  try{
+    const ok = await runBusy(() => addMainCategory(type, name), '新增中…');
+    if(!ok){ alert('請輸入尚未存在的主類別名稱。'); return; }
+  }catch(err){
+    alert('新增失敗：' + err.message);
+    return;
+  }
   input.value = '';
   renderCategories();
   refreshCategoryDependents();
@@ -3272,13 +3315,22 @@ $('#catAddIncomeBtn').addEventListener('click', () => handleAddMainCategory('inc
 $('#catAddExpense').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddMainCategory('expense', '#catAddExpense'); } });
 $('#catAddIncome').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddMainCategory('income', '#catAddIncome'); } });
 
-function handleCategoryBlockClick(e){
+// 類別的新增/改名/刪除現在都要打後端 API，這個 handler 改成 async：
+// 用 runBusy 顯示「處理中」避免使用者以為沒反應而重複點擊，失敗時要明確
+// alert 出來，不能讓使用者以為已經刪除/改名成功、其實後端沒有真的動到。
+async function handleCategoryBlockClick(e){
   const renameMain = e.target.closest('.catRenameMainBtn');
   if(renameMain){
     const { catType, catMain } = renameMain.dataset;
-    const next = prompt(`重新命名主類別「${catMain}」：`, catMain);
+    const next = prompt(`重新命名主類別「${catMain}」：\n（同時會把過去已經記過、品項是「${catMain}」的記帳紀錄與固定項目一併改成新名稱）`, catMain);
     if(next === null) return;
-    if(!renameMainCategory(catType, catMain, next)){ alert('名稱不能為空，也不能跟現有主類別重複。'); return; }
+    try{
+      const ok = await runBusy(() => renameMainCategory(catType, catMain, next), '重新命名中，同步更新舊紀錄…');
+      if(!ok){ alert('名稱不能為空，也不能跟現有主類別重複。'); return; }
+    }catch(err){
+      alert('重新命名失敗：' + err.message);
+      return;
+    }
     renderCategories();
     refreshCategoryDependents();
     return;
@@ -3287,7 +3339,12 @@ function handleCategoryBlockClick(e){
   if(removeMain){
     const { catType, catMain } = removeMain.dataset;
     if(!confirm(`確定刪除主類別「${catMain}」嗎？（連同底下子類別，不會影響已經記過的舊資料）`)) return;
-    removeMainCategory(catType, catMain);
+    try{
+      await runBusy(() => removeMainCategory(catType, catMain), '刪除中…');
+    }catch(err){
+      alert('刪除失敗：' + err.message);
+      return;
+    }
     renderCategories();
     refreshCategoryDependents();
     return;
@@ -3295,9 +3352,15 @@ function handleCategoryBlockClick(e){
   const renameSub = e.target.closest('.catRenameSubBtn');
   if(renameSub){
     const { catType, catMain, catSub } = renameSub.dataset;
-    const next = prompt(`重新命名子類別「${catSub}」（主類別：${catMain}）：`, catSub);
+    const next = prompt(`重新命名子類別「${catSub}」（主類別：${catMain}）：\n（同時會把過去已經記過、品項是「${catMain}／${catSub}」的記帳紀錄與固定項目一併改成新名稱）`, catSub);
     if(next === null) return;
-    if(!renameSubCategory(catType, catMain, catSub, next)){ alert('名稱不能為空，也不能跟同一主類別下的子類別重複。'); return; }
+    try{
+      const ok = await runBusy(() => renameSubCategory(catType, catMain, catSub, next), '重新命名中，同步更新舊紀錄…');
+      if(!ok){ alert('名稱不能為空，也不能跟同一主類別下的子類別重複。'); return; }
+    }catch(err){
+      alert('重新命名失敗：' + err.message);
+      return;
+    }
     renderCategories();
     refreshCategoryDependents();
     return;
@@ -3306,7 +3369,12 @@ function handleCategoryBlockClick(e){
   if(removeSub){
     const { catType, catMain, catSub } = removeSub.dataset;
     if(!confirm(`確定刪除子類別「${catSub}」嗎？（不會影響已經記過的舊資料）`)) return;
-    removeSubCategory(catType, catMain, catSub);
+    try{
+      await runBusy(() => removeSubCategory(catType, catMain, catSub), '刪除中…');
+    }catch(err){
+      alert('刪除失敗：' + err.message);
+      return;
+    }
     renderCategories();
     refreshCategoryDependents();
     return;
@@ -3315,8 +3383,14 @@ function handleCategoryBlockClick(e){
   if(addSubBtn){
     const { catType, catMain } = addSubBtn.dataset;
     const input = addSubBtn.parentElement.querySelector('.catAddSubInput');
-    const ok = addSubCategory(catType, catMain, input.value);
-    if(!ok){ alert('請輸入尚未存在的子類別名稱。'); return; }
+    const subName = input.value;
+    try{
+      const ok = await runBusy(() => addSubCategory(catType, catMain, subName), '新增中…');
+      if(!ok){ alert('請輸入尚未存在的子類別名稱。'); return; }
+    }catch(err){
+      alert('新增失敗：' + err.message);
+      return;
+    }
     input.value = '';
     renderCategories();
     refreshCategoryDependents();
@@ -3567,6 +3641,7 @@ $('#csvImportBtn').addEventListener('click', async () => {
       state.interest = all.interest;
       state.transactions = all.transactions;
       state.recurring = all.recurring || [];
+      state.categories = all.categories || state.categories;
       state.transactionsFullyLoaded = true;
       renderAll();
     }, '匯入中…（資料量大可能需要一點時間）');

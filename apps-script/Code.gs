@@ -39,7 +39,7 @@
 // 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
 // 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
 // FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
-const BACKEND_VERSION_ = '2026-09-13';
+const BACKEND_VERSION_ = '2026-09-14';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -50,7 +50,8 @@ const SHEET_NAMES = {
   liabilities: 'Liabilities',
   interest: 'InterestRecords',
   transactions: 'Transactions',
-  recurring: 'RecurringTemplates'
+  recurring: 'RecurringTemplates',
+  categories: 'Categories'
 };
 
 const SHEET_HEADERS = {
@@ -83,10 +84,58 @@ const SHEET_HEADERS = {
   //   splitMode  共同帳本用：'personal'（個人，不分攤）| 'split'（平分50/50）| 'advance'（全額代墊算對方的）
   //              （新增於陣列最後面）；這筆範本被加入記帳時，payer/splitMode 會原封不動帶到
   //              產生出來的記帳紀錄，等同「保留這筆紀錄、只有日期會變」
-  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode']
+  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode'],
+  // 類別設定（主類別／子類別）：以前存在前端瀏覽器的 localStorage，跟試算表資料完全分開，
+  // 換裝置、清瀏覽器快取都會不見，也沒辦法在試算表上直接看到/管理。改成存在這張表：
+  //   type      'expense' | 'income'
+  //   mainName  主類別名稱
+  //   subName   子類別名稱；空字串代表這一列本身就是「這個主類別」（就算它底下還沒有
+  //             任何子類別，也需要至少一列才能讓這個主類別「存在」）
+  // 每個子類別各佔一列，同一個主類別會有多列（mainName 相同、subName 不同）。
+  categories: ['id', 'type', 'mainName', 'subName', 'updatedAt']
 };
 
-// 效能：同一次 doGet/doPost 執行內，常常會對同一張表重複呼叫 getSheet_
+// 類別表第一次建立（試算表裡原本沒有 Categories 這張表）時，用這份預設清單
+// 灌進去，讓舊使用者原本習慣的預設主類別/子類別在新的儲存方式下維持一樣，
+// 跟前端原本的 DEFAULT_CATEGORY_TREE 內容一致。
+const DEFAULT_CATEGORY_TREE_ = {
+  expense: [
+    { name: '餐飲', subs: ['早餐', '午餐', '晚餐', '飲料', '消夜'] },
+    { name: '交通', subs: ['大眾運輸', '加油', '停車', '計程車', '保養'] },
+    { name: '購物', subs: ['日用品', '服飾', '電器', '其他'] },
+    { name: '娛樂', subs: ['電影', '遊戲', '訂閱', '旅遊'] },
+    { name: '醫療', subs: ['看診', '藥品', '保健品'] },
+    { name: '教育', subs: ['書籍', '課程', '學費'] },
+    { name: '居家', subs: ['房租', '水電', '瓦斯', '網路', '家具'] },
+    { name: '保險', subs: ['保費'] },
+    { name: '旅遊', subs: ['機票', '住宿', '餐飲', '交通'] },
+    { name: '其他', subs: [] }
+  ],
+  income: [
+    { name: '薪資', subs: ['本薪', '加班費'] },
+    { name: '獎金', subs: ['年終獎金', '績效獎金'] },
+    { name: '投資收益', subs: ['股息', '利息', '資本利得'] },
+    { name: '兼職', subs: [] },
+    { name: '其他', subs: [] }
+  ]
+};
+function seedDefaultCategories_(sheet) {
+  const headers = SHEET_HEADERS.categories;
+  const now = new Date().toISOString();
+  const matrix = [];
+  ['expense', 'income'].forEach(type => {
+    DEFAULT_CATEGORY_TREE_[type].forEach(m => {
+      if (!m.subs || !m.subs.length) {
+        matrix.push([Utilities.getUuid(), type, m.name, '', now]);
+      } else {
+        m.subs.forEach(s => matrix.push([Utilities.getUuid(), type, m.name, s, now]));
+      }
+    });
+  });
+  if (matrix.length) sheet.getRange(2, 1, matrix.length, headers.length).setValues(matrix);
+}
+
+
 // （例如 updateTransactionTx_ 跟它內部呼叫的 updateRow_ 都要用到 Transactions
 // 表）。快取起來可以省掉重複的 getSheetByName / ensureHeaders_（會讀一次表頭）
 // 呼叫；SpreadsheetApp.getActiveSpreadsheet() 也一起快取，理由相同。
@@ -104,6 +153,7 @@ function getSheet_(key) {
     sheet = ss.insertSheet(SHEET_NAMES[key]);
     sheet.appendRow(SHEET_HEADERS[key]);
     setDateColumnsAsPlainText_(sheet, key);
+    if (key === 'categories') seedDefaultCategories_(sheet);
   } else {
     ensureHeaders_(sheet, SHEET_HEADERS[key]);
   }
@@ -407,6 +457,221 @@ function settleLedger_(ids, settlementData) {
   return { updated: updated, settlement: settlement, account: account };
 }
 
+// ---------- 類別管理（主類別／子類別），改存在 Categories 表 ----------
+// 每個類別（不管是主類別本身、還是某個子類別）各佔一列；同一個主類別會有
+// 好幾列（mainName 相同），只是 subName 不同。刪除／改名一律採「整批讀出、
+// 在記憶體裡篩選或修改、一次寫回」的作法（跟 settleLedger_ 同一套手法），
+// 避免逐列 deleteRow 時列號一直往前位移、一不小心刪錯列或漏刪的問題。
+function categorySheetRows_() {
+  const sheet = getSheet_('categories');
+  const headers = SHEET_HEADERS.categories;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  const rows = [];
+  values.forEach(v => {
+    if (v[0] === '' || v[0] === null) return; // 空列跳過
+    const obj = {};
+    headers.forEach((h, i) => (obj[h] = normalizeCellValue_(h, v[i])));
+    rows.push(obj);
+  });
+  return rows;
+}
+
+// 把目前記憶體裡的 rows 陣列整批寫回 Categories 表，並清掉表格裡原本多出來的舊列。
+function rewriteCategorySheet_(rows) {
+  const sheet = getSheet_('categories');
+  const headers = SHEET_HEADERS.categories;
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+  if (rows.length) {
+    const matrix = rows.map(r => headers.map(h => (r[h] !== undefined ? r[h] : '')));
+    sheet.getRange(2, 1, matrix.length, headers.length).setValues(matrix);
+  }
+}
+
+// 把扁平的列資料，組回前端要用的 { expense:[{name,subs:[]}], income:[...] } 樹狀結構。
+function buildCategoryTree_(rows) {
+  const tree = { expense: [], income: [] };
+  const mainIndex = { expense: {}, income: {} };
+  rows.forEach(r => {
+    const type = r.type === 'income' ? 'income' : 'expense';
+    const mainName = String(r.mainName || '').trim();
+    if (!mainName) return;
+    let m = mainIndex[type][mainName];
+    if (!m) {
+      m = { name: mainName, subs: [] };
+      mainIndex[type][mainName] = m;
+      tree[type].push(m);
+    }
+    const subName = String(r.subName || '').trim();
+    if (subName && m.subs.indexOf(subName) === -1) m.subs.push(subName);
+  });
+  return tree;
+}
+
+function getCategoryTreeData_() {
+  return buildCategoryTree_(categorySheetRows_());
+}
+
+function addMainCategory_(type, name) {
+  name = String(name || '').trim();
+  if (!name) throw new Error('名稱不能為空');
+  const rows = categorySheetRows_();
+  if (rows.some(r => r.type === type && String(r.mainName) === name)) throw new Error('主類別已存在');
+  getSheet_('categories').appendRow([Utilities.getUuid(), type, name, '', new Date().toISOString()]);
+  return { name: name };
+}
+
+function addSubCategory_(type, mainName, subName) {
+  subName = String(subName || '').trim();
+  if (!subName) throw new Error('名稱不能為空');
+  const rows = categorySheetRows_();
+  if (!rows.some(r => r.type === type && String(r.mainName) === mainName)) throw new Error('主類別不存在');
+  if (rows.some(r => r.type === type && String(r.mainName) === mainName && String(r.subName) === subName)) throw new Error('子類別已存在');
+  getSheet_('categories').appendRow([Utilities.getUuid(), type, mainName, subName, new Date().toISOString()]);
+  return { name: subName };
+}
+
+function removeMainCategory_(type, name) {
+  const rows = categorySheetRows_();
+  const kept = rows.filter(r => !(r.type === type && String(r.mainName) === name));
+  rewriteCategorySheet_(kept);
+  return { removed: rows.length - kept.length };
+}
+
+function removeSubCategory_(type, mainName, subName) {
+  const rows = categorySheetRows_();
+  const kept = rows.filter(r => !(r.type === type && String(r.mainName) === mainName && String(r.subName) === subName));
+  rewriteCategorySheet_(kept);
+  return { removed: rows.length - kept.length };
+}
+
+// 重新命名主類別：連同底下所有子類別列的 mainName 一起改，並呼叫
+// renameCategoryEverywhere_（定義在下面）把過去已經記過的 Transactions／
+// RecurringTemplates 資料也一併更新成新名稱。
+function renameMainCategory_(type, oldName, newName) {
+  newName = String(newName || '').trim();
+  if (!newName) throw new Error('名稱不能為空');
+  const rows = categorySheetRows_();
+  if (oldName !== newName && rows.some(r => r.type === type && String(r.mainName) === newName)) {
+    throw new Error('已有相同名稱的主類別');
+  }
+  const now = new Date().toISOString();
+  let changed = 0;
+  rows.forEach(r => {
+    if (r.type === type && String(r.mainName) === oldName) {
+      r.mainName = newName;
+      r.updatedAt = now;
+      changed++;
+    }
+  });
+  if (!changed) throw new Error('找不到這個主類別');
+  rewriteCategorySheet_(rows);
+  const txResult = renameCategoryEverywhere_({ txType: type, level: 'main', oldValue: oldName, newValue: newName });
+  return { changed: changed, transactionsUpdated: txResult.updated };
+}
+
+function renameSubCategory_(type, mainName, oldSub, newSub) {
+  newSub = String(newSub || '').trim();
+  if (!newSub) throw new Error('名稱不能為空');
+  const rows = categorySheetRows_();
+  if (oldSub !== newSub && rows.some(r => r.type === type && String(r.mainName) === mainName && String(r.subName) === newSub)) {
+    throw new Error('已有相同名稱的子類別');
+  }
+  const now = new Date().toISOString();
+  let changed = 0;
+  rows.forEach(r => {
+    if (r.type === type && String(r.mainName) === mainName && String(r.subName) === oldSub) {
+      r.subName = newSub;
+      r.updatedAt = now;
+      changed++;
+    }
+  });
+  if (!changed) throw new Error('找不到這個子類別');
+  rewriteCategorySheet_(rows);
+  const txResult = renameCategoryEverywhere_({ txType: type, level: 'sub', mainName: mainName, oldValue: oldSub, newValue: newSub });
+  return { changed: changed, transactionsUpdated: txResult.updated };
+}
+
+// 把類別改名的效果，同步套用到 Transactions／RecurringTemplates 裡已經記過的舊資料，
+// 讓「類別清單」跟「舊紀錄」的名稱保持一致，不會變成清單改了名字、舊資料卻對不起來。
+// 做法跟 settleLedger_ 一樣：整張表讀進記憶體、就地修改符合條件的儲存格，最後一次寫回去。
+function renameCategoryEverywhere_(payload) {
+  const txType = payload && payload.txType;
+  const level = payload && payload.level;
+  const oldValue = String((payload && payload.oldValue) || '');
+  const newValue = String((payload && payload.newValue) || '');
+  const mainName = (payload && payload.mainName) || '';
+  if (!txType || (level !== 'main' && level !== 'sub') || !oldValue || !newValue) {
+    throw new Error('缺少必要參數');
+  }
+
+  let totalUpdated = 0;
+  ['transactions', 'recurring'].forEach(key => {
+    const sheet = getSheet_(key);
+    const headers = SHEET_HEADERS[key];
+    const typeCol = headers.indexOf('type');
+    const catCol = headers.indexOf('category');
+    const subCol = headers.indexOf('subcategory');
+    const updatedAtCol = headers.indexOf('updatedAt');
+    if (typeCol === -1 || catCol === -1) return;
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    const range = sheet.getRange(2, 1, lastRow - 1, headers.length);
+    const values = range.getValues();
+    const now = new Date().toISOString();
+    let changed = false;
+
+    for (let i = 0; i < values.length; i++) {
+      const row = values[i];
+      if (row[0] === '' || row[0] === null) continue;
+      if (row[typeCol] !== txType) continue;
+
+      if (level === 'main') {
+        if (row[catCol] !== oldValue) continue;
+        row[catCol] = newValue;
+      } else {
+        if (subCol === -1) continue;
+        if (row[catCol] !== mainName || row[subCol] !== oldValue) continue;
+        row[subCol] = newValue;
+      }
+      if (updatedAtCol !== -1) row[updatedAtCol] = now;
+      changed = true;
+      totalUpdated++;
+    }
+    if (changed) range.setValues(values);
+  });
+
+  return { updated: totalUpdated };
+}
+
+// 一次性搬移用：把前端瀏覽器原本存在 localStorage 的自訂類別樹整批寫進這張表，
+// 取代目前這個 type 底下的所有列。只有前端偵測到「這個瀏覽器有自訂過類別、
+// 但這是第一次接上這個試算表」時才會呼叫一次，之後不會再用到。
+function replaceCategoryTree_(type, tree) {
+  const rows = categorySheetRows_();
+  const kept = rows.filter(r => r.type !== type);
+  const now = new Date().toISOString();
+  (tree || []).forEach(m => {
+    const mainName = String((m && m.name) || '').trim();
+    if (!mainName) return;
+    const subs = (m && m.subs) || [];
+    if (!subs.length) {
+      kept.push({ id: Utilities.getUuid(), type: type, mainName: mainName, subName: '', updatedAt: now });
+    } else {
+      subs.forEach(s => {
+        const subName = String(s || '').trim();
+        if (!subName) return;
+        kept.push({ id: Utilities.getUuid(), type: type, mainName: mainName, subName: subName, updatedAt: now });
+      });
+    }
+  });
+  rewriteCategorySheet_(kept);
+  return { count: kept.filter(r => r.type === type).length };
+}
+
 // ---------- 固定項目（房租/健保費/訂閱費用...）自動加入本月記帳 ----------
 // 每次呼叫都是「檢查 + 補上」：對每個啟用中的範本，檢查該月份的 Transactions
 // 是否已經有 recurringId = 範本id 的紀錄，沒有的話才新增一筆（同時走
@@ -618,11 +883,14 @@ function doGet(e) {
           interest: readAll_('interest'),
           transactions: txResult.rows,
           recurring: readAll_('recurring'),
+          categories: getCategoryTreeData_(),
           transactionsTruncated: truncated,
           transactionsSince: since
         }
       });
     }
+
+    if (sheetKey === 'categories') return jsonOut_({ ok: true, data: getCategoryTreeData_() });
 
     if (!SHEET_NAMES[sheetKey]) return jsonOut_({ ok: false, error: '未知的資料表' });
 
@@ -647,6 +915,15 @@ function doPost(e) {
     if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
     if (action === 'settleLedger') return jsonOut_({ ok: true, data: settleLedger_((body.data && body.data.ids) || [], body.data && body.data.settlement) });
     if (action === 'runRecurringTemplates') return jsonOut_({ ok: true, data: runRecurringTemplates_(body.data && body.data.month, (body.data && body.data.ids) || null) });
+
+    // 類別管理：新增/改名/刪除主類別、子類別，改名時會一併更新過去的記帳／固定項目資料
+    if (action === 'addMainCategory') return jsonOut_({ ok: true, data: addMainCategory_(body.data.type, body.data.name) });
+    if (action === 'addSubCategory') return jsonOut_({ ok: true, data: addSubCategory_(body.data.type, body.data.mainName, body.data.subName) });
+    if (action === 'removeMainCategory') return jsonOut_({ ok: true, data: removeMainCategory_(body.data.type, body.data.name) });
+    if (action === 'removeSubCategory') return jsonOut_({ ok: true, data: removeSubCategory_(body.data.type, body.data.mainName, body.data.subName) });
+    if (action === 'renameMainCategory') return jsonOut_({ ok: true, data: renameMainCategory_(body.data.type, body.data.oldName, body.data.newName) });
+    if (action === 'renameSubCategory') return jsonOut_({ ok: true, data: renameSubCategory_(body.data.type, body.data.mainName, body.data.oldSub, body.data.newSub) });
+    if (action === 'replaceCategoryTree') return jsonOut_({ ok: true, data: replaceCategoryTree_(body.data.type, body.data.tree) });
 
     const sheetKey = body.sheet;
     if (!SHEET_NAMES[sheetKey]) return jsonOut_({ ok: false, error: '未知的資料表' });
