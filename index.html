@@ -862,7 +862,7 @@
                   </select>
                 </label>
               </div>
-              <p class="hint" id="trAdvanceHint" style="display:none; margin-top:6px;">全額代墊的品項不用選主/子類別，會直接統一存成「代墊」方便之後辨識。</p>
+              <p class="hint" id="trAdvanceHint" style="display:none; margin-top:6px;">「我先付、全額代墊」代表整筆其實是對方的花費，不用選主/子類別，會直接統一存成「代墊」方便之後辨識。若是「對方先付、全額代墊」，代表整筆其實是你自己的花費，請照常選類別。</p>
             </div>
           </form>
           <!-- 儲存/清空按鈕獨立放在表單外面、固定貼在彈出視窗最下方（不會隨內容捲動而被捲出畫面），
@@ -969,7 +969,7 @@
                   </select>
                 </label>
               </div>
-              <p class="hint" id="recAdvanceHint" style="display:none; margin-top:6px;">全額代墊的品項不用選主/子類別，會直接統一存成「代墊」。加入記帳時，這些設定會原封不動帶到那一筆記帳紀錄，等於保留這筆紀錄、只改日期。</p>
+              <p class="hint" id="recAdvanceHint" style="display:none; margin-top:6px;">「我先付、全額代墊」代表整筆其實是對方的花費，不用選主/子類別，會直接統一存成「代墊」。若是「對方先付、全額代墊」，代表整筆其實是你自己的花費，請照常選類別。加入記帳時，這些設定會原封不動帶到那一筆記帳紀錄，等於保留這筆紀錄、只改日期。</p>
             </div>
             <div class="full checkbox-row">
               <input type="checkbox" id="recActive">
@@ -1960,11 +1960,14 @@ $$('#trForm .quick-amount-row button').forEach(btn => {
   });
 });
 
-// 「全額代墊（全部算對方的）」的品項，主類別不用選、直接統一顯示/存成「代墊」，
-// 方便之後在記帳清單或匯出時一眼看出這筆是代墊而不是自己的支出分類
+// 「全額代墊」只有在「我先付」的情況下，才代表整筆其實是對方的花費
+// （我幫對方代墊，不算我自己的支出分類，所以主類別不用選、直接統一存成
+// 「代墊」）。如果是「對方先付」，全額代墊代表整筆其實是「我的」花費，
+// 只是對方先幫我出錢而已——這筆錢本來就要記在我自己的類別下（餐飲/交通...），
+// 所以這種情況不應該強制歸類成「代墊」，要讓使用者自己選類別。
 const ADVANCE_CATEGORY_NAME = '代墊';
 function isAdvanceMode_(){
-  return $('#trType').value !== 'transfer' && $('#trShared').checked && $('#trSplitMode').value === 'advance';
+  return $('#trType').value !== 'transfer' && $('#trShared').checked && $('#trSplitMode').value === 'advance' && $('#trPayer').value !== 'partner';
 }
 function syncCatRowVisibility(){
   const advance = isAdvanceMode_();
@@ -2716,6 +2719,7 @@ $('#trShared').addEventListener('change', () => {
   syncCatRowVisibility();
 });
 $('#trSplitMode').addEventListener('change', syncCatRowVisibility);
+$('#trPayer').addEventListener('change', syncCatRowVisibility);
 
 // 記帳新增/編輯/刪除都是「一次 exec 內同時處理記帳列 + 帳戶餘額」的複合動作（見 Code.gs 的
 // addTransactionTx / updateTransactionTx / deleteTransactionTx），比以前「新增記帳→更新帳戶
@@ -2752,18 +2756,20 @@ $('#trForm').addEventListener('submit', async e => {
   } else {
     const shared = $('#trShared').checked;
     const splitMode = shared ? $('#trSplitMode').value : 'personal';
-    const isAdvance = splitMode === 'advance';
+    const payer = shared ? $('#trPayer').value : 'me';
+    // 全額代墊只有在「我先付」時才代表整筆是對方的花費，才統一存成「代墊」；
+    // 「對方先付」代表整筆其實是我的花費，要保留使用者自己選的類別。
+    const isAdvance = splitMode === 'advance' && payer !== 'partner';
     data = {
       id,
       date: $('#trDate').value,
       type,
-      // 全額代墊的品項主類別統一存成「代墊」，不用另外選類別
       category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#trCategory').value,
       subcategory: isAdvance ? '' : $('#trSubcategory').value,
       amount,
       accountId,
       note: $('#trNote').value,
-      payer: shared ? $('#trPayer').value : 'me',
+      payer,
       splitMode,
       settled: false
     };
@@ -2958,7 +2964,8 @@ $('#trSaveAsTemplate').addEventListener('click', async () => {
   if(type === 'transfer'){ alert('轉帳沒辦法存成模板，模板只適用於支出／收入。'); return; }
   const shared = $('#trShared').checked;
   const splitMode = shared ? $('#trSplitMode').value : 'personal';
-  const isAdvance = splitMode === 'advance';
+  const payer = shared ? $('#trPayer').value : 'me';
+  const isAdvance = splitMode === 'advance' && payer !== 'partner';
   const defaultName = $('#trNote').value.trim();
   const name = prompt('這個模板要取什麼名字？（下次記帳時會顯示這個名字）', defaultName);
   if(name === null) return; // 使用者取消
@@ -2973,7 +2980,7 @@ $('#trSaveAsTemplate').addEventListener('click', async () => {
     dayOfMonth: '',
     note: '',
     active: false,
-    payer: shared ? $('#trPayer').value : 'me',
+    payer,
     splitMode
   };
   try{
@@ -3014,7 +3021,7 @@ $$('#recForm .type-toggle button').forEach(btn => {
 // 這裡的顯示/隱藏、全額代墊的類別欄位隱藏邏輯，跟記帳表單（trForm）的
 // isAdvanceMode_ / syncCatRowVisibility 是同一套規則
 function isRecAdvanceMode_(){
-  return $('#recShared').checked && $('#recSplitMode').value === 'advance';
+  return $('#recShared').checked && $('#recSplitMode').value === 'advance' && $('#recPayer').value !== 'partner';
 }
 function syncRecCatRowVisibility(){
   const advance = isRecAdvanceMode_();
@@ -3026,6 +3033,7 @@ $('#recShared').addEventListener('change', () => {
   syncRecCatRowVisibility();
 });
 $('#recSplitMode').addEventListener('change', syncRecCatRowVisibility);
+$('#recPayer').addEventListener('change', syncRecCatRowVisibility);
 
 // 找出目前這個月，啟用中但還沒被加入記帳的模板
 function pendingRecurringForMonth(month){
@@ -3132,13 +3140,14 @@ $('#recForm').addEventListener('submit', async e => {
   e.preventDefault();
   const shared = $('#recShared').checked;
   const splitMode = shared ? $('#recSplitMode').value : 'personal';
-  const isAdvance = splitMode === 'advance';
+  const payer = shared ? $('#recPayer').value : 'me';
+  // 跟記帳表單同一套規則：全額代墊只有在「我先付」時才統一存成「代墊」，
+  // 「對方先付」代表整筆其實是我的花費，要保留使用者自己選的類別。
+  const isAdvance = splitMode === 'advance' && payer !== 'partner';
   const data = {
     id: $('#recId').value || undefined,
     name: $('#recName').value,
     type: $('#recType').value,
-    // 全額代墊的模板跟記帳表單一樣，主類別統一存成「代墊」，
-    // 這樣加入記帳時才會原封不動長得一樣
     category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#recCategory').value,
     subcategory: isAdvance ? '' : $('#recSubcategory').value,
     amount: parseFloat($('#recAmount').value) || 0,
@@ -3146,7 +3155,7 @@ $('#recForm').addEventListener('submit', async e => {
     dayOfMonth: $('#recDay').value ? parseInt($('#recDay').value, 10) : '',
     note: $('#recNote').value,
     active: $('#recActive').checked,
-    payer: shared ? $('#recPayer').value : 'me',
+    payer,
     splitMode: splitMode
   };
   try{

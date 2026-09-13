@@ -434,7 +434,10 @@ function runRecurringTemplates_(month, ids) {
     // 跟以前一樣是「我先付／個人不分攤」，行為不會改變。
     const payer = tpl.payer === 'partner' ? 'partner' : 'me';
     const splitMode = (tpl.splitMode === 'split' || tpl.splitMode === 'advance') ? tpl.splitMode : 'personal';
-    const isAdvance = splitMode === 'advance';
+    // 全額代墊只有在「我先付」時，才代表整筆其實是對方的花費，才統一存成
+    // 「代墊」；「對方先付」代表整筆其實是我的花費，要保留範本原本設定的類別，
+    // 跟前端記帳表單／固定項目表單同一套規則（isAdvanceMode_ / isRecAdvanceMode_）。
+    const isAdvance = splitMode === 'advance' && payer !== 'partner';
     const result = addTransactionTx_({
       date: date,
       type: tpl.type || 'expense',
