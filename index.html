@@ -281,9 +281,18 @@
     min-height:0;
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
-    border-radius:0 0 var(--radius) var(--radius);
+    border-radius:0;
     margin-top:0;
   }
+  /* 按鈕固定在彈出視窗最下方，不會被表單內容捲動帶走，永遠看得到、點得到 */
+  details.entry-wrap.editing > .entry-footer{
+    flex:none;
+    background:var(--card);
+    border-top:1px solid var(--paper-line);
+    border-radius:0 0 var(--radius) var(--radius);
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .entry-footer .form-actions{ margin:0; }
 
   form.entry{
     background:var(--card);
@@ -845,13 +854,18 @@
               </div>
               <p class="hint" id="trAdvanceHint" style="display:none; margin-top:6px;">全額代墊的品項不用選主/子類別，會直接統一存成「代墊」方便之後辨識。</p>
             </div>
+          </form>
+          <!-- 儲存/清空按鈕獨立放在表單外面、固定貼在彈出視窗最下方（不會隨內容捲動而被捲出畫面），
+               不管上面欄位再長，這幾顆按鈕永遠看得到、點得到。用 form="trForm" 讓 submit 按鈕
+               仍然會正常送出 #trForm 表單。 -->
+          <div class="entry-footer">
             <div class="form-actions">
-              <button type="submit" class="primary">儲存記帳</button>
-              <button type="submit" id="trSaveContinue">儲存並記下一筆</button>
+              <button type="submit" form="trForm" class="primary">儲存記帳</button>
+              <button type="submit" form="trForm" id="trSaveContinue">儲存並記下一筆</button>
               <button type="button" id="trSaveAsTemplate">存成模板</button>
               <button type="button" id="trCancel">清空表單</button>
             </div>
-          </form>
+          </div>
         </details>
         <div class="tr-search-row" id="trSearchRow">
           <input type="search" id="trSearchInput" placeholder="搜尋記帳（名稱、類別、備註、金額、帳戶…）">
