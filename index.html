@@ -698,6 +698,10 @@
           <label class="full">備註
             <input type="text" id="accNote" placeholder="選填">
           </label>
+          <div class="full checkbox-row">
+            <input type="checkbox" id="accFavorite" checked>
+            <label for="accFavorite" style="margin:0;">常用支付工具（記帳/模板/共同帳本結算的帳戶選單預設只會顯示打勾的帳戶，沒打勾的就不用每次都滑過去）</label>
+          </div>
           <div class="form-actions">
             <button type="submit" class="primary">儲存帳戶</button>
             <button type="button" id="accCancel">清空表單</button>
@@ -1500,7 +1504,8 @@ function sortAccountTypeEntries(types){
 }
 function defaultCashAccountId(){
   const sorted = sortAccountsForSelect(state.accounts);
-  const cash = sorted.find(a => a.type === '現金');
+  const favorites = sorted.filter(isAccountFavorite);
+  const cash = favorites.find(a => a.type === '現金') || sorted.find(a => a.type === '現金');
   return cash ? cash.id : '';
 }
 
@@ -1638,11 +1643,13 @@ function renderAccountsList(){
     list.innerHTML = sortedAccounts.map(a => {
       const rate = a.interestRate ? Number(a.interestRate) : 0;
       const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
+      const favorite = isAccountFavorite(a);
       return `<div class="item-card">
         <div class="item-top">
           <div>
             <div class="item-name">${a.name}</div>
             <span class="badge">${a.type}</span>
+            ${favorite ? '' : '<span class="badge">不常用</span>'}
             ${a.note ? `<div class="item-note">${a.note}</div>` : ''}
           </div>
           <div class="item-value">$${fmt(a.balance)}</div>
@@ -1652,6 +1659,7 @@ function renderAccountsList(){
           <span>估算下期利息 <b>$${fmt(est)}</b></span>
         </div>` : ''}
         <div class="item-actions">
+          <button class="small" onclick="toggleAccountFavorite('${a.id}')">${favorite ? '移出常用' : '加入常用'}</button>
           <button class="small" onclick="editAccount('${a.id}')">編輯</button>
           <button class="small danger" onclick="deleteAccount('${a.id}')">刪除</button>
         </div>
@@ -1661,12 +1669,27 @@ function renderAccountsList(){
 }
 
 // 各表單的帳戶下拉選單（記帳、轉帳、利息、模板共用）
+// 記帳/模板/共同帳本結算的帳戶選單，預設只列出打勾「常用」的帳戶（favoriteAccounts）；
+// 如果全部帳戶都沒打勾常用（或還沒升級過這個功能），就退回顯示全部帳戶，
+// 避免選單突然變空、沒帳戶可選。另外如果「目前這個選單本來選著的值」剛好是
+// 一個不常用的帳戶（例如在編輯一筆用了舊帳戶的紀錄），會把它額外補進選項，
+// 讓那筆紀錄看到的還是原本的帳戶，不會被選單悄悄換掉。
+function pickerAccountList_(favoriteAccounts, orderedAccounts, currentValue){
+  const base = favoriteAccounts.length ? favoriteAccounts : orderedAccounts;
+  if(currentValue && !base.some(a => a.id === currentValue)){
+    const extra = orderedAccounts.find(a => a.id === currentValue);
+    if(extra) return [...base, extra];
+  }
+  return base;
+}
 function renderAccountSelects(){
   const orderedAccounts = sortAccountsForSelect(state.accounts);
-  const optionsHtml = orderedAccounts.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+  const favoriteAccounts = orderedAccounts.filter(isAccountFavorite);
+  const optionsHtmlFor = list => list.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
 
   // 利息紀錄只會發生在銀行帳戶，選單只顯示「銀行」類型帳戶，不用在一堆
-  // 現金／行動支付／悠遊卡帳戶裡面找
+  // 現金／行動支付／悠遊卡帳戶裡面找；利息是單獨的記錄情境，不受「常用支付
+  // 工具」篩選影響。
   const bankAccounts = orderedAccounts.filter(a => a.type === '銀行');
   const sel = $('#intAccount');
   const keepIntVal = sel.value;
@@ -1677,7 +1700,7 @@ function renderAccountSelects(){
 
   const trSel = $('#trAccount');
   const keepVal = trSel.value;
-  trSel.innerHTML = `<option value="">不指定</option>` + optionsHtml;
+  trSel.innerHTML = `<option value="">不指定</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepVal));
   trSel.value = keepVal;
   // 新增記帳（尚未選帳戶）時，預設帶入現金帳戶，選單依現金→行動支付→銀行…排序
   if(!$('#trId').value && !trSel.value){
@@ -1687,14 +1710,14 @@ function renderAccountSelects(){
 
   const recSel = $('#recAccount');
   const keepRecVal = recSel.value;
-  recSel.innerHTML = `<option value="">不指定</option>` + optionsHtml;
+  recSel.innerHTML = `<option value="">不指定</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepRecVal));
   recSel.value = keepRecVal;
 
   // 記帳表單「轉帳」類型的「到（轉入帳戶）」選單
   const trToSel = $('#trToAccount');
   if(trToSel){
     const keepTo = trToSel.value;
-    trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtml;
+    trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepTo));
     trToSel.value = keepTo;
   }
 
@@ -1703,7 +1726,7 @@ function renderAccountSelects(){
   const ledgerSel = $('#ledgerSettleAccount');
   if(ledgerSel){
     const keepLedger = ledgerSel.value;
-    ledgerSel.innerHTML = `<option value="">不指定（只標記已結算，不更新帳戶餘額）</option>` + optionsHtml;
+    ledgerSel.innerHTML = `<option value="">不指定（只標記已結算，不更新帳戶餘額）</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepLedger));
     ledgerSel.value = keepLedger;
     if(!ledgerSel.value){
       const cashId = defaultCashAccountId();
@@ -2641,6 +2664,12 @@ $('#statsMonthInput').addEventListener('change', renderStats);
 $('#statsYearInput').addEventListener('change', renderStats);
 
 // ---------- Accounts CRUD ----------
+// 帳戶是否為「常用支付工具」：沒有 favorite 欄位（舊資料）或值不是明確的
+// false／'false'，一律視為常用，這樣既有帳戶升級後不會突然從選單消失，
+// 使用者要自己取消勾選才會被收起來。
+function isAccountFavorite(a){
+  return a.favorite !== false && String(a.favorite) !== 'false';
+}
 $('#accountForm').addEventListener('submit', async e => {
   e.preventDefault();
   const data = {
@@ -2649,7 +2678,8 @@ $('#accountForm').addEventListener('submit', async e => {
     type: $('#accType').value,
     balance: parseFloat($('#accBalance').value) || 0,
     interestRate: $('#accRate').value ? parseFloat($('#accRate').value) : '',
-    note: $('#accNote').value
+    note: $('#accNote').value,
+    favorite: $('#accFavorite').checked
   };
   try{
     await runBusy(async () => {
@@ -2667,6 +2697,7 @@ $('#accCancel').addEventListener('click', resetAccountForm);
 function resetAccountForm(){
   $('#accId').value=''; $('#accName').value=''; $('#accType').value='現金';
   $('#accBalance').value=''; $('#accRate').value=''; $('#accNote').value='';
+  $('#accFavorite').checked = true;
 }
 window.editAccount = id => {
   const a = state.accounts.find(x => x.id === id);
@@ -2674,6 +2705,7 @@ window.editAccount = id => {
   $('#accId').value=a.id; $('#accName').value=a.name; $('#accType').value=a.type;
   $('#accBalance').value=a.balance; $('#accRate').value=a.interestRate || '';
   $('#accNote').value=a.note || '';
+  $('#accFavorite').checked = isAccountFavorite(a);
   $('#accountDetails').open = true;
   $('#accountDetails').scrollIntoView({behavior:'smooth', block:'start'});
 };
@@ -2686,6 +2718,19 @@ window.deleteAccount = async id => {
       renderAll();
     }, '刪除中…');
   }catch(err){ alert('刪除失敗：' + err.message); }
+};
+// 帳戶一覽列表上的「加入常用／移出常用」快速切換按鈕，不用整個打開編輯表單。
+window.toggleAccountFavorite = async id => {
+  const a = state.accounts.find(x => x.id === id);
+  if(!a) return;
+  const data = { ...a, favorite: !isAccountFavorite(a) };
+  try{
+    await runBusy(async () => {
+      const saved = await apiPost('update','accounts',data);
+      upsertLocal('accounts', saved);
+      renderAll();
+    }, '更新中…');
+  }catch(err){ alert('更新失敗：' + err.message); }
 };
 
 // ---------- Interest CRUD ----------
