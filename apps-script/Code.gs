@@ -494,6 +494,41 @@ function removeMonthlyRecurringTrigger() {
   });
 }
 
+// ---------- 選用：定時「保溫」，減少「一開始的載入」要等很久的狀況 ----------
+// Apps Script 網頁應用程式沒有常駐伺服器：閒置一段時間後的第一次呼叫，
+// Google 平台要重新啟動執行環境，這一段「冷啟動」時間往往比實際讀寫試算表
+// 的時間長很多，是「打開網頁第一次載入特別久」最主要的原因，光靠這份程式碼
+// 本身沒辦法完全消除。這裡提供一個可選的做法：设定時間驅動觸發器，每 10
+// 分鐘自動呼叫一次極輕量的 keepWarm_()（幾乎不讀寫試算表），讓執行環境
+// 比較常保持「熱」的狀態，減少使用者真的打開網頁時遇到冷啟動的機率。
+// 效果會因為 Google 平台當下的資源調度而有所不同，不是每次都一定有感，
+// 但成本很低（不會多耗用什麼配額），值得開著。
+// 設定方式（只需要做一次）：跟 setupMonthlyRecurringTrigger 一樣，在 Apps
+// Script 編輯器選 setupKeepWarmTrigger，按「執行」；不想要了就執行
+// removeKeepWarmTrigger。
+function keepWarm_() {
+  // 刻意不讀寫任何試算表資料，只是讓這個 Apps Script 專案的執行環境被叫醒、
+  // 保持熱機，所以幾乎不花時間、也不占讀寫配額。
+  return 'ok';
+}
+
+function setupKeepWarmTrigger() {
+  removeKeepWarmTrigger();
+  ScriptApp.newTrigger('keepWarm_')
+    .timeBased()
+    .everyMinutes(10)
+    .create();
+  return '已設定：每 10 分鐘會自動保溫一次，減少冷啟動等待。';
+}
+
+function removeKeepWarmTrigger() {
+  ScriptApp.getProjectTriggers().forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'keepWarm_') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+}
+
 // 效能優化：sheet=all 帶 recentMonths 時，以前的作法是 readAll_('transactions')
 // 把整張記帳表所有欄位都讀出來，才在記憶體裡篩選「最近 N 個月」，記帳筆數一多
 // （幾百上千筆之後）就會愈讀愈慢。這裡改成：

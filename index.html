@@ -1216,6 +1216,8 @@ updateTrFabVisibility();
 function switchTab(view){
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  currentView = view;
+  renderVisibleSection();
   // 切換分頁只單純顯示紀錄清單，記帳表單保持收合，要點擊「記帳」（或右下角浮動按鈕）才會跳出
   updateTrFabVisibility();
   window.scrollTo({top:0, behavior:'smooth'});
@@ -1420,6 +1422,10 @@ async function loadAll(){
     }, '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
+    // 讓「記帳」清單先完整顯示、使用者可以馬上開始操作之後，才趁機在背景
+    // 偷偷補齊完整記帳歷史，避免一進畫面就同時打兩個請求互相搶時間，
+    // 拖慢最重要的「第一次看到畫面」這件事。
+    setTimeout(prefetchFullHistoryInBackground_, 800);
   }catch(err){
     $('#cfgStatus').textContent = '連線失敗：' + err.message;
     $('#cfgStatus').className = 'status err';
@@ -1427,28 +1433,48 @@ async function loadAll(){
 }
 
 // 補齊完整記帳歷史：只有真的需要完整資料的地方（統計分析、共同帳本、
-// 日曆翻到比 transactionsSince 更舊的月份）才會呼叫，且同時間只會真的打一次
-// 請求（用 fullTransactionsLoadPromise 擋住重複觸發），載入時用 runBusy
-// 顯示一下小提示，載完會自動重新整理畫面。
+// 日曆翻到比 transactionsSince 更舊的月份）才會用到。
+// loadFullTransactions_ 是實際去後端拿資料的共用邏輯（不管背景偷偷拿、
+// 還是使用者主動切頁等著拿，都走同一個 promise，不會重複打兩次請求）。
 let fullTransactionsLoadPromise = null;
-async function ensureFullTransactionsLoaded(){
+async function loadFullTransactions_(){
   if(state.transactionsFullyLoaded) return;
   if(fullTransactionsLoadPromise) return fullTransactionsLoadPromise;
   fullTransactionsLoadPromise = (async () => {
     try{
-      await runBusy(async () => {
-        const full = await apiGet('transactions');
-        state.transactions = full;
-        state.transactionsFullyLoaded = true;
-      }, '補齊完整記帳歷史中…');
-      renderAll();
-    }catch(err){
-      console.warn('補齊完整記帳紀錄失敗：', err);
-    }finally{
+      const full = await apiGet('transactions');
+      state.transactions = full;
+      state.transactionsFullyLoaded = true;
+      // 完整資料到手後，共同帳本／統計分析／記帳清單都要用新資料重算一次，
+      // 但不馬上重畫——沒人在看的分頁沒必要現在就花時間算，等切過去再算就好。
+      dirty.ledger = true; dirty.stats = true; dirty.transactions = true;
+    } finally {
       fullTransactionsLoadPromise = null;
     }
   })();
   return fullTransactionsLoadPromise;
+}
+// 使用者主動切到「共同帳本」「統計分析」等分頁、或搜尋記帳時：要讓使用者
+// 看到「補齊中」的提示並鎖住畫面，等資料回來才繼續。
+async function ensureFullTransactionsLoaded(){
+  if(state.transactionsFullyLoaded) return;
+  try{
+    await runBusy(() => loadFullTransactions_(), '補齊完整記帳歷史中…');
+    renderVisibleSection();
+  }catch(err){
+    console.warn('補齊完整記帳紀錄失敗：', err);
+  }
+}
+// 初次載入完成、使用者已經可以開始操作「記帳」分頁之後，趁使用者還在看畫面、
+// 還沒點進「共同帳本」／「統計分析」之前，偷偷在背景把完整記帳歷史補齊好
+// （不鎖畫面、不顯示任何提示）。這樣真的點過去的時候，資料常常已經在
+// 背景載完了，不用再等一次「補齊完整記帳歷史中…」。就算背景載入還沒完成、
+// 使用者已經手動點過去，也只會共用同一個 loadFullTransactions_ promise，
+// 不會重複打兩次請求，只是那時候才會看到「補齊中」的提示、繼續等剩下的時間。
+function prefetchFullHistoryInBackground_(){
+  loadFullTransactions_()
+    .then(() => renderVisibleSection())
+    .catch(err => console.warn('背景補齊記帳歷史失敗（不影響目前畫面）：', err));
 }
 
 function fmt(n){
@@ -1490,17 +1516,57 @@ function removeLocal(key, id){
 }
 
 // ---------- Render ----------
+// 效能重點：以前每次存檔/刪除都會呼叫 renderAll()，把 10 個區塊全部重新
+// 計算+重畫一次（包含看不到的分頁，例如正在看「記帳」清單時，統計分析、
+// 共同帳本、類別設定也會一起被算一次），資料一多（尤其統計分析要掃全部
+// 歷史記帳）就會讓「儲存中」多卡好幾百毫秒到快一秒。
+// 改成「記髒＋只畫看得到的分頁」：資料異動時只標記哪些區塊「資料舊了」
+// （dirty），實際重畫延後到「使用者真的切過去那個分頁」的當下才做；
+// 分頁本身也記住「目前顯示哪個」，切分頁時只補畫剛好變成需要的那一塊。
+// 這樣「存一筆記帳」只要重畫記帳清單本身，不用連統計圖表、共同帳本都算一次。
+const dirty = { dashboard:true, interest:true, liabilities:true, transactions:true, ledger:true, recurring:true, stats:true, categories:true };
+function markAllDirty(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
+let currentView = 'transactions';
+let currentTrSub = 'records';
+const SECTION_RENDERERS = {
+  dashboard: renderDashboardSection_,
+  interest: renderInterestSection_,
+  liabilities: renderLiabilitiesSection_,
+  transactions: renderTransactionsSection_,
+  ledger: renderLedgerSection_,
+  recurring: renderRecurringSection_,
+  stats: renderStatsSection_,
+  categories: renderCategoriesSection_
+};
+function renderDashboardSection_(){ renderDashboard(); }
+function renderInterestSection_(){ renderInterest(); }
+function renderLiabilitiesSection_(){ renderLiabilities(); }
+function renderTransactionsSection_(){ renderTransactions(); renderTrTemplateChips(); }
+function renderLedgerSection_(){ renderLedger(); }
+function renderRecurringSection_(){ renderRecurring(); }
+function renderStatsSection_(){ renderStats(); }
+function renderCategoriesSection_(){ renderCategories(); }
+
+// 依目前「主分頁 + (若在記帳分頁) 子分頁」算出實際看得到、需要重畫的區塊 key
+function visibleSectionKey_(){
+  if(currentView === 'transactions'){
+    if(['ledger','recurring','stats','categories'].includes(currentTrSub)) return currentTrSub;
+    return 'transactions'; // records / import 子分頁都只需要記帳清單那份資料
+  }
+  return currentView; // dashboard / interest / liabilities / settings
+}
+// 補畫「目前看得到」的那個區塊（如果它被標記為 dirty），不管別的分頁乾不乾淨
+function renderVisibleSection(){
+  const key = visibleSectionKey_();
+  const fn = SECTION_RENDERERS[key];
+  if(fn && dirty[key]){ fn(); dirty[key] = false; }
+}
+// 帳戶下拉選單很多分頁的表單都會用到、計算又很便宜，維持每次資料異動都直接更新，
+// 不用等使用者切過去才补畫，避免「表單選單」顯示舊帳戶名稱/餘額。
 function renderAll(){
-  renderDashboard();
   renderAccountSelects();
-  renderInterest();
-  renderLiabilities();
-  renderTransactions();
-  renderLedger();
-  renderRecurring();
-  renderTrTemplateChips();
-  renderStats();
-  renderCategories();
+  markAllDirty();
+  renderVisibleSection();
 }
 
 // 點擊「帳戶一覽」上方的類型卡片（銀行／現金／行動支付…）可以篩選下方清單只顯示該類型的帳戶，
@@ -2549,13 +2615,11 @@ $('#trSubNav').addEventListener('click', async e => {
   if(!btn) return;
   $$('#trSubNav button').forEach(b => b.classList.toggle('active', b === btn));
   TR_SUBS.forEach(sub => { $('#trSub-' + sub).style.display = (sub === btn.dataset.sub) ? '' : 'none'; });
+  currentTrSub = btn.dataset.sub;
   if(TR_SUBS_NEED_FULL_HISTORY.includes(btn.dataset.sub) && !state.transactionsFullyLoaded){
-    await ensureFullTransactionsLoaded();
+    await ensureFullTransactionsLoaded(); // 這裡面補齊資料後，如果目前這個分頁本來就是 dirty 的，會自己補畫一次
   }
-  if(btn.dataset.sub === 'stats') renderStats();
-  if(btn.dataset.sub === 'ledger') renderLedger();
-  if(btn.dataset.sub === 'recurring') renderRecurring();
-  if(btn.dataset.sub === 'categories') renderCategories();
+  renderVisibleSection();
   updateTrFabVisibility();
 });
 window.goToRecurringTab = function(){
