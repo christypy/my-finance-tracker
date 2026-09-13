@@ -272,6 +272,16 @@
     animation:popupIn .2s ease;
   }
   @keyframes popupIn{ from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:none;} }
+  /* Chrome 131+ 會自動把 <details> 裡除了 <summary> 以外的內容包進一個內部
+     ::details-content 容器，且預設是 display:block，導致我們原本設計的
+     「彈出視窗 flex 直向排版＋按鈕列固定在最下面」完全失效：form 跟
+     .entry-footer 不再是真正的 flex 子項目，會直接照自然高度往下疊，
+     超出彈窗 max-height 的部分被裁掉、也捲不到——這正是「連線後按鈕不見」
+     的原因。強制這個內部容器 display:contents，讓 form / .entry-footer
+     還原成 details 底下真正的 flex 子項目。 */
+  details.entry-wrap.editing::details-content{
+    display:contents;
+  }
   details.entry-wrap.editing > summary{
     border-radius:var(--radius) var(--radius) 0 0;
     flex:none;
