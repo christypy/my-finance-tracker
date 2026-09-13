@@ -1176,9 +1176,27 @@ function switchTab(view){
 }
 $$('.tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.view)));
 
+// 存 Apps Script 網址／權杖用的 localStorage key。
+// 原本用的是很通用的 'fin_url' / 'fin_token'，如果這個網頁跟其他網頁剛好
+// 部署在同一個網域（或用同一台瀏覽器開啟本機檔案），瀏覽器的 localStorage
+// 是整個來源共用的，通用的 key 名稱就很容易被別的網頁誤讀/誤蓋。
+// 這裡換成專屬於這個記帳工具的 key，避免互相污染設定。
+const CFG_URL_KEY = 'mybook_ledger_apps_script_url';
+const CFG_TOKEN_KEY = 'mybook_ledger_apps_script_token';
+// 一次性搬移：如果偵測到舊 key 有值、新 key 還沒有值，就搬過去一次，
+// 這樣舊使用者不會因為改 key 名稱就要重新貼一次網址跟權杖。
+(function migrateLegacyCfgKeys_(){
+  const legacyUrl = localStorage.getItem('fin_url');
+  const legacyToken = localStorage.getItem('fin_token');
+  if(legacyUrl && !localStorage.getItem(CFG_URL_KEY)) localStorage.setItem(CFG_URL_KEY, legacyUrl);
+  if(legacyToken && !localStorage.getItem(CFG_TOKEN_KEY)) localStorage.setItem(CFG_TOKEN_KEY, legacyToken);
+  // 搬完就把舊的通用 key 刪掉，避免繼續佔用共用命名空間、跟其他網頁互相干擾
+  if(legacyUrl) localStorage.removeItem('fin_url');
+  if(legacyToken) localStorage.removeItem('fin_token');
+})();
 const cfg = {
-  url: localStorage.getItem('fin_url') || '',
-  token: localStorage.getItem('fin_token') || ''
+  url: localStorage.getItem(CFG_URL_KEY) || '',
+  token: localStorage.getItem(CFG_TOKEN_KEY) || ''
 };
 
 // 前端版本號：每次你改完這個檔案、要重新上傳到 GitHub Pages 時，
@@ -1226,8 +1244,9 @@ const DEFAULT_CATEGORY_TREE = {
     { name:'其他', subs:[] }
   ]
 };
-const CAT_TREE_KEY = type => 'fin_category_tree_' + type;
-const CAT_LEGACY_KEY = type => 'fin_categories_' + type; // 舊版扁平類別清單，用於自動搬遷
+const CAT_TREE_KEY = type => 'mybook_ledger_category_tree_' + type;
+const CAT_TREE_KEY_LEGACY_V2 = type => 'fin_category_tree_' + type; // 舊 key 名稱，用於自動搬遷（讀取用，不會再寫入）
+const CAT_LEGACY_KEY = type => 'fin_categories_' + type; // 更早期的舊版扁平類別清單，用於自動搬遷（讀取用，不會再寫入這個 key）
 
 function cloneCategoryTree(tree){ return tree.map(m => ({ name: m.name, subs: [...(m.subs || [])] })); }
 
@@ -1237,6 +1256,20 @@ function loadCategoryTree(type){
     if(raw){
       const parsed = JSON.parse(raw);
       if(Array.isArray(parsed)) return parsed;
+    }
+  }catch(e){}
+  // 新 key 底下還沒有資料時，先看看舊 key 名稱（'fin_category_tree_' + type）
+  // 底下是不是已經有使用者自訂過的類別樹，有的話直接搬過去，避免改 key 名稱
+  // 造成使用者原本的類別設定憑空消失。
+  try{
+    const legacyTreeRaw = localStorage.getItem(CAT_TREE_KEY_LEGACY_V2(type));
+    if(legacyTreeRaw){
+      const parsed = JSON.parse(legacyTreeRaw);
+      if(Array.isArray(parsed)){
+        saveCategoryTree(type, parsed);
+        localStorage.removeItem(CAT_TREE_KEY_LEGACY_V2(type));
+        return parsed;
+      }
     }
   }catch(e){}
   // 尚未有新版資料：以預設類別為底，把舊版扁平清單（如果有）併入為主類別
@@ -2254,7 +2287,8 @@ function renderFixedVsFlexible(container, rows){
 }
 
 // ---------- 預算追蹤（存在這台裝置的瀏覽器裡，跟類別設定一樣） ----------
-const BUDGET_KEY = 'fin_budgets_v1'; // { [主類別 或 "__total__"]: 每月預算金額 }
+const BUDGET_KEY = 'mybook_ledger_budgets_v1'; // { [主類別 或 "__total__"]: 每月預算金額 }
+const BUDGET_KEY_LEGACY = 'fin_budgets_v1'; // 舊 key 名稱，用於自動搬遷（讀取用，不會再寫入）
 const BUDGET_TOTAL_KEY = '__total__';
 function loadBudgets(){
   try{
@@ -2262,6 +2296,18 @@ function loadBudgets(){
     if(raw){
       const parsed = JSON.parse(raw);
       if(parsed && typeof parsed === 'object') return parsed;
+    }
+  }catch(e){}
+  // 新 key 底下沒資料時，看看舊 key 名稱是否已經存過預算設定，有的話搬過去一次
+  try{
+    const legacyRaw = localStorage.getItem(BUDGET_KEY_LEGACY);
+    if(legacyRaw){
+      const parsed = JSON.parse(legacyRaw);
+      if(parsed && typeof parsed === 'object'){
+        saveBudgets(parsed);
+        localStorage.removeItem(BUDGET_KEY_LEGACY);
+        return parsed;
+      }
     }
   }catch(e){}
   return {};
@@ -3539,8 +3585,8 @@ $('#cfgToken').value = cfg.token;
 $('#cfgSave').addEventListener('click', () => {
   cfg.url = $('#cfgUrl').value.trim();
   cfg.token = $('#cfgToken').value.trim();
-  localStorage.setItem('fin_url', cfg.url);
-  localStorage.setItem('fin_token', cfg.token);
+  localStorage.setItem(CFG_URL_KEY, cfg.url);
+  localStorage.setItem(CFG_TOKEN_KEY, cfg.token);
   loadAll();
 });
 
