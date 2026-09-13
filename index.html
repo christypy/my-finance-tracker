@@ -190,6 +190,7 @@
     -webkit-appearance:none;
   }
   button.primary{background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600;}
+  button.primary-outline{border-color:var(--gold); color:var(--gold); font-weight:600; background:rgba(180,144,59,.08);}
   button.danger{border-color:var(--red); color:var(--red);}
   button.small{padding:6px 13px; font-size:12.5px; min-height:32px;}
   button:active{transform:scale(.97);}
@@ -527,7 +528,8 @@
 
   /* ---- 記帳表單：模板快速選擇 ---- */
   .tpl-quick-row{ display:flex; flex-direction:column; gap:8px; }
-  .tpl-quick-row label{ font-size:12px; color:var(--ink-soft); font-weight:500; display:flex; flex-direction:column; gap:5px; }
+  .tpl-quick-label{ font-size:12.5px; color:var(--ink); font-weight:600; display:flex; flex-direction:column; gap:2px; }
+  .tpl-quick-hint{ font-size:11.5px; color:var(--ink-soft); font-weight:400; }
   .tpl-chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
   .tpl-chip{
     background:var(--card); border:1px solid var(--paper-line); border-radius:999px;
@@ -535,10 +537,21 @@
   }
   .tpl-chip.active{ background:var(--gold); border-color:var(--gold); color:#241c08; font-weight:600; }
   .tpl-chip-empty{ font-size:12.5px; color:var(--ink-soft); }
-  .tpl-manage-fields{ display:flex; flex-wrap:wrap; gap:10px 16px; margin-bottom:8px; }
-  .tpl-manage-fields label{ font-size:12px; color:var(--ink-soft); font-weight:500; }
-  .tpl-manage-fields input[type="number"]{ width:100px; }
-  .tpl-manage-fields .checkbox-row{ display:flex; align-items:center; gap:6px; }
+  .tpl-manage-box{
+    background:rgba(255,255,255,.6); border:1px dashed var(--gold); border-radius:var(--radius-sm);
+    padding:12px 12px 10px; display:flex; flex-direction:column; gap:10px;
+  }
+  .tpl-manage-title{ font-size:12.5px; font-weight:600; color:var(--ink); }
+  .tpl-manage-title span{ color:var(--gold); }
+  .tpl-manage-fields{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 18px; }
+  .tpl-manage-fields label{
+    display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--ink-soft); font-weight:500; margin:0;
+  }
+  .tpl-manage-fields input[type="number"]{ width:120px; }
+  .tpl-manage-fields label.checkbox-row{
+    flex-direction:row; align-items:center; gap:7px; padding-bottom:9px;
+  }
+  .tpl-manage-box .form-actions{ margin:0; justify-content:flex-end; }
 
   /* ---- 主類別 / 子類別 選單 ---- */
   .cat-select-row{ grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
@@ -805,21 +818,23 @@
             </div>
             <input type="hidden" id="trType" value="expense">
             <div class="full tpl-quick-row" id="trTemplateRow" style="display:none;">
-              <label style="margin:0;">從模板快速記帳（點一下帶入內容，再依實際狀況調整日期或金額；再點一次可以更新或刪除這個模板）</label>
+              <div class="tpl-quick-label">從模板快速記帳
+                <span class="tpl-quick-hint">點一下帶入內容；再點一次同一個可以調整設定或刪除</span>
+              </div>
               <div class="tpl-chip-row" id="trTemplateChips"></div>
-              <div class="tpl-manage-extra" id="trTemplateManageRow" style="display:none; margin-top:4px;">
+              <div class="tpl-manage-box" id="trTemplateManageRow" style="display:none;">
+                <div class="tpl-manage-title">模板設定 · <span id="trTemplateManageName"></span></div>
                 <div class="tpl-manage-fields">
-                  <label style="margin:0;">每月幾號繳（僅供提醒顯示）
-                    <input type="number" id="trTplDay" min="1" max="28" placeholder="例如 5">
+                  <label>每月幾號繳
+                    <input type="number" id="trTplDay" min="1" max="28" placeholder="僅供提醒，選填">
                   </label>
-                  <label class="checkbox-row" style="margin:0;">
+                  <label class="checkbox-row">
                     <input type="checkbox" id="trTplActive">
                     <span>每月自動出現在「本月待加入」清單</span>
                   </label>
                 </div>
                 <div class="form-actions">
-                  <button type="button" class="small" id="trTemplateUpdateBtn">更新模板</button>
-                  <button type="button" class="small danger" id="trTemplateDeleteBtn">刪除模板</button>
+                  <button type="button" class="small danger" id="trTemplateDeleteBtn">刪除這個模板</button>
                 </div>
               </div>
             </div>
@@ -2910,6 +2925,7 @@ window.editTransaction = id => {
   $('#trFormTitle').textContent = '編輯記帳';
   $('#trSaveContinue').style.display = 'none'; // 編輯既有記帳時不適用批量連續新增
   $('#trTemplateRow').style.display = 'none'; // 編輯既有記帳時不能再套用模板（會被誤認成新增）
+  hideTplManageRow_(); // 清掉可能殘留的模板選取狀態，避免「更新模板」按鈕誤指到舊模板
   moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
 };
@@ -2930,8 +2946,8 @@ window.deleteTransaction = async id => {
 // 在「新增記帳」表單最上面多顯示一排可以點的模板，點下去直接把常用內容
 // （類別、金額、帳戶、共同帳本設定…）帶入表單，日期維持原本表單上的值不動，
 // 使用者只要視情況調整日期、微調金額或名稱就能存檔，不用重新選一次類別。
-// 目前選取中的模板 id（用來顯示「更新模板／刪除模板」按鈕）；
-// 只要表單被清空、重新整理或存檔，就會清掉選取狀態。
+// 目前選取中的模板 id（用來顯示模板設定區塊、決定下方按鈕要「存成模板」還是
+// 「更新模板」）；只要表單被清空、重新整理或存檔，就會清掉選取狀態。
 let selectedTplId_ = '';
 
 function renderTrTemplateChips(){
@@ -2950,15 +2966,26 @@ function renderTrTemplateChips(){
   }).join('');
 }
 
+// 「存成模板」按鈕同時兼任「更新模板」：沒有選取模板時是「存成模板」（存一筆
+// 新的），點過某個模板之後文字會換成「更新模板」，直接把表單內容存回那個
+// 模板，不用另外多一顆按鈕、也不會讓使用者搞不清楚現在點下去會發生什麼事。
+function syncTplSaveBtnLabel_(){
+  const btn = $('#trSaveAsTemplate');
+  const t = selectedTplId_ && state.recurring.find(x => x.id === selectedTplId_);
+  btn.textContent = t ? `更新模板「${t.name}」` : '存成模板';
+  btn.classList.toggle('primary-outline', !!t);
+}
+
 function hideTplManageRow_(){
   selectedTplId_ = '';
   $('#trTemplateManageRow').style.display = 'none';
+  syncTplSaveBtnLabel_();
 }
 
 // 點一下模板：一律當成「新增」（trId 清空），把模板存的內容帶入表單；
 // 沿用跟「編輯記帳」/共同帳本相同的一套顯示/隱藏邏輯。同時把這個模板記
-// 為「選取中」，底下會出現「更新模板／刪除模板」按鈕，方便直接調整或刪除
-// 這個模板，不用再跳到另一個管理頁面。
+// 為「選取中」，底下會出現模板設定區塊（每月幾號／每月自動加入／刪除），
+// 下方「存成模板」按鈕也會變成「更新模板」，不用再跳到另一個管理頁面。
 window.applyTemplateToTr = id => {
   const t = state.recurring.find(x => x.id === id);
   if(!t) return;
@@ -2977,51 +3004,17 @@ window.applyTemplateToTr = id => {
   syncCatRowVisibility();
   $('#trFormTitle').textContent = `新增記帳（已帶入模板：${t.name}）`;
   $('#trSaveContinue').style.display = ''; // 這一律是新增，可以繼續用批量記帳按鈕
-  selectedTplId_ = (selectedTplId_ === id) ? '' : id; // 再點一次同一個模板可以收合管理按鈕
+  selectedTplId_ = (selectedTplId_ === id) ? '' : id; // 再點一次同一個模板可以收合設定區塊
   $('#trTemplateManageRow').style.display = selectedTplId_ ? '' : 'none';
+  $('#trTemplateManageName').textContent = selectedTplId_ ? t.name : '';
   if(selectedTplId_){
     $('#trTplDay').value = t.dayOfMonth || '';
     $('#trTplActive').checked = String(t.active) !== 'false';
   }
+  syncTplSaveBtnLabel_();
   renderTrTemplateChips();
   setTimeout(() => $('#trAmount').focus(), 50);
 };
-
-// 「更新模板」：把表單目前的內容（名稱、類別、金額、帳戶、共同帳本設定）
-// 存回目前選取中的模板，不用另外開一個模板管理頁面。
-$('#trTemplateUpdateBtn').addEventListener('click', async () => {
-  const t = state.recurring.find(x => x.id === selectedTplId_);
-  if(!t){ alert('請先點選一個模板。'); return; }
-  const type = $('#trType').value;
-  if(type === 'transfer'){ alert('轉帳沒辦法存成模板，模板只適用於支出／收入。'); return; }
-  const shared = $('#trShared').checked;
-  const splitMode = shared ? $('#trSplitMode').value : 'personal';
-  const payer = shared ? $('#trPayer').value : 'me';
-  const isAdvance = splitMode === 'advance' && payer !== 'partner';
-  const data = {
-    id: t.id,
-    name: t.name,
-    type,
-    category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#trCategory').value,
-    subcategory: isAdvance ? '' : $('#trSubcategory').value,
-    amount: parseFloat($('#trAmount').value) || 0,
-    accountId: $('#trAccount').value,
-    dayOfMonth: $('#trTplDay').value ? parseInt($('#trTplDay').value, 10) : '',
-    note: t.note || '',
-    active: $('#trTplActive').checked,
-    payer,
-    splitMode
-  };
-  try{
-    await runBusy(async () => {
-      const saved = await apiPost('update','recurring',data);
-      upsertLocal('recurring', saved);
-      renderRecurring();
-      renderTrTemplateChips();
-    }, '更新模板中…');
-  }catch(err){ alert('更新模板失敗：' + err.message); return; }
-  alert(`已更新模板「${t.name}」。`);
-});
 
 $('#trTemplateDeleteBtn').addEventListener('click', async () => {
   if(!selectedTplId_) return;
@@ -3030,10 +3023,13 @@ $('#trTemplateDeleteBtn').addEventListener('click', async () => {
   renderTrTemplateChips();
 });
 
-// 「存成模板」：把目前表單正在打的內容（不含日期）存成一筆新的模板，
-// 預設「每月自動出現在待加入清單」不勾選——單純要留著下次快速記帳用的模板，
-// 不會平白無故每個月都跳出來提醒；如果之後想改成每月固定帳單，可以到
-// 「模板」分頁把那個模板的「啟用」打勾。
+// 「存成模板／更新模板」（同一顆按鈕）：
+// - 沒有選取模板時：把目前表單內容（不含日期）存成一筆新的模板，預設「每月
+//   自動出現在待加入清單」不勾選，單純留著下次快速記帳用，不會平白每個月
+//   跳出來提醒；想改成每月固定帳單，之後點一下模板、勾選「每月自動加入」再
+//   按這顆按鈕更新即可。
+// - 已選取模板時：直接把表單目前內容（含模板設定區塊的每月幾號／每月自動
+//   加入）存回這個模板，不用另外開一個模板管理頁面。
 $('#trSaveAsTemplate').addEventListener('click', async () => {
   const type = $('#trType').value;
   if(type === 'transfer'){ alert('轉帳沒辦法存成模板，模板只適用於支出／收入。'); return; }
@@ -3041,32 +3037,43 @@ $('#trSaveAsTemplate').addEventListener('click', async () => {
   const splitMode = shared ? $('#trSplitMode').value : 'personal';
   const payer = shared ? $('#trPayer').value : 'me';
   const isAdvance = splitMode === 'advance' && payer !== 'partner';
-  const defaultName = $('#trNote').value.trim();
-  const name = prompt('這個模板要取什麼名字？（下次記帳時會顯示這個名字）', defaultName);
-  if(name === null) return; // 使用者取消
-  if(!name.trim()){ alert('請輸入模板名稱。'); return; }
+  const existing = selectedTplId_ && state.recurring.find(x => x.id === selectedTplId_);
+
+  let name = existing ? existing.name : '';
+  if(!existing){
+    const defaultName = $('#trNote').value.trim();
+    name = prompt('這個模板要取什麼名字？（下次記帳時會顯示這個名字）', defaultName);
+    if(name === null) return; // 使用者取消
+    if(!name.trim()){ alert('請輸入模板名稱。'); return; }
+    name = name.trim();
+  }
+
   const data = {
-    name: name.trim(),
+    id: existing ? existing.id : undefined,
+    name,
     type,
     category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#trCategory').value,
     subcategory: isAdvance ? '' : $('#trSubcategory').value,
     amount: parseFloat($('#trAmount').value) || 0,
     accountId: $('#trAccount').value,
-    dayOfMonth: '',
-    note: '',
-    active: false,
+    dayOfMonth: existing ? ($('#trTplDay').value ? parseInt($('#trTplDay').value, 10) : '') : '',
+    note: existing ? (existing.note || '') : '',
+    active: existing ? $('#trTplActive').checked : false,
     payer,
     splitMode
   };
   try{
     await runBusy(async () => {
-      const saved = await apiPost('add','recurring',data);
+      const saved = existing
+        ? await apiPost('update','recurring',data)
+        : await apiPost('add','recurring',data);
       upsertLocal('recurring', saved);
-      renderTrTemplateChips();
       renderRecurring();
-    }, '存成模板中…');
-  }catch(err){ alert('存成模板失敗：' + err.message); return; }
-  alert(`已存成模板「${data.name}」，下次在「新增記帳」表單最上面就能點它快速帶入。`);
+      renderTrTemplateChips();
+      syncTplSaveBtnLabel_();
+    }, existing ? '更新模板中…' : '存成模板中…');
+  }catch(err){ alert((existing ? '更新模板失敗：' : '存成模板失敗：') + err.message); return; }
+  alert(existing ? `已更新模板「${name}」。` : `已存成模板「${name}」，下次在「新增記帳」表單最上面就能點它快速帶入。`);
 });
 
 // ---------- 模板（房租/健保費/訂閱費用...每月自動填寫） ----------
