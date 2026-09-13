@@ -1210,7 +1210,7 @@ const cfg = {
 // 前端版本號：每次你改完這個檔案、要重新上傳到 GitHub Pages 時，
 // 記得順手更新這個字串（例如改成今天的日期），才能在「設定」頁看出
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
-const FRONTEND_VERSION = '2026-09-14';
+const FRONTEND_VERSION = '2026-09-13';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -1312,25 +1312,15 @@ function addMainCategory(type, name){
   saveCategoryTree(type, tree);
   return true;
 }
-// 重新命名主類別：先請後端把 Transactions／RecurringTemplates 裡符合條件的舊資料
-// 一併改成新名稱，成功後才更新 localStorage 的類別清單、以及目前瀏覽器記憶體裡
-// 的 state.transactions / state.recurring，讓「類別清單」跟「舊紀錄」的名稱保持一致。
-// 注意：改成 async，呼叫端（handleCategoryBlockClick）需要 await 這個函式。
-async function renameMainCategory(type, oldName, newName){
+function renameMainCategory(type, oldName, newName){
   newName = String(newName || '').trim();
   if(!newName || newName === oldName) return false;
   const tree = getCategoryTree(type);
   if(tree.some(m => m.name === newName)) return false;
   const m = tree.find(x => x.name === oldName);
   if(!m) return false;
-
-  await apiPost('renameCategoryEverywhere', null, { txType: type, level: 'main', oldValue: oldName, newValue: newName });
-
   m.name = newName;
   saveCategoryTree(type, tree);
-  state.transactions.forEach(t => { if(t.type === type && t.category === oldName) t.category = newName; });
-  state.recurring.forEach(t => { if(t.type === type && t.category === oldName) t.category = newName; });
-  markAllDirty();
   return true;
 }
 function removeMainCategory(type, name){
@@ -1349,10 +1339,7 @@ function addSubCategory(type, mainName, subName){
   saveCategoryTree(type, tree);
   return true;
 }
-// 重新命名子類別：同樣先同步後端舊資料，成功後再更新本機類別清單跟記憶體裡的
-// 記帳紀錄／固定項目範本。只會改「同一個主類別底下」品項等於 oldSub 的子類別，
-// 不會動到別的主類別下剛好同名的子類別。
-async function renameSubCategory(type, mainName, oldSub, newSub){
+function renameSubCategory(type, mainName, oldSub, newSub){
   newSub = String(newSub || '').trim();
   if(!newSub || newSub === oldSub) return false;
   const tree = getCategoryTree(type);
@@ -1361,14 +1348,8 @@ async function renameSubCategory(type, mainName, oldSub, newSub){
   if(m.subs.includes(newSub)) return false;
   const idx = m.subs.indexOf(oldSub);
   if(idx === -1) return false;
-
-  await apiPost('renameCategoryEverywhere', null, { txType: type, level: 'sub', mainName: mainName, oldValue: oldSub, newValue: newSub });
-
   m.subs[idx] = newSub;
   saveCategoryTree(type, tree);
-  state.transactions.forEach(t => { if(t.type === type && t.category === mainName && t.subcategory === oldSub) t.subcategory = newSub; });
-  state.recurring.forEach(t => { if(t.type === type && t.category === mainName && t.subcategory === oldSub) t.subcategory = newSub; });
-  markAllDirty();
   return true;
 }
 function removeSubCategory(type, mainName, subName){
@@ -2634,9 +2615,8 @@ function updateTrFabVisibility(){
 // 記帳頁：記帳（含轉帳）/ 共同帳本 / 統計分析 / 匯入 / 類別設定 子分頁切換
 const TR_SUBS = ['records','ledger','stats','import','categories'];
 // 這幾個分頁需要看到完整記帳歷史（不只最近 3 個月）才會算得準：
-// 共同帳本可能有超過 3 個月還沒結算的舊項目、統計分析的「跟平均比」也需要更久以前的資料、
-// 類別設定要從「過去所有記帳紀錄」同步品項名稱，只看最近 3 個月會漏掉更久以前用過的類別。
-const TR_SUBS_NEED_FULL_HISTORY = ['ledger', 'stats', 'categories'];
+// 共同帳本可能有超過 3 個月還沒結算的舊項目、統計分析的「跟平均比」也需要更久以前的資料。
+const TR_SUBS_NEED_FULL_HISTORY = ['ledger', 'stats'];
 $('#trSubNav').addEventListener('click', async e => {
   const btn = e.target.closest('button[data-sub]');
   if(!btn) return;
@@ -3247,32 +3227,6 @@ function escapeHtml(s){
 function refreshCategoryDependents(){
   populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
 }
-// 從記帳紀錄／固定項目「反向」把用過的品項同步進類別清單：
-// CSV 匯入、舊資料、或別的裝置手動新增過的品項，文字可能本來就不在目前的
-// 主類別/子類別清單裡；每次打開「類別設定」頁面時，掃一次目前記憶體裡的
-// 記帳紀錄跟固定項目範本，把清單裡還沒有的主類別／子類別自動補進去，
-// 這樣類別設定頁就能看到、管理到過去實際用過的所有品項，不用自己手動一個一個新增。
-// 只會新增缺少的項目，不會動到既有的排序或使用者自訂的內容。
-function syncCategoryTreeFromTransactions(){
-  ['expense','income'].forEach(type => {
-    const tree = getCategoryTree(type);
-    let changed = false;
-    const mergeOne = (main, sub) => {
-      main = String(main || '').trim();
-      if(!main) return;
-      let m = tree.find(x => x.name === main);
-      if(!m){ m = { name: main, subs: [] }; tree.push(m); changed = true; }
-      sub = String(sub || '').trim();
-      if(sub){
-        if(!m.subs) m.subs = [];
-        if(!m.subs.includes(sub)){ m.subs.push(sub); changed = true; }
-      }
-    };
-    state.transactions.forEach(t => { if(t.type === type) mergeOne(t.category, t.subcategory); });
-    state.recurring.forEach(t => { if(t.type === type) mergeOne(t.category, t.subcategory); });
-    if(changed) saveCategoryTree(type, tree);
-  });
-}
 function renderCategoryBlocks(type){
   const wrap = $(type === 'expense' ? '#catBlocksExpense' : '#catBlocksIncome');
   const tree = getCategoryTree(type);
@@ -3301,7 +3255,6 @@ function renderCategoryBlocks(type){
     </div>`).join('');
 }
 function renderCategories(){
-  syncCategoryTreeFromTransactions();
   renderCategoryBlocks('expense');
   renderCategoryBlocks('income');
 }
@@ -3319,22 +3272,13 @@ $('#catAddIncomeBtn').addEventListener('click', () => handleAddMainCategory('inc
 $('#catAddExpense').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddMainCategory('expense', '#catAddExpense'); } });
 $('#catAddIncome').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddMainCategory('income', '#catAddIncome'); } });
 
-// 改成 async：重新命名主類別／子類別需要先呼叫後端，把舊資料一起同步改名，
-// 這裡用 runBusy 讓畫面顯示「處理中」、避免使用者在等後端回應時重複點擊，
-// 呼叫失敗（例如連線問題）時也要提醒使用者，不能悄悄失敗、卻讓畫面看起來像改名成功。
-async function handleCategoryBlockClick(e){
+function handleCategoryBlockClick(e){
   const renameMain = e.target.closest('.catRenameMainBtn');
   if(renameMain){
     const { catType, catMain } = renameMain.dataset;
-    const next = prompt(`重新命名主類別「${catMain}」：\n（同時會把過去所有已經記過、品項是「${catMain}」的記帳紀錄與固定項目一併改成新名稱）`, catMain);
+    const next = prompt(`重新命名主類別「${catMain}」：`, catMain);
     if(next === null) return;
-    try{
-      const ok = await runBusy(() => renameMainCategory(catType, catMain, next), '重新命名中，同步更新舊紀錄…');
-      if(!ok){ alert('名稱不能為空，也不能跟現有主類別重複。'); return; }
-    }catch(err){
-      alert('重新命名失敗：' + err.message);
-      return;
-    }
+    if(!renameMainCategory(catType, catMain, next)){ alert('名稱不能為空，也不能跟現有主類別重複。'); return; }
     renderCategories();
     refreshCategoryDependents();
     return;
@@ -3351,15 +3295,9 @@ async function handleCategoryBlockClick(e){
   const renameSub = e.target.closest('.catRenameSubBtn');
   if(renameSub){
     const { catType, catMain, catSub } = renameSub.dataset;
-    const next = prompt(`重新命名子類別「${catSub}」（主類別：${catMain}）：\n（同時會把過去所有已經記過、品項是「${catMain}／${catSub}」的記帳紀錄與固定項目一併改成新名稱）`, catSub);
+    const next = prompt(`重新命名子類別「${catSub}」（主類別：${catMain}）：`, catSub);
     if(next === null) return;
-    try{
-      const ok = await runBusy(() => renameSubCategory(catType, catMain, catSub, next), '重新命名中，同步更新舊紀錄…');
-      if(!ok){ alert('名稱不能為空，也不能跟同一主類別下的子類別重複。'); return; }
-    }catch(err){
-      alert('重新命名失敗：' + err.message);
-      return;
-    }
+    if(!renameSubCategory(catType, catMain, catSub, next)){ alert('名稱不能為空，也不能跟同一主類別下的子類別重複。'); return; }
     renderCategories();
     refreshCategoryDependents();
     return;
