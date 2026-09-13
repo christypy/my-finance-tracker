@@ -39,7 +39,7 @@
 // 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
 // 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
 // FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
-const BACKEND_VERSION_ = '2026-09-13';
+const BACKEND_VERSION_ = '2026-09-14';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -407,6 +407,74 @@ function settleLedger_(ids, settlementData) {
   return { updated: updated, settlement: settlement, account: account };
 }
 
+// ---------- 類別重新命名：同步套用到過去已經記過的資料 ----------
+// 前端「類別設定」頁的主類別/子類別都存在瀏覽器 localStorage，跟 Transactions／
+// RecurringTemplates 表裡實際存的品項文字是分開的兩份資料。如果只改 localStorage
+// 裡的名稱，舊的記帳紀錄跟固定項目範本用的還是舊名稱，會變成「類別清單改了名字、
+// 但舊資料對不起來」。這裡在改名的同時，一次把 Transactions 跟 RecurringTemplates
+// 兩張表裡符合條件的列都掃過去、直接改成新名稱，讓舊資料跟著統一更新。
+//
+// payload:
+//   txType    'expense' | 'income'，只改這個收支類型底下的資料
+//   level     'main'（改主類別名稱）| 'sub'（改子類別名稱）
+//   mainName  level 為 'sub' 時才需要：只有這個主類別底下、品項等於 oldValue 的
+//             子類別才會被改名（避免改到別的主類別下同名的子類別）
+//   oldValue  舊名稱（主類別名稱，或子類別名稱）
+//   newValue  新名稱
+//
+// 效能：跟 settleLedger_ 一樣的作法——一次 getDataRange 把整張表讀進記憶體、
+// 在陣列裡就地修改符合條件的儲存格，最後只呼叫一次 setValues 寫回去，
+// 不管改到幾筆資料都只讀寫表格各一次，不會一筆一筆來回。
+function renameCategoryEverywhere_(payload) {
+  const txType = payload && payload.txType;
+  const level = payload && payload.level;
+  const oldValue = String((payload && payload.oldValue) || '');
+  const newValue = String((payload && payload.newValue) || '');
+  const mainName = (payload && payload.mainName) || '';
+  if (!txType || (level !== 'main' && level !== 'sub') || !oldValue || !newValue) {
+    throw new Error('缺少必要參數');
+  }
+
+  let totalUpdated = 0;
+  ['transactions', 'recurring'].forEach(key => {
+    const sheet = getSheet_(key);
+    const headers = SHEET_HEADERS[key];
+    const typeCol = headers.indexOf('type');
+    const catCol = headers.indexOf('category');
+    const subCol = headers.indexOf('subcategory');
+    const updatedAtCol = headers.indexOf('updatedAt');
+    if (typeCol === -1 || catCol === -1) return; // 保險：這張表沒有對應欄位就跳過
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    const range = sheet.getRange(2, 1, lastRow - 1, headers.length);
+    const values = range.getValues();
+    const now = new Date().toISOString();
+    let changed = false;
+
+    for (let i = 0; i < values.length; i++) {
+      const row = values[i];
+      if (row[0] === '' || row[0] === null) continue; // 空列（刪除後留下的）跳過
+      if (row[typeCol] !== txType) continue;
+
+      if (level === 'main') {
+        if (row[catCol] !== oldValue) continue;
+        row[catCol] = newValue;
+      } else {
+        if (subCol === -1) continue;
+        if (row[catCol] !== mainName || row[subCol] !== oldValue) continue;
+        row[subCol] = newValue;
+      }
+      if (updatedAtCol !== -1) row[updatedAtCol] = now;
+      changed = true;
+      totalUpdated++;
+    }
+    if (changed) range.setValues(values);
+  });
+
+  return { updated: totalUpdated };
+}
+
 // ---------- 固定項目（房租/健保費/訂閱費用...）自動加入本月記帳 ----------
 // 每次呼叫都是「檢查 + 補上」：對每個啟用中的範本，檢查該月份的 Transactions
 // 是否已經有 recurringId = 範本id 的紀錄，沒有的話才新增一筆（同時走
@@ -647,6 +715,7 @@ function doPost(e) {
     if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
     if (action === 'settleLedger') return jsonOut_({ ok: true, data: settleLedger_((body.data && body.data.ids) || [], body.data && body.data.settlement) });
     if (action === 'runRecurringTemplates') return jsonOut_({ ok: true, data: runRecurringTemplates_(body.data && body.data.month, (body.data && body.data.ids) || null) });
+    if (action === 'renameCategoryEverywhere') return jsonOut_({ ok: true, data: renameCategoryEverywhere_(body.data) });
 
     const sheetKey = body.sheet;
     if (!SHEET_NAMES[sheetKey]) return jsonOut_({ ok: false, error: '未知的資料表' });
