@@ -625,13 +625,17 @@
   .sub-add-row button{ flex:none; min-height:34px; padding:5px 12px; font-size:12.5px; }
 
   /* ---- 各類別每月花費：長條圖（依類別頁面） ---- */
-  .cat-chart-card{ margin-bottom:22px; }
+  .cat-chart-card{ margin-bottom:22px; cursor:pointer; }
   .cat-chart-card:last-child{ margin-bottom:0; }
   .cat-chart-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
   .cat-chart-name{ font-weight:600; font-size:14px; color:var(--ink); }
+  .cat-chart-caret{ display:inline-block; margin-left:4px; font-size:10px; color:var(--ink-soft); transition:transform .15s; }
+  .cat-chart-card.open .cat-chart-caret{ transform:rotate(90deg); }
   .cat-chart-total{ font-family:'Roboto Slab', serif; font-size:13.5px; color:var(--ink-soft); }
-  .cat-chart-bars{ display:flex; align-items:flex-end; gap:3px; height:60px; background:var(--paper); border:1px solid var(--paper-line); border-radius:8px; padding:6px 4px 0; }
-  .cat-chart-bar-col{ flex:1; height:100%; display:flex; align-items:flex-end; min-width:0; }
+  .cat-chart-bars{ display:flex; align-items:flex-end; gap:3px; background:var(--paper); border:1px solid var(--paper-line); border-radius:8px; padding:6px 4px 4px; }
+  .cat-chart-col{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; }
+  .cat-chart-val{ font-size:8px; color:var(--ink-soft); line-height:1.3; height:11px; white-space:nowrap; }
+  .cat-chart-bar-track{ width:100%; height:56px; display:flex; align-items:flex-end; }
   .cat-chart-bar{ width:100%; background:var(--red); border-radius:3px 3px 0 0; min-height:2px; transition:height .2s; }
   .cat-chart-months{ display:flex; gap:3px; margin-top:4px; }
   .cat-chart-month-label{ flex:1; text-align:center; font-size:9.5px; color:var(--ink-soft); }
@@ -2531,8 +2535,16 @@ function renderStats(){
 }
 
 // ---------- 各類別每月花費（依類別頁面）：用長條圖看每個主類別的月度變化 ----------
+let expandedCatChart_ = null; // 目前展開子類別明細的類別（依類別頁面），null 代表全部收合
+function fmtShort(n){
+  const num = Number(n) || 0;
+  if(!num) return '';
+  if(num >= 10000) return Math.round(num/1000) + 'k';
+  if(num >= 1000) return (num/1000).toFixed(1) + 'k';
+  return String(Math.round(num));
+}
 function renderCategoryMonthCharts(year){
-  const catMap = {}; // { 主類別: [12 個月金額] }
+  const catMap = {}; // { 主類別: { arr:[12個月金額], subs:{子類別: 金額} } }
   state.transactions.forEach(t => {
     if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
     const d = t.date || '';
@@ -2540,37 +2552,64 @@ function renderCategoryMonthCharts(year){
     const m = parseInt(d.slice(5,7), 10) - 1;
     if(m < 0 || m > 11) return;
     const cat = t.category || '其他';
-    if(!catMap[cat]) catMap[cat] = Array(12).fill(0);
-    catMap[cat][m] += Number(t.amount) || 0;
+    if(!catMap[cat]) catMap[cat] = { arr: Array(12).fill(0), subs: {} };
+    const amt = Number(t.amount) || 0;
+    catMap[cat].arr[m] += amt;
+    const sub = (t.subcategory || '').trim() || '未分類';
+    catMap[cat].subs[sub] = (catMap[cat].subs[sub] || 0) + amt;
   });
   const container = $('#statsCategoryCharts');
   const cats = Object.keys(catMap).map(cat => {
-    const arr = catMap[cat];
+    const { arr, subs } = catMap[cat];
     const total = arr.reduce((s,v) => s+v, 0);
     const max = Math.max(...arr);
-    return { cat, arr, total, max };
+    return { cat, arr, subs, total, max };
   }).sort((a,b) => b.total - a.total);
   if(!cats.length){
+    expandedCatChart_ = null;
     container.innerHTML = `<div class="empty">這個年度沒有支出資料。</div>`;
     return;
   }
   const monthLabels = Array.from({length:12}, (_,i) => `<div class="cat-chart-month-label">${i+1}</div>`).join('');
-  container.innerHTML = cats.map(({cat, arr, total, max}) => {
-    const bars = arr.map((v, i) => {
+  container.innerHTML = cats.map(({cat, arr, subs, total, max}) => {
+    const cols = arr.map((v, i) => {
       const pct = max ? Math.round(v / max * 100) : 0;
       const height = v > 0 ? Math.max(pct, 4) : 0;
-      return `<div class="cat-chart-bar-col"><div class="cat-chart-bar" style="height:${height}%" title="${i+1} 月：$${fmt(v)}"></div></div>`;
+      return `<div class="cat-chart-col">
+        <div class="cat-chart-val">${fmtShort(v)}</div>
+        <div class="cat-chart-bar-track"><div class="cat-chart-bar" style="height:${height}%" title="${i+1} 月：$${fmt(v)}"></div></div>
+      </div>`;
     }).join('');
-    return `<div class="cat-chart-card">
+    const isOpen = expandedCatChart_ === cat;
+    const subEntries = Object.entries(subs || {}).sort((a,b) => b[1] - a[1]);
+    const subHtml = isOpen
+      ? `<div class="rank-sub-list">${
+          subEntries.length
+            ? subEntries.map(([sub, amt]) => {
+                const subPct = total ? Math.round(amt / total * 100) : 0;
+                return `<div class="rank-sub-row"><span>${escapeHtml(sub)}</span><span>$${fmt(amt)}（${subPct}%）</span></div>`;
+              }).join('')
+            : `<div class="rank-sub-row empty">沒有子類別明細</div>`
+        }</div>`
+      : '';
+    return `<div class="cat-chart-card${isOpen ? ' open' : ''}" data-cat="${escapeHtml(cat)}">
       <div class="cat-chart-head">
-        <span class="cat-chart-name">${escapeHtml(cat)}</span>
+        <span class="cat-chart-name">${escapeHtml(cat)}<span class="cat-chart-caret">▶</span></span>
         <span class="cat-chart-total">$${fmt(total)}</span>
       </div>
-      <div class="cat-chart-bars">${bars}</div>
+      <div class="cat-chart-bars">${cols}</div>
       <div class="cat-chart-months">${monthLabels}</div>
+      ${subHtml}
     </div>`;
   }).join('');
 }
+$('#statsCategoryCharts').addEventListener('click', e => {
+  const card = e.target.closest('.cat-chart-card');
+  if(!card) return;
+  const cat = card.dataset.cat;
+  expandedCatChart_ = (expandedCatChart_ === cat) ? null : cat;
+  renderCategoryMonthCharts(currentStatsPeriod());
+});
 
 // 浮動「＋記帳」按鈕：只有在「記帳」分頁且停留在「記帳」子分頁時才顯示，
 // 其他分頁/子分頁看不到，避免點了按鈕卻不知道跳去哪裡
