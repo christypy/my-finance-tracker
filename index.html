@@ -621,33 +621,22 @@
   .dist-month-block{ margin-bottom:14px; }
   .dist-month-title{ font-size:12.5px; color:var(--ink-soft); margin-bottom:6px; font-family:'Roboto Slab', serif; }
 
-  /* ---- 統計分析：預算追蹤 ---- */
   .stat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-  .budget-add-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
-  .budget-add-row select{ flex:1 1 140px; min-height:38px; padding:7px 10px; }
-  .budget-add-row input{ flex:1 1 120px; min-height:38px; padding:7px 10px; }
-  .budget-add-row button{ flex:none; min-height:38px; }
-  .budget-row{ background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:10px; }
-  .budget-row-top{ display:flex; justify-content:space-between; gap:8px; font-size:13px; margin-bottom:6px; }
-  .budget-row-top span:first-child{ font-weight:600; color:var(--ink); }
-  .budget-row-top span:last-child{ font-family:'Roboto Slab', serif; color:var(--ink-soft); white-space:nowrap; }
-  .budget-track{ height:14px; background:var(--paper-line); border-radius:999px; overflow:hidden; }
-  .budget-fill{ height:100%; border-radius:999px; background:var(--green); transition:width .2s; }
-  .budget-fill.warn{ background:var(--gold); }
-  .budget-fill.danger{ background:var(--red); }
-  .budget-row-bottom{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; font-size:11.5px; color:var(--ink-soft); }
-  .budget-row-bottom .ok{ color:var(--green); font-weight:600; }
-  .budget-row-bottom .warn{ color:var(--gold); font-weight:600; }
-  .budget-row-bottom .danger{ color:var(--red); font-weight:600; }
-  .budget-row-bottom button{ margin-left:auto; }
 
   /* ---- 統計分析：支出排行（圓餅 + 排行榜） ---- */
   .category-rank-wrap{ display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
   .pie-wrap-mini{ flex:none; width:130px; }
   .pie-wrap-mini svg{ width:130px; height:130px; display:block; }
   .rank-list{ flex:1 1 220px; min-width:200px; }
-  .rank-row{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; }
+  .rank-row{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; cursor:pointer; }
   .rank-row:last-child{ margin-bottom:0; }
+  .rank-row .rank-caret{ display:inline-block; margin-left:4px; font-size:10px; color:var(--ink-soft); transition:transform .15s; }
+  .rank-row.open .rank-caret{ transform:rotate(90deg); }
+  .rank-sub-list{ margin-top:8px; padding:8px 10px; background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm); cursor:default; }
+  .rank-sub-row{ display:flex; justify-content:space-between; gap:8px; font-size:11.5px; color:var(--ink-soft); padding:3px 0; }
+  .rank-sub-row:not(:last-child){ border-bottom:1px dashed var(--paper-line); }
+  .rank-sub-row span:first-child{ color:var(--ink); }
+  .rank-sub-row.empty{ justify-content:center; padding:6px 0; }
   .rank-num{ width:18px; flex:none; font-family:'Roboto Slab', serif; font-size:13px; color:var(--gold); font-weight:700; padding-top:1px; }
   .rank-bar-wrap{ flex:1; min-width:0; }
   .rank-top{ display:flex; justify-content:space-between; gap:8px; font-size:12.5px; margin-bottom:4px; }
@@ -964,49 +953,36 @@
         <div class="summary-grid" id="statsSummaryGrid"></div>
         <div class="compare-grid" id="statsCompareGrid"></div>
 
-        <!-- ② 預算追蹤 -->
-        <div class="stat-section" id="statsBudgetSection">
-          <div class="stat-section-head">
-            <h3>預算追蹤</h3>
-          </div>
-          <p class="hint" style="margin-bottom:10px;">設定每月預算，這裡會即時顯示花了多少、還剩多少。只存在這台裝置的瀏覽器裡。</p>
-          <div class="budget-add-row">
-            <select id="budgetCatSelect"></select>
-            <input type="number" id="budgetAmountInput" min="0" step="1" placeholder="每月預算金額">
-            <button type="button" class="primary" id="budgetSaveBtn">設定</button>
-          </div>
-          <div id="budgetList"></div>
-        </div>
-
-        <!-- ③ 支出去了哪裡：排行 + 跟上期比 -->
+        <!-- ② 支出去了哪裡：排行 + 跟上期比（點一列可展開該類別的子類別明細） -->
         <div class="stat-section">
           <h3>支出去了哪裡</h3>
+          <p class="hint" style="margin-bottom:10px;">點一列可以展開看該主類別底下的子類別花了多少。全額代墊給對方的款項不算在支出裡。</p>
           <div class="category-rank-wrap">
             <div class="pie-wrap-mini" id="statsExpensePie"></div>
             <div class="rank-list" id="statsCategoryRank"></div>
           </div>
         </div>
 
-        <!-- ④ 固定 vs 彈性支出 -->
+        <!-- ③ 固定 vs 彈性支出 -->
         <div class="stat-section">
           <h3>固定支出 vs 彈性支出</h3>
           <p class="hint" style="margin-bottom:10px;">固定支出＝由「模板」自動加入的紀錄（房租、訂閱費等）；其餘算彈性花費，是比較能省的部分。</p>
           <div id="statsFixedVsFlex"></div>
         </div>
 
-        <!-- ⑤ 消費節奏：年模式看每月趨勢 -->
+        <!-- ④ 消費節奏：年模式看每月趨勢 -->
         <div class="stat-section" id="statsYearlyTrendSection" style="display:none;">
           <h3>年度每月支出趨勢</h3>
           <div id="statsYearlyTrend"></div>
         </div>
 
-        <!-- ⑥ 收入來源 -->
+        <!-- ⑤ 收入來源 -->
         <div class="stat-section">
           <h3>收入品項分佈</h3>
           <div id="statsIncomeBreakdown"></div>
         </div>
 
-        <!-- ⑦ 進階查詢（預設收合，不干擾主要重點） -->
+        <!-- ⑥ 進階查詢（預設收合，不干擾主要重點） -->
         <details class="entry-wrap" id="statsAdvancedDetails">
           <summary><span class="plus">＋</span>進階：類別月份分佈查詢</summary>
           <div class="stat-section" style="margin-top:14px;">
@@ -2171,7 +2147,9 @@ function previousPeriodStr(period, mode){
   return String((parseInt(period, 10) || 0) - 1);
 }
 function expenseTotalOf(period){
-  return transactionsInPeriod(period).filter(t => t.type === 'expense').reduce((s,t) => s + (Number(t.amount)||0), 0);
+  return transactionsInPeriod(period)
+    .filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME)
+    .reduce((s,t) => s + (Number(t.amount)||0), 0);
 }
 // 所有「有資料」的期間（依模式為月或年），用來計算平均值
 function periodsWithData(mode){
@@ -2255,23 +2233,31 @@ function renderPieChart(container, items, total, withLegend){
   container.innerHTML = `${svg}<div class="pie-legend">${legend}</div>`;
 }
 
-// ---------- 支出去了哪裡：排行榜（金額＋佔比＋筆數／平均＋跟上期比） ----------
+// ---------- 支出去了哪裡：排行榜（金額＋佔比＋筆數／平均＋跟上期比，可點開看子類別） ----------
 function categoryStatsFor(rows, type){
   const map = {};
   let total = 0;
-  rows.filter(t => t.type === type).forEach(t => {
-    const cat = t.category || '其他';
-    const amt = Number(t.amount) || 0;
-    if(!map[cat]) map[cat] = { total: 0, count: 0 };
-    map[cat].total += amt;
-    map[cat].count += 1;
-    total += amt;
-  });
+  rows
+    // 全額代墊給對方的款項不算「支出」，排行榜／圓餅圖裡不會出現這個類別
+    .filter(t => t.type === type && !(type === 'expense' && t.category === ADVANCE_CATEGORY_NAME))
+    .forEach(t => {
+      const cat = t.category || '其他';
+      const amt = Number(t.amount) || 0;
+      if(!map[cat]) map[cat] = { total: 0, count: 0, subs: {} };
+      map[cat].total += amt;
+      map[cat].count += 1;
+      const sub = (t.subcategory || '').trim() || '未分類';
+      map[cat].subs[sub] = (map[cat].subs[sub] || 0) + amt;
+      total += amt;
+    });
   return { total, map };
 }
+// 目前展開顯示子類別明細的主類別（支出排行榜），null 代表全部收合
+let expandedRankCat_ = null;
 function renderCategoryRanking(container, cur, prev){
   const entries = Object.entries(cur.map).sort((a,b) => b[1].total - a[1].total);
   if(!entries.length){
+    expandedRankCat_ = null;
     container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
     return;
   }
@@ -2290,11 +2276,23 @@ function renderCategoryRanking(container, cur, prev){
         moverHtml = `<span class="rank-mover ${cls}">${arrow} $${fmt(Math.abs(diff))} 較上期</span>`;
       }
     }
-    return `<div class="rank-row">
+    const isOpen = expandedRankCat_ === cat;
+    const subEntries = Object.entries(info.subs || {}).sort((a,b) => b[1] - a[1]);
+    const subHtml = isOpen
+      ? `<div class="rank-sub-list">${
+          subEntries.length
+            ? subEntries.map(([sub, amt]) => {
+                const subPct = info.total ? Math.round(amt / info.total * 100) : 0;
+                return `<div class="rank-sub-row"><span>${escapeHtml(sub)}</span><span>$${fmt(amt)}（${subPct}%）</span></div>`;
+              }).join('')
+            : `<div class="rank-sub-row empty">沒有子類別明細</div>`
+        }</div>`
+      : '';
+    return `<div class="rank-row${isOpen ? ' open' : ''}" data-rank-cat="${escapeHtml(cat)}">
       <div class="rank-num">${i+1}</div>
       <div class="rank-bar-wrap">
         <div class="rank-top">
-          <span class="rank-label"><span class="rank-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>${escapeHtml(cat)}</span>
+          <span class="rank-label"><span class="rank-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>${escapeHtml(cat)}<span class="rank-caret">▶</span></span>
           <span class="rank-value">$${fmt(info.total)}（${pct}%）</span>
         </div>
         <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
@@ -2302,14 +2300,25 @@ function renderCategoryRanking(container, cur, prev){
           <span>${info.count} 筆 · 平均 $${fmt(avg)}</span>
           ${moverHtml}
         </div>
+        ${subHtml}
       </div>
     </div>`;
   }).join('');
 }
+// 用來讓「點一列展開子類別」不用重新整個 renderStats() 就能重畫排行榜
+let lastCurExpStats_ = null;
+let lastPrevExpStats_ = null;
+$('#statsCategoryRank').addEventListener('click', e => {
+  const row = e.target.closest('.rank-row');
+  if(!row || !lastCurExpStats_) return;
+  const cat = row.dataset.rankCat;
+  expandedRankCat_ = (expandedRankCat_ === cat) ? null : cat;
+  renderCategoryRanking($('#statsCategoryRank'), lastCurExpStats_, lastPrevExpStats_);
+});
 
 // ---------- 固定支出 vs 彈性支出 ----------
 function renderFixedVsFlexible(container, rows){
-  const expenseRows = rows.filter(t => t.type === 'expense');
+  const expenseRows = rows.filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME);
   const total = expenseRows.reduce((s,t) => s + (Number(t.amount)||0), 0);
   if(!total){
     container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
@@ -2330,107 +2339,6 @@ function renderFixedVsFlexible(container, rows){
     </div>`;
   }).join('');
 }
-
-// ---------- 預算追蹤（存在這台裝置的瀏覽器裡，跟類別設定一樣） ----------
-const BUDGET_KEY = 'mybook_ledger_budgets_v1'; // { [主類別 或 "__total__"]: 每月預算金額 }
-const BUDGET_KEY_LEGACY = 'fin_budgets_v1'; // 舊 key 名稱，用於自動搬遷（讀取用，不會再寫入）
-const BUDGET_TOTAL_KEY = '__total__';
-function loadBudgets(){
-  try{
-    const raw = localStorage.getItem(BUDGET_KEY);
-    if(raw){
-      const parsed = JSON.parse(raw);
-      if(parsed && typeof parsed === 'object') return parsed;
-    }
-  }catch(e){}
-  // 新 key 底下沒資料時，看看舊 key 名稱是否已經存過預算設定，有的話搬過去一次
-  try{
-    const legacyRaw = localStorage.getItem(BUDGET_KEY_LEGACY);
-    if(legacyRaw){
-      const parsed = JSON.parse(legacyRaw);
-      if(parsed && typeof parsed === 'object'){
-        saveBudgets(parsed);
-        localStorage.removeItem(BUDGET_KEY_LEGACY);
-        return parsed;
-      }
-    }
-  }catch(e){}
-  return {};
-}
-function saveBudgets(map){ localStorage.setItem(BUDGET_KEY, JSON.stringify(map)); }
-function setBudget(cat, amount){
-  const map = loadBudgets();
-  if(amount > 0) map[cat] = amount; else delete map[cat];
-  saveBudgets(map);
-}
-function removeBudget(cat){
-  const map = loadBudgets();
-  delete map[cat];
-  saveBudgets(map);
-}
-function populateBudgetCatOptions(){
-  const sel = $('#budgetCatSelect');
-  const keep = sel.value;
-  const names = getCategoryNames('expense');
-  sel.innerHTML = `<option value="${BUDGET_TOTAL_KEY}">整體支出（不分類別）</option>` +
-    names.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-  if(Array.from(sel.options).some(o => o.value === keep)) sel.value = keep;
-}
-function renderBudgetSection(period, expenseByCat, totalExpense){
-  const section = $('#statsBudgetSection');
-  if(statsMode !== 'month'){
-    section.style.display = 'none';
-    return;
-  }
-  section.style.display = '';
-  populateBudgetCatOptions();
-  const budgets = loadBudgets();
-  const entries = Object.entries(budgets);
-  const list = $('#budgetList');
-  if(!entries.length){
-    list.innerHTML = `<div class="empty">尚未設定預算。設定後，這裡會顯示每個類別（或整體）本月花了多少、還剩多少，超支會提醒你。</div>`;
-    return;
-  }
-  const withUsage = entries.map(([cat, amt]) => {
-    const spent = cat === BUDGET_TOTAL_KEY ? totalExpense : (expenseByCat[cat] || 0);
-    const pct = amt ? Math.round(spent / amt * 100) : 0;
-    return { cat, amt: Number(amt) || 0, spent, pct };
-  }).sort((a,b) => (a.cat === BUDGET_TOTAL_KEY ? -1 : b.cat === BUDGET_TOTAL_KEY ? 1 : b.pct - a.pct));
-
-  list.innerHTML = withUsage.map(b => {
-    const label = b.cat === BUDGET_TOTAL_KEY ? '整體支出' : b.cat;
-    const barPct = Math.max(0, Math.min(100, b.pct));
-    const cls = b.pct >= 100 ? 'danger' : (b.pct >= 70 ? 'warn' : 'ok');
-    const remain = b.amt - b.spent;
-    const remainText = remain >= 0 ? `剩 $${fmt(remain)}` : `超支 $${fmt(Math.abs(remain))}`;
-    return `<div class="budget-row">
-      <div class="budget-row-top">
-        <span>${escapeHtml(label)}</span>
-        <span>$${fmt(b.spent)} / $${fmt(b.amt)}</span>
-      </div>
-      <div class="budget-track"><div class="budget-fill ${cls}" style="width:${barPct}%"></div></div>
-      <div class="budget-row-bottom">
-        <span class="${cls}">${b.pct}%</span>
-        <span>${remainText}</span>
-        <button type="button" class="small danger" data-del-budget="${escapeHtml(b.cat)}">刪除</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-$('#budgetSaveBtn').addEventListener('click', () => {
-  const cat = $('#budgetCatSelect').value;
-  const amt = parseFloat($('#budgetAmountInput').value);
-  if(!amt || amt <= 0){ alert('請輸入大於 0 的預算金額。'); return; }
-  setBudget(cat, amt);
-  $('#budgetAmountInput').value = '';
-  renderStats();
-});
-$('#budgetList').addEventListener('click', e => {
-  const btn = e.target.closest('button[data-del-budget]');
-  if(!btn) return;
-  removeBudget(btn.dataset.delBudget);
-  renderStats();
-});
 
 // ---------- 每日消費節奏（月模式）----------
 function daysElapsedInPeriod(period, mode){
@@ -2472,13 +2380,18 @@ function renderStats(){
   const period = currentStatsPeriod();
   const rows = transactionsInPeriod(period);
 
+  // 全額代墊給對方的款項（category === 代墊）雖然錢確實從帳戶流出，但那筆錢本來就不是
+  // 自己的花費，只是先幫對方付、之後會透過共同帳本結算拿回來，所以不算進「支出」統計。
+  const isRealExpense_ = t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME;
   const incomeTotal = rows.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
-  const expenseTotal = rows.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+(Number(t.amount)||0),0);
   // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
   // 沒有填帳戶的紀錄（多半是舊資料匯入，沒有對應到任何帳戶）只計入上面的收入／支出總額，
   // 單純知道花了多少、賺了多少，但不會影響結餘這個數字。
   const rowsWithAccount = rows.filter(t => t.accountId);
   const incomeWithAccount = rowsWithAccount.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  // 結餘算的是帳戶裡實際增減的錢，代墊款項雖然不算「支出」，但錢確實從帳戶流出了，
+  // 所以這裡仍然要把它算進去，結餘才會跟帳戶餘額對得起來。
   const expenseWithAccount = rowsWithAccount.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const net = incomeWithAccount - expenseWithAccount;
 
@@ -2501,23 +2414,22 @@ function renderStats(){
 
   renderCompare(period, expenseTotal);
 
-  // ② 支出去了哪裡：排行榜（跟上一期比較誰漲最多、誰降最多）
+  // ② 支出去了哪裡：排行榜（跟上一期比較誰漲最多、誰降最多；每列可點開看子類別明細）
   const prevPeriod = previousPeriodStr(period, statsMode);
   const curExpStats = categoryStatsFor(rows, 'expense');
   const prevExpStats = categoryStatsFor(transactionsInPeriod(prevPeriod), 'expense');
+  // 存起來給「點擊展開子類別」用：使用者點一列的時候只需要重畫排行榜本身，
+  // 不需要重新跑一次整個 renderStats（也不會不小心把使用者正在看的其他區塊重畫掉）。
+  lastCurExpStats_ = curExpStats;
+  lastPrevExpStats_ = prevExpStats;
   const rankedItems = Object.entries(curExpStats.map).sort((a,b) => b[1].total - a[1].total).map(([cat, info]) => [cat, info.total]);
   renderPieChart($('#statsExpensePie'), rankedItems, curExpStats.total, false);
   renderCategoryRanking($('#statsCategoryRank'), curExpStats, prevExpStats);
 
-  // ③ 預算追蹤
-  const expenseByCat = {};
-  Object.entries(curExpStats.map).forEach(([cat, info]) => { expenseByCat[cat] = info.total; });
-  renderBudgetSection(period, expenseByCat, expenseTotal);
-
-  // ④ 固定 vs 彈性支出
+  // ③ 固定 vs 彈性支出
   renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
 
-  // ⑤ 消費節奏：年模式顯示每月趨勢
+  // ④ 消費節奏：年模式顯示每月趨勢
   const trendSection = $('#statsYearlyTrendSection');
   if(statsMode === 'year' && period){
     trendSection.style.display = '';
@@ -2545,11 +2457,11 @@ function renderStats(){
     trendSection.style.display = 'none';
   }
 
-  // ⑥ 收入來源
+  // ⑤ 收入來源
   const inc = breakdownByCategory(rows, 'income');
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
 
-  // ⑦ 進階查詢（類別月份分佈，預設收合）
+  // ⑥ 進階查詢（類別月份分佈，預設收合）
   renderDistribution();
 }
 
@@ -2610,7 +2522,9 @@ function renderDistribution(){
     if(!mainCat){
       const map = {};
       let total = 0;
-      rows.forEach(t => {
+      // 「全部主類別」的總覽不算代墊款項（不是自己的支出）；如果使用者特地選了
+      // 「代墊」這個主類別要單獨查看，下面 else 分支會用完整的 rows，不受影響。
+      rows.filter(t => t.category !== ADVANCE_CATEGORY_NAME).forEach(t => {
         const cat = t.category || '其他';
         const amt = Number(t.amount) || 0;
         map[cat] = (map[cat] || 0) + amt;
