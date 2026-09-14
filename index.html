@@ -755,6 +755,11 @@
         <h2 id="dashboardAccountsTitle">帳戶一覽</h2>
         <button type="button" class="dash-list-reset" id="dashboardFilterReset" style="display:none;">顯示全部</button>
       </div>
+      <div class="acc-fav-filter" id="accFavFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+        <button type="button" class="small" data-fav="all">全部帳戶</button>
+        <button type="button" class="small" data-fav="favorite">常用帳戶</button>
+        <button type="button" class="small" data-fav="unfavorite">不常用帳戶</button>
+      </div>
       <div class="acc-bulk-bar" id="accBulkBar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
         <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--ink-soft);cursor:pointer;">
           <input type="checkbox" id="accSelectAll"> 全選
@@ -1732,6 +1737,26 @@ function estimateAccountNextInterest_(a){
 // 點擊「帳戶一覽」上方的類型卡片（銀行／現金／行動支付…）可以篩選下方清單只顯示該類型的帳戶，
 // 再點一次或按「顯示全部」可以取消篩選。
 let dashboardFilterType = null;
+// 「常用帳戶」顯示頁面：全部帳戶／只看常用／只看不常用，三選一，可以跟上面的類型篩選疊加使用
+// （例如「銀行」+「常用」＝只看常用的銀行帳戶）。
+let dashboardFavFilter = 'all';
+function visibleDashboardAccounts_(){
+  let list = dashboardFilterType ? state.accounts.filter(a => a.type === dashboardFilterType) : state.accounts;
+  if(dashboardFavFilter === 'favorite') list = list.filter(isAccountFavorite);
+  else if(dashboardFavFilter === 'unfavorite') list = list.filter(a => !isAccountFavorite(a));
+  return list;
+}
+function updateFavFilterButtons_(){
+  $$('#accFavFilterBar button').forEach(b => {
+    b.classList.toggle('primary', b.dataset.fav === dashboardFavFilter);
+  });
+}
+$$('#accFavFilterBar button').forEach(b => {
+  b.addEventListener('click', () => {
+    dashboardFavFilter = b.dataset.fav;
+    renderAccountsList();
+  });
+});
 
 function renderDashboard(){
   const byType = {};
@@ -1780,22 +1805,25 @@ $('#dashboardFilterReset').addEventListener('click', () => {
   renderDashboard();
 });
 
-// 總覽頁的「帳戶一覽」：含新增/編輯/刪除操作，並支援依類型篩選
+// 總覽頁的「帳戶一覽」：含新增/編輯/刪除操作，並支援依類型／常用狀態篩選
 function renderAccountsList(){
   const list = $('#dashboardAccountsList');
   const titleEl = $('#dashboardAccountsTitle');
   const resetBtn = $('#dashboardFilterReset');
-  const accountsToShow = dashboardFilterType
-    ? state.accounts.filter(a => a.type === dashboardFilterType)
-    : state.accounts;
+  const accountsToShow = visibleDashboardAccounts_();
+  updateFavFilterButtons_();
 
-  titleEl.textContent = dashboardFilterType ? `帳戶一覽 · ${dashboardFilterType}` : '帳戶一覽';
+  const titleParts = [];
+  if(dashboardFilterType) titleParts.push(dashboardFilterType);
+  if(dashboardFavFilter === 'favorite') titleParts.push('常用');
+  else if(dashboardFavFilter === 'unfavorite') titleParts.push('不常用');
+  titleEl.textContent = titleParts.length ? `帳戶一覽 · ${titleParts.join(' · ')}` : '帳戶一覽';
   resetBtn.style.display = dashboardFilterType ? '' : 'none';
 
   if(!state.accounts.length){
     list.innerHTML = `<div class="empty">尚無帳戶，請在上方「新增 / 編輯帳戶」新增。</div>`;
   } else if(!accountsToShow.length){
-    list.innerHTML = `<div class="empty">這個類型尚無帳戶。</div>`;
+    list.innerHTML = `<div class="empty">${dashboardFavFilter === 'favorite' ? '目前沒有常用帳戶。' : dashboardFavFilter === 'unfavorite' ? '目前沒有不常用的帳戶。' : '這個類型尚無帳戶。'}</div>`;
   } else {
     const sortedAccounts = [...accountsToShow].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
     list.innerHTML = sortedAccounts.map(a => {
@@ -1858,7 +1886,7 @@ function updateAccBulkBar(accountsToShow){
   }
 }
 $('#accSelectAll').addEventListener('change', () => {
-  const accountsToShow = dashboardFilterType ? state.accounts.filter(a => a.type === dashboardFilterType) : state.accounts;
+  const accountsToShow = visibleDashboardAccounts_();
   if($('#accSelectAll').checked) accountsToShow.forEach(a => selectedAccountIds.add(a.id));
   else accountsToShow.forEach(a => selectedAccountIds.delete(a.id));
   renderAccountsList();
