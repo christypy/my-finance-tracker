@@ -554,23 +554,7 @@
     background:var(--card); border:1px solid var(--paper-line); border-radius:999px;
     padding:7px 14px; font-size:12.5px; color:var(--ink); min-height:auto;
   }
-  .tpl-chip.active{ background:var(--gold); border-color:var(--gold); color:#241c08; font-weight:600; }
   .tpl-chip-empty{ font-size:12.5px; color:var(--ink-soft); }
-  .tpl-manage-box{
-    background:rgba(255,255,255,.6); border:1px dashed var(--gold); border-radius:var(--radius-sm);
-    padding:12px 12px 10px; display:flex; flex-direction:column; gap:10px;
-  }
-  .tpl-manage-title{ font-size:12.5px; font-weight:600; color:var(--ink); }
-  .tpl-manage-title span{ color:var(--gold); }
-  .tpl-manage-fields{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 18px; }
-  .tpl-manage-fields label{
-    display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--ink-soft); font-weight:500; margin:0;
-  }
-  .tpl-manage-fields input[type="number"]{ width:120px; }
-  .tpl-manage-fields label.checkbox-row{
-    flex-direction:row; align-items:center; gap:7px; padding-bottom:9px;
-  }
-  .tpl-manage-box .form-actions{ margin:0; justify-content:flex-end; }
 
   /* ---- 主類別 / 子類別 選單 ---- */
   .cat-select-row{ grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
@@ -815,7 +799,7 @@
           <h2 style="font-size:15px;">本月待加入</h2>
           <div id="recurringPendingList"></div>
         </div>
-        <!-- <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。常記的項目（例如某個固定會買的東西）可以按「存成模板」存起來，下次表單最上面會出現這個模板，點一下就能帶入內容，只要調整日期或金額就能存檔；再點一次同一個模板還能直接更新或刪除它，不用另外切到別的分頁管理。</p> -->
+        <!-- <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。有存好的模板時，表單最上面會出現一排模板按鈕，點一下就能帶入內容，只要調整日期或金額就能存檔；模板的新增／編輯／每月自動加入／刪除，請到「模板管理」分頁統一設定。</p> -->
         <details class="entry-wrap" id="trDetails">
           <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
           <form class="entry" id="trForm">
@@ -828,24 +812,9 @@
             <input type="hidden" id="trType" value="expense">
             <div class="full tpl-quick-row" id="trTemplateRow" style="display:none;">
               <div class="tpl-quick-label">從模板快速記帳
-                <span class="tpl-quick-hint">點一下帶入內容；再點一次同一個可以調整設定或刪除</span>
+                <span class="tpl-quick-hint">點一下帶入內容，調整日期或金額後儲存即可（模板本身的設定請到「模板管理」分頁）</span>
               </div>
               <div class="tpl-chip-row" id="trTemplateChips"></div>
-              <div class="tpl-manage-box" id="trTemplateManageRow" style="display:none;">
-                <div class="tpl-manage-title">模板設定 · <span id="trTemplateManageName"></span></div>
-                <div class="tpl-manage-fields">
-                  <label>每月幾號繳
-                    <input type="number" id="trTplDay" min="1" max="28" placeholder="僅供提醒，選填">
-                  </label>
-                  <label class="checkbox-row">
-                    <input type="checkbox" id="trTplActive">
-                    <span>每月自動出現在「本月待加入」清單</span>
-                  </label>
-                </div>
-                <div class="form-actions">
-                  <button type="button" class="small danger" id="trTemplateDeleteBtn">刪除這個模板</button>
-                </div>
-              </div>
             </div>
             <div class="amount-hero">
               <div class="amount-label">金額</div>
@@ -906,7 +875,6 @@
           <div class="entry-footer">
             <div class="form-actions">
               <button type="button" id="trCancel">清空表單</button>
-              <button type="button" id="trSaveAsTemplate">存成模板</button>
               <button type="submit" form="trForm" id="trSaveContinue">儲存並記下一筆</button>
               <button type="submit" form="trForm" class="primary">儲存記帳</button>
             </div>
@@ -2998,7 +2966,6 @@ function resetTransactionForm(){
   setTrType('expense');
   $('#trFormTitle').textContent = '新增記帳';
   $('#trSaveContinue').style.display = ''; // 新增模式才需要「儲存並記下一筆」
-  hideTplManageRow_();
   renderTrTemplateChips(); // 新增模式才顯示模板快速選擇（會依有沒有模板自動顯示/隱藏）
   // 編輯表單存檔/取消後，一律搬回「記帳」分頁原本的位置
   restoreTrDetailsHome_();
@@ -3029,7 +2996,6 @@ window.editTransaction = id => {
   $('#trFormTitle').textContent = '編輯記帳';
   $('#trSaveContinue').style.display = 'none'; // 編輯既有記帳時不適用批量連續新增
   $('#trTemplateRow').style.display = 'none'; // 編輯既有記帳時不能再套用模板（會被誤認成新增）
-  hideTplManageRow_(); // 清掉可能殘留的模板選取狀態，避免「更新模板」按鈕誤指到舊模板
   moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
 };
@@ -3045,51 +3011,30 @@ window.deleteTransaction = async id => {
   }catch(err){ alert('刪除失敗：' + err.message); }
 };
 
-// ---------- 新增記帳表單：模板快速選擇／存成模板 ----------
-// 「模板」清單就是 state.recurring（跟「模板」分頁共用同一份資料），這裡只是
-// 在「新增記帳」表單最上面多顯示一排可以點的模板，點下去直接把常用內容
-// （類別、金額、帳戶、共同帳本設定…）帶入表單，日期維持原本表單上的值不動，
-// 使用者只要視情況調整日期、微調金額或名稱就能存檔，不用重新選一次類別。
-// 目前選取中的模板 id（用來顯示模板設定區塊、決定下方按鈕要「存成模板」還是
-// 「更新模板」）；只要表單被清空、重新整理或存檔，就會清掉選取狀態。
-let selectedTplId_ = '';
-
+// ---------- 新增記帳表單：模板快速選擇 ----------
+// 「模板」清單就是 state.recurring（跟「模板管理」分頁共用同一份資料），這裡
+// 只負責在「新增記帳」表單最上面顯示一排可以點的模板按鈕，點下去直接把
+// 常用內容（類別、金額、帳戶、共同帳本設定…）帶入表單，日期維持原本表單
+// 上的值不動，使用者只要視情況調整日期、微調金額或名稱就能存檔。
+// 模板本身的新增／編輯／每月自動加入設定／刪除，一律在「模板管理」分頁處理，
+// 這裡的表單只做「套用」，不提供模板設定或存成模板的功能。
 function renderTrTemplateChips(){
   const row = $('#trTemplateRow');
   const chips = $('#trTemplateChips');
   if(!row || !chips) return;
   if(!state.recurring.length){
     row.style.display = 'none';
-    hideTplManageRow_();
     return;
   }
   row.style.display = '';
-  chips.innerHTML = state.recurring.map(t => {
-    const active = t.id === selectedTplId_;
-    return `<button type="button" class="tpl-chip${active ? ' active' : ''}" onclick="applyTemplateToTr('${t.id}')">${escapeHtml(t.name)}</button>`;
-  }).join('');
-}
-
-// 「存成模板」按鈕同時兼任「更新模板」：沒有選取模板時是「存成模板」（存一筆
-// 新的），點過某個模板之後文字會換成「更新模板」，直接把表單內容存回那個
-// 模板，不用另外多一顆按鈕、也不會讓使用者搞不清楚現在點下去會發生什麼事。
-function syncTplSaveBtnLabel_(){
-  const btn = $('#trSaveAsTemplate');
-  const t = selectedTplId_ && state.recurring.find(x => x.id === selectedTplId_);
-  btn.textContent = t ? `更新模板「${t.name}」` : '存成模板';
-  btn.classList.toggle('primary-outline', !!t);
-}
-
-function hideTplManageRow_(){
-  selectedTplId_ = '';
-  $('#trTemplateManageRow').style.display = 'none';
-  syncTplSaveBtnLabel_();
+  chips.innerHTML = state.recurring.map(t =>
+    `<button type="button" class="tpl-chip" onclick="applyTemplateToTr('${t.id}')">${escapeHtml(t.name)}</button>`
+  ).join('');
 }
 
 // 點一下模板：一律當成「新增」（trId 清空），把模板存的內容帶入表單；
-// 沿用跟「編輯記帳」/共同帳本相同的一套顯示/隱藏邏輯。同時把這個模板記
-// 為「選取中」，底下會出現模板設定區塊（每月幾號／每月自動加入／刪除），
-// 下方「存成模板」按鈕也會變成「更新模板」，不用再跳到另一個管理頁面。
+// 沿用跟「編輯記帳」/共同帳本相同的一套顯示/隱藏邏輯，套用完直接聚焦金額
+// 欄位方便使用者微調金額後儲存，不會出現任何模板設定或刪除相關的按鈕。
 window.applyTemplateToTr = id => {
   const t = state.recurring.find(x => x.id === id);
   if(!t) return;
@@ -3108,77 +3053,8 @@ window.applyTemplateToTr = id => {
   syncCatRowVisibility();
   $('#trFormTitle').textContent = `新增記帳（已帶入模板：${t.name}）`;
   $('#trSaveContinue').style.display = ''; // 這一律是新增，可以繼續用批量記帳按鈕
-  selectedTplId_ = (selectedTplId_ === id) ? '' : id; // 再點一次同一個模板可以收合設定區塊
-  $('#trTemplateManageRow').style.display = selectedTplId_ ? '' : 'none';
-  $('#trTemplateManageName').textContent = selectedTplId_ ? t.name : '';
-  if(selectedTplId_){
-    $('#trTplDay').value = t.dayOfMonth || '';
-    $('#trTplActive').checked = String(t.active) !== 'false';
-  }
-  syncTplSaveBtnLabel_();
-  renderTrTemplateChips();
   setTimeout(() => $('#trAmount').focus(), 50);
 };
-
-$('#trTemplateDeleteBtn').addEventListener('click', async () => {
-  if(!selectedTplId_) return;
-  await window.deleteRecurring(selectedTplId_);
-  hideTplManageRow_();
-  renderTrTemplateChips();
-});
-
-// 「存成模板／更新模板」（同一顆按鈕）：
-// - 沒有選取模板時：把目前表單內容（不含日期）存成一筆新的模板，預設「每月
-//   自動出現在待加入清單」不勾選，單純留著下次快速記帳用，不會平白每個月
-//   跳出來提醒；想改成每月固定帳單，之後點一下模板、勾選「每月自動加入」再
-//   按這顆按鈕更新即可。
-// - 已選取模板時：直接把表單目前內容（含模板設定區塊的每月幾號／每月自動
-//   加入）存回這個模板，不用另外開一個模板管理頁面。
-$('#trSaveAsTemplate').addEventListener('click', async () => {
-  const type = $('#trType').value;
-  if(type === 'transfer'){ alert('轉帳沒辦法存成模板，模板只適用於支出／收入。'); return; }
-  const shared = $('#trShared').checked;
-  const splitMode = shared ? $('#trSplitMode').value : 'personal';
-  const payer = shared ? $('#trPayer').value : 'me';
-  const isAdvance = splitMode === 'advance' && payer !== 'partner';
-  const existing = selectedTplId_ && state.recurring.find(x => x.id === selectedTplId_);
-
-  let name = existing ? existing.name : '';
-  if(!existing){
-    const defaultName = $('#trNote').value.trim();
-    name = prompt('這個模板要取什麼名字？（下次記帳時會顯示這個名字）', defaultName);
-    if(name === null) return; // 使用者取消
-    if(!name.trim()){ alert('請輸入模板名稱。'); return; }
-    name = name.trim();
-  }
-
-  const data = {
-    id: existing ? existing.id : undefined,
-    name,
-    type,
-    category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#trCategory').value,
-    subcategory: isAdvance ? '' : $('#trSubcategory').value,
-    amount: parseFloat($('#trAmount').value) || 0,
-    accountId: $('#trAccount').value,
-    dayOfMonth: existing ? ($('#trTplDay').value ? parseInt($('#trTplDay').value, 10) : '') : '',
-    note: existing ? (existing.note || '') : '',
-    active: existing ? $('#trTplActive').checked : false,
-    payer,
-    splitMode
-  };
-  try{
-    await runBusy(async () => {
-      const saved = existing
-        ? await apiPost('update','recurring',data)
-        : await apiPost('add','recurring',data);
-      upsertLocal('recurring', saved);
-      renderRecurring();
-      renderTrTemplateChips();
-      syncTplSaveBtnLabel_();
-    }, existing ? '更新模板中…' : '存成模板中…');
-  }catch(err){ alert((existing ? '更新模板失敗：' : '存成模板失敗：') + err.message); return; }
-  alert(existing ? `已更新模板「${name}」。` : `已存成模板「${name}」，下次在「新增記帳」表單最上面就能點它快速帶入。`);
-});
 
 // ---------- 模板（房租/健保費/訂閱費用...每月自動填寫） ----------
 function currentMonthStr(){
