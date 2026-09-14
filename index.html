@@ -624,18 +624,17 @@
   .sub-add-row input{ flex:1; min-height:34px; padding:6px 10px; font-size:13px; }
   .sub-add-row button{ flex:none; min-height:34px; padding:5px 12px; font-size:12.5px; }
 
-  /* ---- 類別月度明細表 ---- */
-  .cat-month-scroll{ overflow-x:auto; margin:0 -20px; padding:0 20px; }
-  .cat-month-table{ border-collapse:collapse; width:100%; min-width:640px; font-size:12px; }
-  .cat-month-table th, .cat-month-table td{ padding:7px 8px; text-align:right; white-space:nowrap; }
-  .cat-month-table th{ color:var(--ink-soft); font-weight:600; font-size:11px; border-bottom:2px solid var(--paper-line); }
-  .cat-month-table td:first-child, .cat-month-table th:first-child{ text-align:left; position:sticky; left:0; background:var(--card); }
-  .cat-month-table tbody tr:nth-child(odd) td{ background:var(--paper); }
-  .cat-month-table tbody tr:nth-child(odd) td:first-child{ background:var(--paper); }
-  .cat-month-table td.cat-name{ font-weight:600; color:var(--ink); }
-  .cat-month-table td.zero{ color:var(--paper-line); }
-  .cat-month-table tfoot td{ border-top:2px solid var(--paper-line); font-weight:700; color:var(--ink); }
-  .cat-month-table tfoot td:first-child{ background:var(--card); }
+  /* ---- 各類別每月花費：長條圖（依類別頁面） ---- */
+  .cat-chart-card{ margin-bottom:22px; }
+  .cat-chart-card:last-child{ margin-bottom:0; }
+  .cat-chart-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+  .cat-chart-name{ font-weight:600; font-size:14px; color:var(--ink); }
+  .cat-chart-total{ font-family:'Roboto Slab', serif; font-size:13.5px; color:var(--ink-soft); }
+  .cat-chart-bars{ display:flex; align-items:flex-end; gap:3px; height:60px; background:var(--paper); border:1px solid var(--paper-line); border-radius:8px; padding:6px 4px 0; }
+  .cat-chart-bar-col{ flex:1; height:100%; display:flex; align-items:flex-end; min-width:0; }
+  .cat-chart-bar{ width:100%; background:var(--red); border-radius:3px 3px 0 0; min-height:2px; transition:height .2s; }
+  .cat-chart-months{ display:flex; gap:3px; margin-top:4px; }
+  .cat-chart-month-label{ flex:1; text-align:center; font-size:9.5px; color:var(--ink-soft); }
 
   .stat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
 
@@ -1016,6 +1015,7 @@
         <div class="segmented" id="statsModeNav">
           <button type="button" class="active" data-mode="month">依月份</button>
           <button type="button" data-mode="year">依年度</button>
+          <button type="button" data-mode="category">依類別</button>
         </div>
         <div class="period-nav">
           <button type="button" class="period-nav-btn" id="statsPrevBtn" title="上一期">‹</button>
@@ -1024,6 +1024,7 @@
           <button type="button" class="period-nav-btn" id="statsNextBtn" title="下一期">›</button>
         </div>
 
+        <div id="statsGeneralSections">
         <!-- ① 本期關鍵指標 -->
         <div class="summary-grid" id="statsSummaryGrid"></div>
         <div class="compare-grid" id="statsCompareGrid"></div>
@@ -1050,17 +1051,20 @@
           <div id="statsYearlyTrend"></div>
         </div>
 
-        <!-- ④-2 類別 × 月份明細（年模式）：一次看每個類別每個月花多少 -->
-        <div class="stat-section" id="statsCategoryMonthSection" style="display:none;">
-          <h3>各類別每月花費</h3>
-          <p class="hint" style="margin-bottom:10px;">左右可滑動，看這個年度每個類別在各月份花了多少。</p>
-          <div class="cat-month-scroll"><div id="statsCategoryMonthTable"></div></div>
-        </div>
-
         <!-- ⑤ 收入來源 -->
         <div class="stat-section">
           <h3>收入品項分佈</h3>
           <div id="statsIncomeBreakdown"></div>
+        </div>
+        </div>
+
+        <!-- 依類別：獨立頁面，用長條圖看每個類別的月度變化 -->
+        <div id="statsCategoryMonthSection" style="display:none;">
+          <div class="stat-section">
+            <h3>各類別每月花費</h3>
+            <p class="hint" style="margin-bottom:14px;">這個年度裡，每個主類別在各月份花了多少；長條愈高代表那個月花得愈多（以該類別自己全年最高的月份為基準）。</p>
+            <div id="statsCategoryCharts"></div>
+          </div>
         </div>
       </div>
 
@@ -2164,7 +2168,7 @@ function setTrType(type, selectedCategory, selectedSub){
 }
 
 // ---------- 記帳統計分析 ----------
-let statsMode = 'month'; // 'month' | 'year'
+let statsMode = 'month'; // 'month' | 'year' | 'category'
 
 function currentStatsPeriod(){
   return statsMode === 'month' ? $('#statsMonthInput').value : $('#statsYearInput').value;
@@ -2433,6 +2437,17 @@ function renderStats(){
     $('#statsMonthInput').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
   const period = currentStatsPeriod();
+
+  // 「依類別」是獨立的一頁：只看這個年度每個類別的月度長條圖，不顯示月/年模式的其他統計區塊
+  if(statsMode === 'category'){
+    $('#statsGeneralSections').style.display = 'none';
+    $('#statsCategoryMonthSection').style.display = '';
+    renderCategoryMonthCharts(period);
+    return;
+  }
+  $('#statsGeneralSections').style.display = '';
+  $('#statsCategoryMonthSection').style.display = 'none';
+
   const rows = transactionsInPeriod(period);
 
   // 全額代墊給對方的款項（category === 代墊）雖然錢確實從帳戶流出，但那筆錢本來就不是
@@ -2482,12 +2497,10 @@ function renderStats(){
   // ③ 固定 vs 彈性支出
   renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
 
-  // ④ 消費節奏：年模式顯示每月趨勢 + 各類別每月花費
+  // ④ 消費節奏：年模式顯示每月趨勢
   const trendSection = $('#statsYearlyTrendSection');
-  const catMonthSection = $('#statsCategoryMonthSection');
   if(statsMode === 'year' && period){
     trendSection.style.display = '';
-    catMonthSection.style.display = '';
     const monthlyExpense = Array(12).fill(0);
     let maxVal = 0;
     state.transactions.forEach(t => {
@@ -2508,10 +2521,8 @@ function renderStats(){
         <div class="stat-bar-value">$${fmt(val)}</div>
       </div>`;
     }).join('');
-    renderCategoryMonthTable(period);
   } else {
     trendSection.style.display = 'none';
-    catMonthSection.style.display = 'none';
   }
 
   // ⑤ 收入來源
@@ -2519,9 +2530,8 @@ function renderStats(){
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
 }
 
-// ---------- 各類別每月花費（年模式）：一次看所有主類別在該年度每個月花多少 ----------
-function renderCategoryMonthTable(year){
-  const monthTotals = Array(12).fill(0);
+// ---------- 各類別每月花費（依類別頁面）：用長條圖看每個主類別的月度變化 ----------
+function renderCategoryMonthCharts(year){
   const catMap = {}; // { 主類別: [12 個月金額] }
   state.transactions.forEach(t => {
     if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
@@ -2531,29 +2541,35 @@ function renderCategoryMonthTable(year){
     if(m < 0 || m > 11) return;
     const cat = t.category || '其他';
     if(!catMap[cat]) catMap[cat] = Array(12).fill(0);
-    const amt = Number(t.amount) || 0;
-    catMap[cat][m] += amt;
-    monthTotals[m] += amt;
+    catMap[cat][m] += Number(t.amount) || 0;
   });
-  const container = $('#statsCategoryMonthTable');
-  const cats = Object.keys(catMap).map(cat => ({ cat, arr: catMap[cat], total: catMap[cat].reduce((s,v)=>s+v,0) }))
-    .sort((a,b) => b.total - a.total);
+  const container = $('#statsCategoryCharts');
+  const cats = Object.keys(catMap).map(cat => {
+    const arr = catMap[cat];
+    const total = arr.reduce((s,v) => s+v, 0);
+    const max = Math.max(...arr);
+    return { cat, arr, total, max };
+  }).sort((a,b) => b.total - a.total);
   if(!cats.length){
     container.innerHTML = `<div class="empty">這個年度沒有支出資料。</div>`;
     return;
   }
-  const monthHeads = Array.from({length:12}, (_,i) => `<th>${i+1}月</th>`).join('');
-  const rowsHtml = cats.map(({cat, arr, total}) => {
-    const cells = arr.map(v => v ? `<td>$${fmt(v)}</td>` : `<td class="zero">-</td>`).join('');
-    return `<tr><td class="cat-name">${escapeHtml(cat)}</td>${cells}<td>$${fmt(total)}</td></tr>`;
+  const monthLabels = Array.from({length:12}, (_,i) => `<div class="cat-chart-month-label">${i+1}</div>`).join('');
+  container.innerHTML = cats.map(({cat, arr, total, max}) => {
+    const bars = arr.map((v, i) => {
+      const pct = max ? Math.round(v / max * 100) : 0;
+      const height = v > 0 ? Math.max(pct, 4) : 0;
+      return `<div class="cat-chart-bar-col"><div class="cat-chart-bar" style="height:${height}%" title="${i+1} 月：$${fmt(v)}"></div></div>`;
+    }).join('');
+    return `<div class="cat-chart-card">
+      <div class="cat-chart-head">
+        <span class="cat-chart-name">${escapeHtml(cat)}</span>
+        <span class="cat-chart-total">$${fmt(total)}</span>
+      </div>
+      <div class="cat-chart-bars">${bars}</div>
+      <div class="cat-chart-months">${monthLabels}</div>
+    </div>`;
   }).join('');
-  const grandTotal = monthTotals.reduce((s,v)=>s+v,0);
-  const footCells = monthTotals.map(v => `<td>$${fmt(v)}</td>`).join('');
-  container.innerHTML = `<table class="cat-month-table">
-    <thead><tr><th>類別</th>${monthHeads}<th>全年</th></tr></thead>
-    <tbody>${rowsHtml}</tbody>
-    <tfoot><tr><td>合計</td>${footCells}<td>$${fmt(grandTotal)}</td></tr></tfoot>
-  </table>`;
 }
 
 // 浮動「＋記帳」按鈕：只有在「記帳」分頁且停留在「記帳」子分頁時才顯示，
@@ -2588,7 +2604,7 @@ $('#statsModeNav').addEventListener('click', e => {
   statsMode = btn.dataset.mode;
   $$('#statsModeNav button').forEach(b => b.classList.toggle('active', b === btn));
   $('#statsMonthInput').style.display = statsMode === 'month' ? '' : 'none';
-  $('#statsYearInput').style.display = statsMode === 'year' ? '' : 'none';
+  $('#statsYearInput').style.display = statsMode === 'month' ? 'none' : '';
   renderStats();
 });
 $('#statsMonthInput').addEventListener('change', renderStats);
