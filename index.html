@@ -698,7 +698,7 @@
       <div class="summary-grid" id="summaryGrid"></div>
 
       <h2 style="font-size:15px;">帳戶管理</h2>
-      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。銀行帳戶可填年利率，用來估算利息（實際入帳請到「利息紀錄」新增）。</p>
+      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。銀行帳戶可填年利率，用來估算利息；如果帳戶是「優惠利率有上限金額，超過部分改用一般利率」的類型，可以填「優惠利率上限金額」與「超過上限部分年利率」，估算時會自動分兩段計算（實際入帳請到「利息紀錄」新增）。</p>
       <details class="entry-wrap" id="accountDetails">
         <summary><span class="plus">＋</span>新增 / 編輯帳戶</summary>
         <form class="entry" id="accountForm">
@@ -720,6 +720,12 @@
           </label>
           <label>年利率 %（銀行適用，選填）
             <input type="number" id="accRate" step="0.001" placeholder="例如 1.8">
+          </label>
+          <label>優惠利率上限金額（選填）
+            <input type="number" id="accCap" step="0.01" placeholder="例如 100000，超過此金額的部分改用下方利率計算">
+          </label>
+          <label>超過上限部分年利率 %（選填，未填視為 0%）
+            <input type="number" id="accNormalRate" step="0.001" placeholder="例如 0.2">
           </label>
           <label class="full">備註
             <input type="text" id="accNote" placeholder="選填">
@@ -1677,9 +1683,26 @@ function renderAll(){
   renderVisibleSection();
 }
 
-// 點擊「帳戶一覽」上方的類型卡片（銀行／現金／行動支付…）可以篩選下方清單只顯示該類型的帳戶，
-// 再點一次或按「顯示全部」可以取消篩選。
-let dashboardFilterType = null;
+// 估算帳戶「下一期」利息（按月估算，單利）：
+// 沒有設「優惠利率上限金額」時，直接用年利率乘以全部餘額；
+// 有設上限金額、且餘額超過上限時，改成分兩段計算——上限內的金額用年利率，
+// 超過上限的部分改用「超過上限部分年利率」（未填視為 0%），
+// 這樣才符合大部分銀行「優惠利率只算到某個金額，超過的部分回歸一般利率」的規則。
+function estimateAccountMonthlyInterest_(a){
+  const balance = Number(a.balance) || 0;
+  const rate = a.interestRate ? Number(a.interestRate) : 0;
+  if(!rate || !balance) return 0;
+  const cap = a.interestCap ? Number(a.interestCap) : 0;
+  if(cap > 0 && balance > cap){
+    const normalRate = a.normalRate ? Number(a.normalRate) : 0;
+    const preferredPart = cap * rate / 100 / 12;
+    const excessPart = (balance - cap) * normalRate / 100 / 12;
+    return preferredPart + excessPart;
+  }
+  return balance * rate / 100 / 12;
+}
+
+
 
 function renderDashboard(){
   const byType = {};
@@ -1694,11 +1717,7 @@ function renderDashboard(){
     .reduce((s,l) => s + (Number(l.amount)||0), 0);
   const net = totalAssets - totalDebt;
   // 加總所有有填年利率的帳戶，估算「下一期」全部帳戶合計會拿到的利息（單利、按月估算）
-  const totalEstInterest = state.accounts.reduce((s,a) => {
-    const rate = a.interestRate ? Number(a.interestRate) : 0;
-    if(!rate) return s;
-    return s + (Number(a.balance)||0) * rate / 100 / 12;
-  }, 0);
+  const totalEstInterest = state.accounts.reduce((s,a) => s + estimateAccountMonthlyInterest_(a), 0);
 
   $('#netHeroValue').textContent = '$' + fmt(net);
   $('#netHeroAssets').textContent = '$' + fmt(totalAssets);
@@ -1752,7 +1771,10 @@ function renderAccountsList(){
     const sortedAccounts = [...accountsToShow].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
     list.innerHTML = sortedAccounts.map(a => {
       const rate = a.interestRate ? Number(a.interestRate) : 0;
-      const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
+      const cap = a.interestCap ? Number(a.interestCap) : 0;
+      const normalRate = a.normalRate ? Number(a.normalRate) : 0;
+      const overCap = cap > 0 && (Number(a.balance)||0) > cap;
+      const est = rate ? estimateAccountMonthlyInterest_(a) : null;
       const favorite = isAccountFavorite(a);
       const checked = selectedAccountIds.has(a.id);
       return `<div class="item-card">
@@ -1769,7 +1791,8 @@ function renderAccountsList(){
           <div class="item-value">$${fmt(a.balance)}</div>
         </div>
         ${rate ? `<div class="item-meta">
-          <span>年利率 <b>${rate}%</b></span>
+          <span>年利率 <b>${rate}%</b>${cap ? `（上限 $${fmt(cap)}）` : ''}</span>
+          ${overCap ? `<span>超額部分利率 <b>${normalRate}%</b></span>` : ''}
           <span>估算下期利息 <b>$${fmt(est)}</b></span>
         </div>` : ''}
         <div class="item-actions">
@@ -2750,6 +2773,8 @@ $('#accountForm').addEventListener('submit', async e => {
     type: $('#accType').value,
     balance: parseFloat($('#accBalance').value) || 0,
     interestRate: $('#accRate').value ? parseFloat($('#accRate').value) : '',
+    interestCap: $('#accCap').value ? parseFloat($('#accCap').value) : '',
+    normalRate: $('#accNormalRate').value ? parseFloat($('#accNormalRate').value) : '',
     note: $('#accNote').value,
     favorite: $('#accFavorite').checked
   };
@@ -2768,7 +2793,7 @@ $('#accountForm').addEventListener('submit', async e => {
 $('#accCancel').addEventListener('click', resetAccountForm);
 function resetAccountForm(){
   $('#accId').value=''; $('#accName').value=''; $('#accType').value='現金';
-  $('#accBalance').value=''; $('#accRate').value=''; $('#accNote').value='';
+  $('#accBalance').value=''; $('#accRate').value=''; $('#accCap').value=''; $('#accNormalRate').value=''; $('#accNote').value='';
   $('#accFavorite').checked = true;
 }
 window.editAccount = id => {
@@ -2776,6 +2801,7 @@ window.editAccount = id => {
   if(!a) return;
   $('#accId').value=a.id; $('#accName').value=a.name; $('#accType').value=a.type;
   $('#accBalance').value=a.balance; $('#accRate').value=a.interestRate || '';
+  $('#accCap').value=a.interestCap || ''; $('#accNormalRate').value=a.normalRate || '';
   $('#accNote').value=a.note || '';
   $('#accFavorite').checked = isAccountFavorite(a);
   $('#accountDetails').open = true;

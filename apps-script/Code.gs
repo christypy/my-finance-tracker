@@ -59,7 +59,7 @@ const SHEET_HEADERS = {
   //           空字串／未設定＝視為常用（相容舊資料，既有帳戶不會突然消失）；
   //           'false' 或 false＝不常用，記帳/模板/共同帳本結算的帳戶選單預設不顯示，
   //           但如果某筆舊紀錄已經用了這個帳戶，編輯那筆紀錄時還是看得到、選得到它。
-  accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'note', 'updatedAt', 'favorite'],
+  accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'interestCap', 'normalRate', 'note', 'updatedAt', 'favorite'],
   liabilities: ['id', 'name', 'amount', 'dueDate', 'paid', 'note', 'updatedAt'],
   interest: ['id', 'accountId', 'date', 'amount', 'note', 'createdAt'],
   // 記帳紀錄：
