@@ -1258,7 +1258,7 @@ const cfg = {
 // 前端版本號：每次你改完這個檔案、要重新上傳到 GitHub Pages 時，
 // 記得順手更新這個字串（例如改成今天的日期），才能在「設定」頁看出
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
-const FRONTEND_VERSION = '2026-09-14';
+const FRONTEND_VERSION = '2026-09-14-2';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -1562,6 +1562,19 @@ function prefetchFullHistoryInBackground_(){
 function fmt(n){
   const num = Number(n) || 0;
   return num.toLocaleString('zh-Hant-TW', { minimumFractionDigits:0, maximumFractionDigits:2 });
+}
+
+// 後端偵測到「日期＋類型＋主/子類別＋金額」都跟既有紀錄一樣時，會回傳那筆
+// 既有紀錄（而不是直接新增），這裡把它的內容組成一句話問使用者「真的要存
+// 這筆重複的紀錄嗎？」，答應了前端才會帶著 force:true 再送一次。
+function confirmDuplicateTransaction_(dup){
+  const catLabel = dup.category + (dup.subcategory ? ' / ' + dup.subcategory : '');
+  const noteLabel = dup.note ? `，備註：${dup.note}` : '';
+  return confirm(
+    `這天已經有一筆很像的紀錄了：\n` +
+    `${dup.date}．${dup.type === 'income' ? '收入' : '支出'}．${catLabel}．$${fmt(dup.amount)}${noteLabel}\n\n` +
+    `確定還是要存這一筆嗎？`
+  );
 }
 
 // ---------- 帳戶類型排序：記帳時預設用現金，選單依「現金 → 行動支付 → 銀行 → 悠遊卡 → 投資」排序 ----------
@@ -2901,18 +2914,30 @@ $('#trForm').addEventListener('submit', async e => {
     };
   }
   try{
+    let duplicateCancelled = false;
     await runBusy(async () => {
       let result;
       if(id){
         result = await apiPost('updateTransactionTx','transactions',data);
+        if(result.duplicate){
+          if(!confirmDuplicateTransaction_(result.duplicate)){ duplicateCancelled = true; return; }
+          data.force = true;
+          result = await apiPost('updateTransactionTx','transactions',data);
+        }
         upsertLocal('transactions', result.transaction);
         (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
       } else {
         delete data.id;
         result = await apiPost('addTransactionTx','transactions',data);
+        if(result.duplicate){
+          if(!confirmDuplicateTransaction_(result.duplicate)){ duplicateCancelled = true; return; }
+          data.force = true;
+          result = await apiPost('addTransactionTx','transactions',data);
+        }
         upsertLocal('transactions', result.transaction);
         if(result.account) upsertLocal('accounts', result.account);
       }
+      if(duplicateCancelled) return;
       if(continueBatch && !id){
         // 批量記帳模式：保留日期／主類別／子類別／帳戶／共同帳本設定，
         // 只清空名稱跟金額，表單留在打開狀態，馬上可以繼續打下一筆。
@@ -3679,9 +3704,11 @@ $('#csvImportBtn').addEventListener('click', async () => {
   if(!mapped.length){ alert('沒有可匯入的資料，請確認日期／金額欄位對應是否正確。'); return; }
   if(!confirm(`確定匯入 ${mapped.length} 筆記帳資料嗎？${invalidCount ? `（另有 ${invalidCount} 筆因日期或金額格式異常被略過）` : ''}`)) return;
   try{
+    let skipped = 0;
     await runBusy(async () => {
       const rows = mapped.map(({valid, ...rest}) => rest);
-      await apiPost('batchAddTransactions','transactions',{ rows });
+      const result = await apiPost('batchAddTransactions','transactions',{ rows });
+      skipped = (result && result.skipped) || 0;
       const all = await apiGet('all');
       state.accounts = all.accounts;
       state.liabilities = all.liabilities;
@@ -3692,7 +3719,9 @@ $('#csvImportBtn').addEventListener('click', async () => {
       state.transactionsFullyLoaded = true;
       renderAll();
     }, '匯入中…（資料量大可能需要一點時間）');
-    $('#csvStatus').textContent = `匯入完成，共新增 ${mapped.length} 筆記帳。`;
+    // 日期＋類型＋主/子類別＋金額都跟既有紀錄（或這份 CSV 裡自己）重複的列，
+    // 後端會自動略過不寫入，這裡把略過筆數也顯示出來，避免使用者以為資料不見了。
+    $('#csvStatus').textContent = `匯入完成，共新增 ${mapped.length - skipped} 筆記帳。` + (skipped ? `（${skipped} 筆因跟既有紀錄重複已自動略過）` : '');
     $('#csvStatus').className = 'status ok';
     $('#csvStatus').style.display = '';
     $('#csvFile').value = '';

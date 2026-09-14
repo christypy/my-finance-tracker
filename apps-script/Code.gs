@@ -39,7 +39,7 @@
 // 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
 // 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
 // FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
-const BACKEND_VERSION_ = '2026-09-14';
+const BACKEND_VERSION_ = '2026-09-14-2';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -369,7 +369,72 @@ function applyBalanceEffect_(data, sign) {
   return applyBalanceDeltas_(deltas);
 }
 
+// ---------- 防止重複記帳：同一天、同類型、同主/子類別、同金額視為「疑似重複」 ----------
+// 只擋 expense/income 這種使用者一筆一筆手動輸入、最容易「手滑點兩下」或
+// 「網路卡頓重送」的類型；transfer（轉帳）、settlement（結算）本來就可能
+// 同一天同金額出現好幾筆合理的紀錄（例如分兩次轉一樣的金額），不擋。
+// 金額用四捨五入到分（*100）比較，避免浮點數誤差誤判。
+function txDupKey_(data) {
+  const date = normalizeCellValue_('date', data.date);
+  const amt = Math.round((Number(data.amount) || 0) * 100);
+  return [date, data.type, data.category || '', data.subcategory || '', amt].join('|');
+}
+
+// 掃描 Transactions 表找出跟 data 完全同 key 的既有紀錄（若有）。
+// excludeId：編輯某一筆時，要排除自己這一筆，不要跟自己比對成重複。
+function findDuplicateTransaction_(data, excludeId) {
+  if (data.type === 'transfer' || data.type === 'settlement') return null;
+  const sheet = getSheet_('transactions');
+  const headers = SHEET_HEADERS.transactions;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const idIdx = headers.indexOf('id');
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  const targetKey = txDupKey_(data);
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
+    if (r[idIdx] === '' || r[idIdx] === null) continue;
+    if (excludeId && String(r[idIdx]) === String(excludeId)) continue;
+    const obj = {};
+    headers.forEach((h, hi) => { obj[h] = normalizeCellValue_(h, r[hi]); });
+    if (txDupKey_(obj) === targetKey) return obj;
+  }
+  return null;
+}
+
+// 讀出整張 Transactions 表現有的 key 集合，CSV 批次匯入用來一次比對，
+// 不用每一列都重新掃一次整張表（掃一次表、查表都是 O(1)）。
+function buildTransactionKeySet_() {
+  const set = {};
+  const sheet = getSheet_('transactions');
+  const headers = SHEET_HEADERS.transactions;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return set;
+  const idIdx = headers.indexOf('id');
+  const dateIdx = headers.indexOf('date');
+  const typeIdx = headers.indexOf('type');
+  const catIdx = headers.indexOf('category');
+  const subIdx = headers.indexOf('subcategory');
+  const amtIdx = headers.indexOf('amount');
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  values.forEach(r => {
+    if (r[idIdx] === '' || r[idIdx] === null) return;
+    const date = normalizeCellValue_('date', r[dateIdx]);
+    const amt = Math.round((Number(r[amtIdx]) || 0) * 100);
+    set[[date, r[typeIdx], r[catIdx] || '', r[subIdx] || '', amt].join('|')] = true;
+  });
+  return set;
+}
+
+// data.force === true 時略過重複檢查，直接新增（前端在跳出「這筆看起來
+// 重複了，確定要新增嗎？」的確認視窗、使用者按下確定之後，會帶著
+// force:true 再送一次）。回傳 { duplicate: 既有那筆紀錄 } 而不是丟例外，
+// 這樣前端可以直接把既有那筆的內容顯示給使用者看，比純文字錯誤訊息更清楚。
 function addTransactionTx_(data) {
+  if (!data.force) {
+    const dup = findDuplicateTransaction_(data);
+    if (dup) return { duplicate: dup };
+  }
   const tx = addRow_('transactions', data);
   const accountsTouched = applyBalanceEffect_(tx, 1);
   return { transaction: tx, account: accountsTouched[0] || null, accounts: accountsTouched };
@@ -386,6 +451,12 @@ function updateTransactionTx_(data) {
   const headers = SHEET_HEADERS.transactions;
   const rowIndex = findRowIndexById_(sheet, data.id);
   if (rowIndex === -1) throw new Error('找不到這筆記帳: ' + data.id);
+
+  if (!data.force) {
+    const dup = findDuplicateTransaction_(data, data.id);
+    if (dup) return { duplicate: dup };
+  }
+
   const old = readRowObj_(sheet, rowIndex, headers);
 
   const tx = updateRow_('transactions', data, rowIndex);
@@ -408,22 +479,35 @@ function deleteTransactionTx_(id) {
   return { id: id, account: accountsTouched[0] || null, accounts: accountsTouched };
 }
 
-// 批次新增（CSV 匯入用）：一次 exec 內用陣列寫入所有列，不逐筆來回
+// 批次新增（CSV 匯入用）：一次 exec 內用陣列寫入所有列，不逐筆來回。
+// key 為 'transactions' 時，會順便擋掉「日期＋類型＋主/子類別＋金額」都
+// 跟既有紀錄一樣的重複列（例如同一份 CSV 不小心匯入兩次），以及 CSV 檔案
+// 裡本身就重複的列，一律略過不寫入，並回傳 skipped 筆數讓前端顯示提醒。
 function batchAdd_(key, rows) {
   const sheet = getSheet_(key);
   const headers = SHEET_HEADERS[key];
   const now = new Date().toISOString();
-  const matrix = (rows || []).map(r => {
+  const isTx = key === 'transactions';
+  const existingKeys = isTx ? buildTransactionKeySet_() : null;
+  const seenKeys = {};
+  let skipped = 0;
+  const matrix = [];
+  (rows || []).forEach(r => {
+    if (isTx && r.type !== 'transfer' && r.type !== 'settlement') {
+      const k = txDupKey_(r);
+      if (existingKeys[k] || seenKeys[k]) { skipped++; return; }
+      seenKeys[k] = true;
+    }
     const data = Object.assign({}, r);
     data.id = Utilities.getUuid();
     data.updatedAt = now;
-    return headers.map(h => (data[h] !== undefined ? data[h] : ''));
+    matrix.push(headers.map(h => (data[h] !== undefined ? data[h] : '')));
   });
   if (matrix.length) {
     const startRow = sheet.getLastRow() + 1;
     sheet.getRange(startRow, 1, matrix.length, headers.length).setValues(matrix);
   }
-  return { count: matrix.length };
+  return { count: matrix.length, skipped: skipped };
 }
 
 // 共同帳本結算：把指定的記帳列標記為已結算，一次 exec 內完成；
@@ -725,6 +809,11 @@ function runRecurringTemplates_(month, ids) {
     // 「代墊」；「對方先付」代表整筆其實是我的花費，要保留範本原本設定的類別，
     // 跟前端記帳表單／固定項目表單同一套規則（isAdvanceMode_ / isRecAdvanceMode_）。
     const isAdvance = splitMode === 'advance' && payer !== 'partner';
+    // force:true：固定項目本來就已經靠 recurringDoneIds（見
+    // recurringDoneIds­ForMonth_）確保同一個範本同一個月不會被重複加入，
+    // 不需要再套用「日期＋類型＋類別＋金額」的通用重複檢查——不然剛好跟
+    // 使用者自己手動記的某一筆撞上（例如金額、類別剛好一樣），固定項目
+    // 就會被誤判成重複而悄悄加不進去。
     const result = addTransactionTx_({
       date: date,
       type: tpl.type || 'expense',
@@ -737,7 +826,8 @@ function runRecurringTemplates_(month, ids) {
       payer: payer,
       splitMode: splitMode,
       settled: false,
-      recurringId: tpl.id
+      recurringId: tpl.id,
+      force: true
     });
     created.push(result.transaction);
     if (result.account) accountsTouched.push(result.account);
