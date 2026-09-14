@@ -533,6 +533,17 @@
     -webkit-appearance:none;
     margin:0;
   }
+  .amount-hero input#tplAmount{
+    background:transparent; border:none; box-shadow:none; color:var(--paper);
+    font-family:'Roboto Slab', serif; font-size:36px; padding:2px 0; min-height:auto; flex:1; width:100%;
+    -moz-appearance:textfield;
+  }
+  .amount-hero input#tplAmount:focus{ box-shadow:none; }
+  .amount-hero input#tplAmount::-webkit-outer-spin-button,
+  .amount-hero input#tplAmount::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
 
   /* ---- 記帳表單：模板快速選擇 ---- */
   .tpl-quick-row{ display:flex; flex-direction:column; gap:8px; }
@@ -791,6 +802,7 @@
       <div class="segmented" id="trSubNav">
         <button type="button" class="active" data-sub="records">記帳</button>
         <button type="button" data-sub="ledger">共同帳本</button>
+        <button type="button" data-sub="templates">模板管理</button>
         <button type="button" data-sub="stats">統計分析</button>
         <button type="button" data-sub="import">匯入CSV</button>
         <button type="button" data-sub="categories">類別設定</button>
@@ -934,6 +946,82 @@
         </div>
         <h2 style="font-size:15px;">未結算明細</h2>
         <div class="item-list" id="ledgerList"></div>
+      </div>
+
+      <!-- 記帳：模板管理（獨立介面，可新增/編輯/刪除模板；記帳表單裡的模板按鈕仍可直接點擊套用） -->
+      <div id="trSub-templates" style="display:none;">
+        <p class="hint">在這裡統一管理所有「模板」（房租、訂閱費、常買的東西…）。存好的模板會自動出現在「記帳」分頁表單最上方，點一下按鈕就能直接帶入內容快速記帳；勾選「每月自動出現在待加入清單」的模板，每個月都會提醒你加入記帳。</p>
+        <details class="entry-wrap" id="tplDetails">
+          <summary><span class="plus">＋</span><span id="tplFormTitle">新增模板</span></summary>
+          <form class="entry" id="tplForm">
+            <input type="hidden" id="tplId">
+            <div class="full type-toggle">
+              <button type="button" class="expense active" data-type="expense">支出</button>
+              <button type="button" class="income" data-type="income">收入</button>
+            </div>
+            <input type="hidden" id="tplType" value="expense">
+            <label class="full">模板名稱
+              <input type="text" id="tplName" placeholder="例如：房租、Netflix 訂閱" required>
+            </label>
+            <div class="amount-hero full">
+              <div class="amount-label">金額</div>
+              <div class="amount-input-row">
+                <span>$</span>
+                <input type="number" id="tplAmount" step="0.01" min="0" placeholder="0" required>
+              </div>
+            </div>
+            <div class="cat-select-row" id="tplCatRow">
+              <label>主類別
+                <select id="tplCategory"></select>
+              </label>
+              <label>子類別（選填）
+                <select id="tplSubcategory"><option value="">不指定</option></select>
+              </label>
+            </div>
+            <label id="tplAccountWrap"><span>帳戶（選填，加入記帳時會自動增減餘額）</span>
+              <select id="tplAccount">
+                <option value="">不指定</option>
+              </select>
+            </label>
+            <label>每月幾號繳（選填，僅供提醒）
+              <input type="number" id="tplDayOfMonth" min="1" max="28" placeholder="例如：5">
+            </label>
+            <label class="full">備註（加入記帳時的名稱，留空則用模板名稱）
+              <input type="text" id="tplNote" placeholder="留空則沿用模板名稱">
+            </label>
+            <div class="full checkbox-row">
+              <input type="checkbox" id="tplActive">
+              <label for="tplActive" style="margin:0;">每月自動出現在「記帳」分頁的「本月待加入」清單</label>
+            </div>
+            <div class="full checkbox-row" id="tplSharedRow">
+              <input type="checkbox" id="tplShared">
+              <label for="tplShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
+            </div>
+            <div class="full" id="tplLedgerFields" style="display:none;">
+              <div class="map-grid">
+                <label>誰先付款
+                  <select id="tplPayer">
+                    <option value="me">我先付</option>
+                    <option value="partner">對方先付</option>
+                  </select>
+                </label>
+                <label>分攤方式
+                  <select id="tplSplitMode">
+                    <option value="split">平分（各一半）</option>
+                    <option value="advance">全額代墊</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </form>
+          <div class="entry-footer">
+            <div class="form-actions">
+              <button type="button" id="tplCancel">清空表單</button>
+              <button type="submit" form="tplForm" class="primary" id="tplSaveBtn">新增模板</button>
+            </div>
+          </div>
+        </details>
+        <div class="item-list" id="templatesManageList"></div>
       </div>
 
       <!-- 記帳：統計分析 -->
@@ -1531,7 +1619,7 @@ function removeLocal(key, id){
 // （dirty），實際重畫延後到「使用者真的切過去那個分頁」的當下才做；
 // 分頁本身也記住「目前顯示哪個」，切分頁時只補畫剛好變成需要的那一塊。
 // 這樣「存一筆記帳」只要重畫記帳清單本身，不用連統計圖表、共同帳本都算一次。
-const dirty = { dashboard:true, interest:true, liabilities:true, transactions:true, ledger:true, stats:true, categories:true };
+const dirty = { dashboard:true, interest:true, liabilities:true, transactions:true, ledger:true, templates:true, stats:true, categories:true };
 function markAllDirty(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
 let currentView = 'transactions';
 let currentTrSub = 'records';
@@ -1541,6 +1629,7 @@ const SECTION_RENDERERS = {
   liabilities: renderLiabilitiesSection_,
   transactions: renderTransactionsSection_,
   ledger: renderLedgerSection_,
+  templates: renderTemplatesManageSection_,
   stats: renderStatsSection_,
   categories: renderCategoriesSection_
 };
@@ -1549,13 +1638,14 @@ function renderInterestSection_(){ renderInterest(); }
 function renderLiabilitiesSection_(){ renderLiabilities(); }
 function renderTransactionsSection_(){ renderTransactions(); renderTrTemplateChips(); renderRecurringBanner(); renderRecurringPending(); }
 function renderLedgerSection_(){ renderLedger(); }
+function renderTemplatesManageSection_(){ renderTemplatesManage(); }
 function renderStatsSection_(){ renderStats(); }
 function renderCategoriesSection_(){ renderCategories(); }
 
 // 依目前「主分頁 + (若在記帳分頁) 子分頁」算出實際看得到、需要重畫的區塊 key
 function visibleSectionKey_(){
   if(currentView === 'transactions'){
-    if(['ledger','stats','categories'].includes(currentTrSub)) return currentTrSub;
+    if(['ledger','templates','stats','categories'].includes(currentTrSub)) return currentTrSub;
     return 'transactions'; // records / import 子分頁都只需要記帳清單那份資料
   }
   return currentView; // dashboard / interest / liabilities / settings
@@ -1709,6 +1799,14 @@ function renderAccountSelects(){
     const keepTo = trToSel.value;
     trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepTo));
     trToSel.value = keepTo;
+  }
+
+  // 模板管理表單的帳戶選單，跟記帳表單共用同一套「常用支付工具」篩選規則
+  const tplSel = $('#tplAccount');
+  if(tplSel){
+    const keepTpl = tplSel.value;
+    tplSel.innerHTML = `<option value="">不指定</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepTpl));
+    tplSel.value = keepTpl;
   }
 
   // 共同帳本「結算」用的轉帳帳戶選單：預設帶入現金帳戶，選了之後結算時
@@ -2032,6 +2130,7 @@ bindInlineCategoryCreation_($('#trCategory'), $('#trSubcategory'), () => $('#trT
 // 另外數字輸入框在滑鼠停留時用滾輪很容易不小心改動金額，這裡讓輸入框
 // 在滾輪事件時直接失焦，避免滾動網頁時誤觸改變數字。
 $('#trAmount').addEventListener('wheel', () => { $('#trAmount').blur(); }, { passive:true });
+$('#tplAmount').addEventListener('wheel', () => { $('#tplAmount').blur(); }, { passive:true });
 
 // 「全額代墊」只有在「我先付」的情況下，才代表整筆其實是對方的花費
 // （我幫對方代墊，不算我自己的支出分類，所以主類別不用選、直接統一存成
@@ -3170,6 +3269,137 @@ window.deleteRecurring = async id => {
     }, '刪除中…');
   }catch(err){ alert('刪除失敗：' + err.message); }
 };
+
+// ---------- 模板管理（獨立分頁：新增/編輯/刪除模板；記帳表單裡的模板按鈕仍可直接點擊套用，見上方 renderTrTemplateChips/applyTemplateToTr） ----------
+function populateTplCategories(type, selected, selectedSub){
+  const value = populateCategorySelect_($('#tplCategory'), getCategoryNames(type), selected);
+  populateTplSubcategories(type, value, selectedSub);
+}
+function populateTplSubcategories(type, mainName, selectedSub){
+  populateSubcategorySelect_($('#tplSubcategory'), getSubcategories(type, mainName), selectedSub);
+}
+bindInlineCategoryCreation_($('#tplCategory'), $('#tplSubcategory'), () => $('#tplType').value, populateTplCategories, populateTplSubcategories);
+
+function setTplType(type, selectedCategory, selectedSub){
+  $('#tplType').value = type;
+  $$('#tplForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  populateTplCategories(type, selectedCategory, selectedSub);
+}
+$$('#tplForm .type-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => setTplType(btn.dataset.type));
+});
+$('#tplShared').addEventListener('change', () => {
+  $('#tplLedgerFields').style.display = $('#tplShared').checked ? '' : 'none';
+});
+
+(function initTplDefaults(){
+  populateTplCategories('expense');
+})();
+
+// 清空表單、回到「新增模板」狀態
+function resetTplForm_(){
+  $('#tplId').value = '';
+  $('#tplForm').reset();
+  setTplType('expense');
+  $('#tplLedgerFields').style.display = 'none';
+  $('#tplFormTitle').textContent = '新增模板';
+  $('#tplSaveBtn').textContent = '新增模板';
+  $('#tplDetails').open = false;
+}
+$('#tplCancel').addEventListener('click', resetTplForm_);
+
+// 點清單裡的「編輯」：把模板內容帶入表單、展開表單並捲動過去，方便手機上直接改
+window.editTemplateManage = id => {
+  const t = state.recurring.find(x => x.id === id);
+  if(!t) return;
+  $('#tplId').value = t.id;
+  setTplType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
+  $('#tplName').value = t.name || '';
+  $('#tplAmount').value = t.amount || '';
+  $('#tplAccount').value = t.accountId || '';
+  $('#tplDayOfMonth').value = t.dayOfMonth || '';
+  $('#tplNote').value = t.note || '';
+  $('#tplActive').checked = String(t.active) === 'true';
+  const shared = recIsShared_(t);
+  $('#tplShared').checked = shared;
+  $('#tplLedgerFields').style.display = shared ? '' : 'none';
+  $('#tplPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+  $('#tplSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  $('#tplFormTitle').textContent = `編輯模板：${t.name}`;
+  $('#tplSaveBtn').textContent = '更新模板';
+  $('#tplDetails').open = true;
+  $('#tplDetails').scrollIntoView({ behavior:'smooth', block:'start' });
+};
+
+$('#tplForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = $('#tplId').value;
+  const type = $('#tplType').value;
+  const name = $('#tplName').value.trim();
+  if(!name){ alert('請輸入模板名稱。'); return; }
+  const shared = $('#tplShared').checked;
+  const splitMode = shared ? $('#tplSplitMode').value : 'personal';
+  const payer = shared ? $('#tplPayer').value : 'me';
+  const isAdvance = splitMode === 'advance' && payer !== 'partner';
+  const data = {
+    id: id || undefined,
+    name,
+    type,
+    category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#tplCategory').value,
+    subcategory: isAdvance ? '' : $('#tplSubcategory').value,
+    amount: parseFloat($('#tplAmount').value) || 0,
+    accountId: $('#tplAccount').value,
+    dayOfMonth: $('#tplDayOfMonth').value ? parseInt($('#tplDayOfMonth').value, 10) : '',
+    note: $('#tplNote').value.trim(),
+    active: $('#tplActive').checked,
+    payer,
+    splitMode
+  };
+  try{
+    await runBusy(async () => {
+      const saved = id
+        ? await apiPost('update','recurring',data)
+        : await apiPost('add','recurring',data);
+      upsertLocal('recurring', saved);
+      renderRecurring();
+      renderTrTemplateChips();
+      renderTemplatesManage();
+    }, id ? '更新模板中…' : '新增模板中…');
+  }catch(err){ alert((id ? '更新模板失敗：' : '新增模板失敗：') + err.message); return; }
+  resetTplForm_();
+});
+
+// 模板管理清單：顯示所有模板（不管本月是否已加入），可直接編輯/刪除
+function renderTemplatesManage(){
+  const list = $('#templatesManageList');
+  if(!list) return;
+  if(!state.recurring.length){
+    list.innerHTML = `<div class="empty">目前還沒有任何模板，點上面「＋新增模板」建立第一個吧。</div>`;
+    return;
+  }
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  list.innerHTML = state.recurring.map(t => {
+    const typeLabel = t.type === 'income' ? '收入' : '支出';
+    const activeOn = String(t.active) === 'true';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${escapeHtml(t.name)}</div>
+          <div class="item-note">${typeLabel} · ${escapeHtml(t.category || '其他')}${t.subcategory ? ' · ' + escapeHtml(t.subcategory) : ''}${t.accountId && byId[t.accountId] ? ' · ' + escapeHtml(byId[t.accountId]) : ''}${recSharedLabel_(t)}</div>
+        </div>
+        <div class="item-value ${t.type === 'income' ? 'income' : 'expense'}">$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-meta">
+        ${t.dayOfMonth ? `<span>每月 <b>${t.dayOfMonth}</b> 號</span>` : ''}
+        <span class="badge ${activeOn ? 'paid' : 'unpaid'}">${activeOn ? '每月自動提醒' : '不自動提醒'}</span>
+      </div>
+      <div class="item-actions">
+        <button class="small" onclick="editTemplateManage('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteRecurring('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
 
 // ---------- 類別設定（管理主類別 / 子類別，可新增、編輯、刪除） ----------
 function escapeHtml(s){
