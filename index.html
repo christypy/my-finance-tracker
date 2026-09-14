@@ -2631,7 +2631,7 @@ function updateTrFabVisibility(){
 }
 
 // 記帳頁：記帳（含轉帳）/ 共同帳本 / 統計分析 / 匯入 / 類別設定 子分頁切換
-const TR_SUBS = ['records','ledger','stats','import','categories'];
+const TR_SUBS = ['records','ledger','templates','stats','import','categories'];
 // 這幾個分頁需要看到完整記帳歷史（不只最近 3 個月）才會算得準：
 // 共同帳本可能有超過 3 個月還沒結算的舊項目、統計分析的「跟平均比」也需要更久以前的資料。
 const TR_SUBS_NEED_FULL_HISTORY = ['ledger', 'stats'];
