@@ -442,15 +442,22 @@
   .item-value.income{ color:var(--green); }
   .item-value.expense{ color:var(--red); }
 
-  .stat-section{ margin-bottom:22px; }
-  .stat-section h3{ font-family:'Roboto Slab', serif; font-size:15px; margin:0 0 10px; color:var(--ink); }
+  .stat-section{
+    margin-bottom:14px;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-sm);
+    padding:16px 20px 18px;
+  }
+  .stat-section h3{ font-family:'Roboto Slab', serif; font-size:14.5px; margin:0 0 12px; color:var(--ink); padding-bottom:8px; border-bottom:1px solid var(--paper-line); }
   .stat-bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px; }
   .stat-bar-label{ width:64px; flex:none; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .stat-bar-track{ flex:1; height:16px; background:var(--paper-line); border-radius:999px; overflow:hidden; }
+  .stat-bar-track{ flex:1; height:14px; background:var(--paper); border:1px solid var(--paper-line); border-radius:999px; overflow:hidden; }
   .stat-bar-fill{ height:100%; border-radius:999px; background:var(--gold); }
   .stat-bar-fill.income{ background:var(--green); }
   .stat-bar-fill.expense{ background:var(--red); }
-  .stat-bar-value{ width:104px; flex:none; text-align:right; font-family:'Roboto Slab', serif; font-size:12px; white-space:nowrap; }
+  .stat-bar-fill.flexible{ background:var(--ink-soft); }
+  .stat-bar-value{ width:104px; flex:none; text-align:right; font-family:'Roboto Slab', serif; font-size:12px; white-space:nowrap; color:var(--ink); }
 
   /* ---- Busy / processing state (避免連續點擊造成重複紀錄) ---- */
   body.busy button, body.busy .tab{ pointer-events:none; opacity:.55; }
@@ -587,23 +594,14 @@
   /* ---- 統計：比較卡片 ---- */
   .compare-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:18px; }
   .compare-card{
-    background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm);
-    padding:11px 13px; box-shadow:0 2px 8px rgba(58,43,18,.05);
+    background:var(--paper); border:1px solid var(--paper-line); border-radius:var(--radius-sm);
+    padding:11px 13px;
   }
   .compare-card .label{ font-size:11.5px; color:var(--ink-soft); }
-  .compare-card .value{ font-family:'Roboto Slab', serif; font-size:16px; margin-top:3px; }
+  .compare-card .value{ font-family:'Roboto Slab', serif; font-size:16px; margin-top:3px; color:var(--ink); }
   .compare-card .value.up{ color:var(--red); }
   .compare-card .value.down{ color:var(--green); }
   .compare-card .value.flat{ color:var(--ink-soft); }
-
-  /* ---- 統計：圓餅圖 ---- */
-  .pie-wrap{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin-bottom:6px; }
-  .pie-wrap svg{ width:150px; height:150px; flex:none; }
-  .pie-legend{ flex:1; min-width:160px; display:flex; flex-direction:column; gap:7px; }
-  .pie-legend-row{ display:flex; align-items:center; gap:8px; font-size:12.5px; }
-  .pie-legend-dot{ width:10px; height:10px; border-radius:50%; flex:none; }
-  .pie-legend-label{ flex:1; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .pie-legend-value{ font-family:'Roboto Slab', serif; font-size:12px; color:var(--ink-soft); white-space:nowrap; }
 
   /* ---- 類別管理（主類別 + 子類別） ---- */
   .main-cat-block{
@@ -626,18 +624,23 @@
   .sub-add-row input{ flex:1; min-height:34px; padding:6px 10px; font-size:13px; }
   .sub-add-row button{ flex:none; min-height:34px; padding:5px 12px; font-size:12.5px; }
 
-  /* ---- 類別月份分佈 ---- */
-  .dist-select-row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
-  .dist-select-row select{ min-height:38px; padding:7px 10px; }
-  .dist-month-block{ margin-bottom:14px; }
-  .dist-month-title{ font-size:12.5px; color:var(--ink-soft); margin-bottom:6px; font-family:'Roboto Slab', serif; }
+  /* ---- 類別月度明細表 ---- */
+  .cat-month-scroll{ overflow-x:auto; margin:0 -20px; padding:0 20px; }
+  .cat-month-table{ border-collapse:collapse; width:100%; min-width:640px; font-size:12px; }
+  .cat-month-table th, .cat-month-table td{ padding:7px 8px; text-align:right; white-space:nowrap; }
+  .cat-month-table th{ color:var(--ink-soft); font-weight:600; font-size:11px; border-bottom:2px solid var(--paper-line); }
+  .cat-month-table td:first-child, .cat-month-table th:first-child{ text-align:left; position:sticky; left:0; background:var(--card); }
+  .cat-month-table tbody tr:nth-child(odd) td{ background:var(--paper); }
+  .cat-month-table tbody tr:nth-child(odd) td:first-child{ background:var(--paper); }
+  .cat-month-table td.cat-name{ font-weight:600; color:var(--ink); }
+  .cat-month-table td.zero{ color:var(--paper-line); }
+  .cat-month-table tfoot td{ border-top:2px solid var(--paper-line); font-weight:700; color:var(--ink); }
+  .cat-month-table tfoot td:first-child{ background:var(--card); }
 
   .stat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
 
-  /* ---- 統計分析：支出排行（圓餅 + 排行榜） ---- */
+  /* ---- 統計分析：支出排行榜 ---- */
   .category-rank-wrap{ display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
-  .pie-wrap-mini{ flex:none; width:130px; }
-  .pie-wrap-mini svg{ width:130px; height:130px; display:block; }
   .rank-list{ flex:1 1 220px; min-width:200px; }
   .rank-row{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; cursor:pointer; }
   .rank-row:last-child{ margin-bottom:0; }
@@ -1030,7 +1033,6 @@
           <h3>支出去了哪裡</h3>
           <p class="hint" style="margin-bottom:10px;">點一列可以展開看該主類別底下的子類別花了多少。全額代墊給對方的款項不算在支出裡。</p>
           <div class="category-rank-wrap">
-            <div class="pie-wrap-mini" id="statsExpensePie"></div>
             <div class="rank-list" id="statsCategoryRank"></div>
           </div>
         </div>
@@ -1048,25 +1050,18 @@
           <div id="statsYearlyTrend"></div>
         </div>
 
+        <!-- ④-2 類別 × 月份明細（年模式）：一次看每個類別每個月花多少 -->
+        <div class="stat-section" id="statsCategoryMonthSection" style="display:none;">
+          <h3>各類別每月花費</h3>
+          <p class="hint" style="margin-bottom:10px;">左右可滑動，看這個年度每個類別在各月份花了多少。</p>
+          <div class="cat-month-scroll"><div id="statsCategoryMonthTable"></div></div>
+        </div>
+
         <!-- ⑤ 收入來源 -->
         <div class="stat-section">
           <h3>收入品項分佈</h3>
           <div id="statsIncomeBreakdown"></div>
         </div>
-
-        <!-- ⑥ 進階查詢（預設收合，不干擾主要重點） -->
-        <details class="entry-wrap" id="statsAdvancedDetails">
-          <summary><span class="plus">＋</span>進階：類別月份分佈查詢</summary>
-          <div class="stat-section" style="margin-top:14px;">
-            <p class="hint" style="margin-bottom:10px;">選擇主類別（與子類別）後，可以看到該年度每個月的支出金額變化，適合深入追蹤單一類別的長期趨勢。</p>
-            <div class="dist-select-row">
-              <select id="distYearInput"></select>
-              <select id="distCategoryInput"><option value="">全部主類別</option></select>
-              <select id="distSubcategoryInput"><option value="">不分子類別</option></select>
-            </div>
-            <div id="statsDistribution"></div>
-          </div>
-        </details>
       </div>
 
       <!-- 記帳：匯入 CSV -->
@@ -2290,48 +2285,8 @@ function renderCompare(period, expenseTotal){
     renderCompareCard('跟平均比', expenseTotal, avgTotal);
 }
 
-// ---------- 圓餅圖（純 SVG，無外部套件） ----------
-const PIE_COLORS = ['#d99a2b','#c1453d','#3f8f6f','#e0863a','#8a6b1f','#6b8e23','#a4442f','#4a6fa5','#b8860b','#9c5b8c','#2f7d7a','#7a5c2e'];
-function polarPoint(cx, cy, r, angleDeg){
-  const rad = (angleDeg - 90) * Math.PI / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-function pieSlicePath(cx, cy, r, startAngle, endAngle){
-  const start = polarPoint(cx, cy, r, endAngle);
-  const end = polarPoint(cx, cy, r, startAngle);
-  const largeArc = (endAngle - startAngle) <= 180 ? 0 : 1;
-  return `M ${cx} ${cy} L ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 0 ${end.x.toFixed(2)} ${end.y.toFixed(2)} Z`;
-}
-// withLegend=false 只畫圓餅本身（不附文字清單），用在旁邊已經有排行榜清單的地方，避免資訊重複
-function renderPieChart(container, items, total, withLegend){
-  if(withLegend === undefined) withLegend = true;
-  if(!items.length || !total){
-    container.innerHTML = withLegend ? `<div class="empty">這段期間沒有支出資料。</div>` : '';
-    return;
-  }
-  const cx = 75, cy = 75, r = 70;
-  let angle = 0;
-  const slices = items.map(([label, val], i) => {
-    const pct = val / total;
-    const startAngle = angle;
-    const endAngle = angle + pct * 360;
-    angle = endAngle;
-    const color = PIE_COLORS[i % PIE_COLORS.length];
-    const path = items.length === 1
-      ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>`
-      : `<path d="${pieSlicePath(cx, cy, r, startAngle, endAngle)}" fill="${color}"/>`;
-    return { path, label, val, pct, color };
-  });
-  const svg = `<svg viewBox="0 0 150 150">${slices.map(s => s.path).join('')}</svg>`;
-  if(!withLegend){ container.innerHTML = svg; return; }
-  const legend = slices.map(s => `
-    <div class="pie-legend-row">
-      <span class="pie-legend-dot" style="background:${s.color}"></span>
-      <span class="pie-legend-label">${s.label}</span>
-      <span class="pie-legend-value">$${fmt(s.val)}（${Math.round(s.pct*100)}%）</span>
-    </div>`).join('');
-  container.innerHTML = `${svg}<div class="pie-legend">${legend}</div>`;
-}
+// ---------- 排行榜色標：同一色系深淺，取代原本的彩虹配色 ----------
+const RANK_COLORS = ['#8a5a12','#b8860b','#c98a00','#a56f1c','#d9a233','#9c7a2e','#e6b752','#7a5c2e'];
 
 // ---------- 支出去了哪裡：排行榜（金額＋佔比＋筆數／平均＋跟上期比，可點開看子類別） ----------
 function categoryStatsFor(rows, type){
@@ -2392,7 +2347,7 @@ function renderCategoryRanking(container, cur, prev){
       <div class="rank-num">${i+1}</div>
       <div class="rank-bar-wrap">
         <div class="rank-top">
-          <span class="rank-label"><span class="rank-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>${escapeHtml(cat)}<span class="rank-caret">▶</span></span>
+          <span class="rank-label"><span class="rank-dot" style="background:${RANK_COLORS[i % RANK_COLORS.length]}"></span>${escapeHtml(cat)}<span class="rank-caret">▶</span></span>
           <span class="rank-value">$${fmt(info.total)}（${pct}%）</span>
         </div>
         <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
@@ -2427,14 +2382,14 @@ function renderFixedVsFlexible(container, rows){
   const fixed = expenseRows.filter(t => t.recurringId).reduce((s,t) => s + (Number(t.amount)||0), 0);
   const flexible = total - fixed;
   const parts = [
-    { label: '固定支出', val: fixed, color: 'var(--gold)' },
-    { label: '彈性支出', val: flexible, color: 'var(--red)' }
+    { label: '固定支出', val: fixed, cls: '' },
+    { label: '彈性支出', val: flexible, cls: 'flexible' }
   ];
   container.innerHTML = parts.map(p => {
     const pct = total ? Math.round(p.val / total * 100) : 0;
     return `<div class="stat-bar-row">
       <div class="stat-bar-label" style="width:56px;">${p.label}</div>
-      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${pct}%; background:${p.color};"></div></div>
+      <div class="stat-bar-track"><div class="stat-bar-fill ${p.cls}" style="width:${pct}%;"></div></div>
       <div class="stat-bar-value">$${fmt(p.val)}（${pct}%）</div>
     </div>`;
   }).join('');
@@ -2522,17 +2477,17 @@ function renderStats(){
   // 不需要重新跑一次整個 renderStats（也不會不小心把使用者正在看的其他區塊重畫掉）。
   lastCurExpStats_ = curExpStats;
   lastPrevExpStats_ = prevExpStats;
-  const rankedItems = Object.entries(curExpStats.map).sort((a,b) => b[1].total - a[1].total).map(([cat, info]) => [cat, info.total]);
-  renderPieChart($('#statsExpensePie'), rankedItems, curExpStats.total, false);
   renderCategoryRanking($('#statsCategoryRank'), curExpStats, prevExpStats);
 
   // ③ 固定 vs 彈性支出
   renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
 
-  // ④ 消費節奏：年模式顯示每月趨勢
+  // ④ 消費節奏：年模式顯示每月趨勢 + 各類別每月花費
   const trendSection = $('#statsYearlyTrendSection');
+  const catMonthSection = $('#statsCategoryMonthSection');
   if(statsMode === 'year' && period){
     trendSection.style.display = '';
+    catMonthSection.style.display = '';
     const monthlyExpense = Array(12).fill(0);
     let maxVal = 0;
     state.transactions.forEach(t => {
@@ -2553,107 +2508,53 @@ function renderStats(){
         <div class="stat-bar-value">$${fmt(val)}</div>
       </div>`;
     }).join('');
+    renderCategoryMonthTable(period);
   } else {
     trendSection.style.display = 'none';
+    catMonthSection.style.display = 'none';
   }
 
   // ⑤ 收入來源
   const inc = breakdownByCategory(rows, 'income');
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
-
-  // ⑥ 進階查詢（類別月份分佈，預設收合）
-  renderDistribution();
 }
 
-// ---------- 類別月份分佈（依主類別 / 子類別看每個月支出） ----------
-function populateDistYearOptions(){
-  const years = new Set(state.transactions.map(t => (t.date||'').slice(0,4)).filter(Boolean));
-  const thisYear = String(new Date().getFullYear());
-  years.add(thisYear);
-  const sel = $('#distYearInput');
-  const keep = sel.value || thisYear;
-  years.add(keep);
-  const sorted = Array.from(years).sort((a,b) => b.localeCompare(a));
-  sel.innerHTML = sorted.map(y => `<option value="${y}">${y} 年</option>`).join('');
-  sel.value = keep;
-}
-function populateDistCategoryOptions(){
-  const sel = $('#distCategoryInput');
-  const keep = sel.value;
-  const names = getCategoryNames('expense');
-  sel.innerHTML = `<option value="">全部主類別</option>` + names.map(c => `<option value="${c}">${c}</option>`).join('');
-  sel.value = names.includes(keep) ? keep : '';
-}
-function populateDistSubcategoryOptions(mainCat){
-  const sel = $('#distSubcategoryInput');
-  const keep = sel.value;
-  if(!mainCat){
-    sel.innerHTML = `<option value="">不分子類別</option>`;
-    sel.value = '';
-    sel.disabled = true;
+// ---------- 各類別每月花費（年模式）：一次看所有主類別在該年度每個月花多少 ----------
+function renderCategoryMonthTable(year){
+  const monthTotals = Array(12).fill(0);
+  const catMap = {}; // { 主類別: [12 個月金額] }
+  state.transactions.forEach(t => {
+    if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+    const d = t.date || '';
+    if(!d.startsWith(year)) return;
+    const m = parseInt(d.slice(5,7), 10) - 1;
+    if(m < 0 || m > 11) return;
+    const cat = t.category || '其他';
+    if(!catMap[cat]) catMap[cat] = Array(12).fill(0);
+    const amt = Number(t.amount) || 0;
+    catMap[cat][m] += amt;
+    monthTotals[m] += amt;
+  });
+  const container = $('#statsCategoryMonthTable');
+  const cats = Object.keys(catMap).map(cat => ({ cat, arr: catMap[cat], total: catMap[cat].reduce((s,v)=>s+v,0) }))
+    .sort((a,b) => b.total - a.total);
+  if(!cats.length){
+    container.innerHTML = `<div class="empty">這個年度沒有支出資料。</div>`;
     return;
   }
-  sel.disabled = false;
-  const subs = getSubcategories('expense', mainCat);
-  sel.innerHTML = `<option value="">不分子類別</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('');
-  sel.value = subs.includes(keep) ? keep : '';
+  const monthHeads = Array.from({length:12}, (_,i) => `<th>${i+1}月</th>`).join('');
+  const rowsHtml = cats.map(({cat, arr, total}) => {
+    const cells = arr.map(v => v ? `<td>$${fmt(v)}</td>` : `<td class="zero">-</td>`).join('');
+    return `<tr><td class="cat-name">${escapeHtml(cat)}</td>${cells}<td>$${fmt(total)}</td></tr>`;
+  }).join('');
+  const grandTotal = monthTotals.reduce((s,v)=>s+v,0);
+  const footCells = monthTotals.map(v => `<td>$${fmt(v)}</td>`).join('');
+  container.innerHTML = `<table class="cat-month-table">
+    <thead><tr><th>類別</th>${monthHeads}<th>全年</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot><tr><td>合計</td>${footCells}<td>$${fmt(grandTotal)}</td></tr></tfoot>
+  </table>`;
 }
-function distBarRow(label, val, total){
-  const pct = total ? Math.round(val/total*100) : 0;
-  return `<div class="stat-bar-row">
-    <div class="stat-bar-label">${label}</div>
-    <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
-    <div class="stat-bar-value">$${fmt(val)}</div>
-  </div>`;
-}
-function renderDistribution(){
-  populateDistYearOptions();
-  populateDistCategoryOptions();
-  const year = $('#distYearInput').value;
-  const mainCat = $('#distCategoryInput').value;
-  populateDistSubcategoryOptions(mainCat);
-  const subCat = $('#distSubcategoryInput').value;
-
-  const container = $('#statsDistribution');
-  const blocks = [];
-  for(let i = 0; i < 12; i++){
-    const period = `${year}-${String(i+1).padStart(2,'0')}`;
-    const rows = state.transactions.filter(t => t.type === 'expense' && (t.date||'').startsWith(period));
-    if(!mainCat){
-      const map = {};
-      let total = 0;
-      // 「全部主類別」的總覽不算代墊款項（不是自己的支出）；如果使用者特地選了
-      // 「代墊」這個主類別要單獨查看，下面 else 分支會用完整的 rows，不受影響。
-      rows.filter(t => t.category !== ADVANCE_CATEGORY_NAME).forEach(t => {
-        const cat = t.category || '其他';
-        const amt = Number(t.amount) || 0;
-        map[cat] = (map[cat] || 0) + amt;
-        total += amt;
-      });
-      const items = Object.entries(map).sort((a,b) => b[1]-a[1]);
-      const body = items.length ? items.map(([label,val]) => distBarRow(label, val, total)).join('') : `<div class="empty">無資料</div>`;
-      blocks.push(`<div class="dist-month-block"><div class="dist-month-title">${i+1} 月（共 $${fmt(total)}）</div>${body}</div>`);
-    } else {
-      const filtered = rows.filter(t => t.category === mainCat && (!subCat || t.subcategory === subCat));
-      const total = filtered.reduce((s,t) => s + (Number(t.amount)||0), 0);
-      let body = '';
-      if(!subCat){
-        const map = {};
-        filtered.forEach(t => {
-          const sub = t.subcategory || '（未分子類別）';
-          map[sub] = (map[sub] || 0) + (Number(t.amount) || 0);
-        });
-        const items = Object.entries(map).sort((a,b) => b[1]-a[1]);
-        body = items.length ? items.map(([label,val]) => distBarRow(label, val, total)).join('') : '';
-      }
-      blocks.push(`<div class="dist-month-block"><div class="dist-month-title">${i+1} 月 · $${fmt(total)}</div>${body}</div>`);
-    }
-  }
-  container.innerHTML = blocks.join('');
-}
-$('#distYearInput').addEventListener('change', renderDistribution);
-$('#distCategoryInput').addEventListener('change', renderDistribution);
-$('#distSubcategoryInput').addEventListener('change', renderDistribution);
 
 // 浮動「＋記帳」按鈕：只有在「記帳」分頁且停留在「記帳」子分頁時才顯示，
 // 其他分頁/子分頁看不到，避免點了按鈕卻不知道跳去哪裡
