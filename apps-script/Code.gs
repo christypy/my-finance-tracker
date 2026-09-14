@@ -61,7 +61,9 @@ const SHEET_HEADERS = {
   //           但如果某筆舊紀錄已經用了這個帳戶，編輯那筆紀錄時還是看得到、選得到它。
   // interestCap / normalRate 新增於陣列最後面（原因同上：ensureHeaders_ 只會在
   // 「最後面」補齊缺少的欄位，插在中間會讓既有欄位對不起來，寫入/讀取整個錯位）。
-  accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'note', 'updatedAt', 'favorite', 'interestCap', 'normalRate'],
+  // interestFreqMonths 同樣新增於陣列最後面：帳戶撥息週期的月數（1=每月、
+  // 3=每季、6=每半年、12=每年），空值／未設定時前端會當成 1（每月），相容舊資料。
+  accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'note', 'updatedAt', 'favorite', 'interestCap', 'normalRate', 'interestFreqMonths'],
   liabilities: ['id', 'name', 'amount', 'dueDate', 'paid', 'note', 'updatedAt'],
   interest: ['id', 'accountId', 'date', 'amount', 'note', 'createdAt'],
   // 記帳紀錄：

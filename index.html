@@ -698,7 +698,7 @@
       <div class="summary-grid" id="summaryGrid"></div>
 
       <h2 style="font-size:15px;">帳戶管理</h2>
-      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。銀行帳戶可填年利率，用來估算利息；如果帳戶是「優惠利率有上限金額，超過部分改用一般利率」的類型，可以填「優惠利率上限金額」與「超過上限部分年利率」，估算時會自動分兩段計算（實際入帳請到「利息紀錄」新增）。</p>
+      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。只有「銀行」類型的帳戶需要填年利率等利息相關欄位，用來估算利息；撥息週期可選每月／每季／每半年／每年（不是所有帳戶都是每月撥息）。如果帳戶是「優惠利率有上限金額，超過部分改用一般利率」的類型，可以填「優惠利率上限金額」與「超過上限部分年利率」，估算時會自動分兩段計算（實際入帳請到「利息紀錄」新增）。</p>
       <details class="entry-wrap" id="accountDetails">
         <summary><span class="plus">＋</span>新增 / 編輯帳戶</summary>
         <form class="entry" id="accountForm">
@@ -718,15 +718,25 @@
           <label>目前餘額
             <input type="number" id="accBalance" step="0.01" required>
           </label>
-          <label>年利率 %（銀行適用，選填）
-            <input type="number" id="accRate" step="0.001" placeholder="例如 1.8">
-          </label>
-          <label>優惠利率上限金額（選填）
-            <input type="number" id="accCap" step="0.01" placeholder="例如 100000，超過此金額的部分改用下方利率計算">
-          </label>
-          <label>超過上限部分年利率 %（選填，未填視為 0%）
-            <input type="number" id="accNormalRate" step="0.001" placeholder="例如 0.2">
-          </label>
+          <div class="full" id="accBankFieldsWrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+            <label>年利率 %（選填）
+              <input type="number" id="accRate" step="0.001" placeholder="例如 1.8">
+            </label>
+            <label>撥息週期（選填，未填視為每月撥息）
+              <select id="accInterestFreq">
+                <option value="1">每月</option>
+                <option value="3">每季（3 個月）</option>
+                <option value="6">每半年（6 個月）</option>
+                <option value="12">每年</option>
+              </select>
+            </label>
+            <label>優惠利率上限金額（選填）
+              <input type="number" id="accCap" step="0.01" placeholder="例如 100000，超過此金額的部分改用下方利率計算">
+            </label>
+            <label>超過上限部分年利率 %（選填，未填視為 0%）
+              <input type="number" id="accNormalRate" step="0.001" placeholder="例如 0.2">
+            </label>
+          </div>
           <label class="full">備註
             <input type="text" id="accNote" placeholder="選填">
           </label>
@@ -759,7 +769,7 @@
     <!-- 利息紀錄 -->
     <div class="view" id="view-interest">
       <h2>利息紀錄</h2>
-      <p class="hint">銀行真的撥利息給你時，在這裡新增一筆，系統會自動把金額加進該帳戶的餘額。</p>
+      <p class="hint">銀行真的撥利息給你時，在這裡新增一筆，系統會自動把金額加進該帳戶的餘額。帳戶選單只列出餘額大於 100 元的銀行帳戶；選好帳戶後金額欄位會先帶入系統估算的下期利息，如果跟銀行實際撥的金額不同，直接改成實際數字再存檔即可。</p>
       <details class="entry-wrap" open id="interestDetails">
         <summary><span class="plus">＋</span>新增利息入帳</summary>
         <form class="entry" id="interestForm">
@@ -1683,23 +1693,38 @@ function renderAll(){
   renderVisibleSection();
 }
 
-// 估算帳戶「下一期」利息（按月估算，單利）：
-// 沒有設「優惠利率上限金額」時，直接用年利率乘以全部餘額；
+// 帳戶撥息週期（月數）：沒有填的舊帳戶預設當作「每月」，相容既有資料
+function accountInterestFreqMonths_(a){
+  const months = a.interestFreqMonths ? parseInt(a.interestFreqMonths, 10) : 1;
+  return months > 0 ? months : 1;
+}
+function accountInterestFreqLabel_(a){
+  const months = accountInterestFreqMonths_(a);
+  if(months === 1) return '每月';
+  if(months === 3) return '每季';
+  if(months === 6) return '每半年';
+  if(months === 12) return '每年';
+  return `每 ${months} 個月`;
+}
+// 估算帳戶「下一期」會撥的利息（單利）：不是每個帳戶都是每月撥息，所以是用
+// 「年利率 × (撥息週期月數 / 12)」而不是固定除以 12，撥季息、半年息、年息都算得出來。
+// 沒有設「優惠利率上限金額」時，直接用這個週期利率乘以全部餘額；
 // 有設上限金額、且餘額超過上限時，改成分兩段計算——上限內的金額用年利率，
 // 超過上限的部分改用「超過上限部分年利率」（未填視為 0%），
 // 這樣才符合大部分銀行「優惠利率只算到某個金額，超過的部分回歸一般利率」的規則。
-function estimateAccountMonthlyInterest_(a){
+function estimateAccountNextInterest_(a){
   const balance = Number(a.balance) || 0;
   const rate = a.interestRate ? Number(a.interestRate) : 0;
   if(!rate || !balance) return 0;
+  const periodFraction = accountInterestFreqMonths_(a) / 12;
   const cap = a.interestCap ? Number(a.interestCap) : 0;
   if(cap > 0 && balance > cap){
     const normalRate = a.normalRate ? Number(a.normalRate) : 0;
-    const preferredPart = cap * rate / 100 / 12;
-    const excessPart = (balance - cap) * normalRate / 100 / 12;
+    const preferredPart = cap * rate / 100 * periodFraction;
+    const excessPart = (balance - cap) * normalRate / 100 * periodFraction;
     return preferredPart + excessPart;
   }
-  return balance * rate / 100 / 12;
+  return balance * rate / 100 * periodFraction;
 }
 
 
@@ -1721,7 +1746,7 @@ function renderDashboard(){
     .reduce((s,l) => s + (Number(l.amount)||0), 0);
   const net = totalAssets - totalDebt;
   // 加總所有有填年利率的帳戶，估算「下一期」全部帳戶合計會拿到的利息（單利、按月估算）
-  const totalEstInterest = state.accounts.reduce((s,a) => s + estimateAccountMonthlyInterest_(a), 0);
+  const totalEstInterest = state.accounts.reduce((s,a) => s + estimateAccountNextInterest_(a), 0);
 
   $('#netHeroValue').textContent = '$' + fmt(net);
   $('#netHeroAssets').textContent = '$' + fmt(totalAssets);
@@ -1778,7 +1803,8 @@ function renderAccountsList(){
       const cap = a.interestCap ? Number(a.interestCap) : 0;
       const normalRate = a.normalRate ? Number(a.normalRate) : 0;
       const overCap = cap > 0 && (Number(a.balance)||0) > cap;
-      const est = rate ? estimateAccountMonthlyInterest_(a) : null;
+      const est = rate ? estimateAccountNextInterest_(a) : null;
+      const freqLabel = accountInterestFreqLabel_(a);
       const favorite = isAccountFavorite(a);
       const checked = selectedAccountIds.has(a.id);
       return `<div class="item-card">
@@ -1796,6 +1822,7 @@ function renderAccountsList(){
         </div>
         ${rate ? `<div class="item-meta">
           <span>年利率 <b>${rate}%</b>${cap ? `（上限 $${fmt(cap)}）` : ''}</span>
+          <span>撥息週期 <b>${freqLabel}</b></span>
           ${overCap ? `<span>超額部分利率 <b>${normalRate}%</b></span>` : ''}
           <span>估算下期利息 <b>$${fmt(est)}</b></span>
         </div>` : ''}
@@ -1899,16 +1926,25 @@ function renderAccountSelects(){
   const favoriteAccounts = orderedAccounts.filter(isAccountFavorite);
   const optionsHtmlFor = list => list.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
 
-  // 利息紀錄只會發生在銀行帳戶，選單只顯示「銀行」類型帳戶，不用在一堆
-  // 現金／行動支付／悠遊卡帳戶裡面找；利息是單獨的記錄情境，不受「常用支付
-  // 工具」篩選影響。
-  const bankAccounts = orderedAccounts.filter(a => a.type === '銀行');
+  // 利息紀錄只會發生在銀行帳戶，選單只顯示「銀行」類型、而且餘額大於 100 的帳戶——
+  // 金額太小（例如 0 元、幾十元）的銀行帳戶通常不會真的產生利息，選單列出來只是
+  // 徒增選擇困難，所以先篩掉。如果「目前這個選單本來選著的值」剛好是一個不符合
+  // 條件的帳戶（例如編輯當下餘額已經降到 100 以下），一樣額外把它補進選項，
+  // 避免選單悄悄把原本選的帳戶換掉。
+  const bankAccounts = orderedAccounts.filter(a => a.type === '銀行' && (Number(a.balance)||0) > 100);
   const sel = $('#intAccount');
   const keepIntVal = sel.value;
-  sel.innerHTML = bankAccounts.length
-    ? bankAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('')
-    : `<option value="">尚無銀行帳戶</option>`;
-  if(bankAccounts.some(a => a.id === keepIntVal)) sel.value = keepIntVal;
+  let bankOptions = bankAccounts;
+  if(keepIntVal && !bankOptions.some(a => a.id === keepIntVal)){
+    const extra = orderedAccounts.find(a => a.id === keepIntVal && a.type === '銀行');
+    if(extra) bankOptions = [...bankOptions, extra];
+  }
+  sel.innerHTML = bankOptions.length
+    ? bankOptions.map(a => `<option value="${a.id}">${a.name}</option>`).join('')
+    : `<option value="">尚無符合條件的銀行帳戶</option>`;
+  if(bankOptions.some(a => a.id === keepIntVal)) sel.value = keepIntVal;
+  // 選好帳戶後，把「估算下期利息」直接帶入金額欄位（使用者還是可以自己改成銀行實際撥的金額）
+  syncIntAmountFromEstimate_();
 
   renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
 
@@ -2769,16 +2805,27 @@ $('#statsYearInput').addEventListener('change', renderStats);
 function isAccountFavorite(a){
   return a.favorite !== false && String(a.favorite) !== 'false';
 }
+// 只有「銀行」類型的帳戶才需要填利率/上限/撥息週期，其他類型（現金、行動支付、
+// 悠遊卡、投資）不會有利息，所以表單上把這幾個欄位整組藏起來，避免誤填。
+function syncAccBankFieldsVisibility(){
+  const isBank = $('#accType').value === '銀行';
+  $('#accBankFieldsWrap').style.display = isBank ? '' : 'none';
+}
+$('#accType').addEventListener('change', syncAccBankFieldsVisibility);
+syncAccBankFieldsVisibility(); // 頁面剛載入時，依目前類型（預設「現金」）先隱藏銀行專屬欄位
 $('#accountForm').addEventListener('submit', async e => {
   e.preventDefault();
+  const isBank = $('#accType').value === '銀行';
   const data = {
     id: $('#accId').value || undefined,
     name: $('#accName').value,
     type: $('#accType').value,
     balance: parseFloat($('#accBalance').value) || 0,
-    interestRate: $('#accRate').value ? parseFloat($('#accRate').value) : '',
-    interestCap: $('#accCap').value ? parseFloat($('#accCap').value) : '',
-    normalRate: $('#accNormalRate').value ? parseFloat($('#accNormalRate').value) : '',
+    // 非銀行帳戶不會用到這些利息相關欄位，直接存空值，避免表單被隱藏後殘留舊資料
+    interestRate: (isBank && $('#accRate').value) ? parseFloat($('#accRate').value) : '',
+    interestCap: (isBank && $('#accCap').value) ? parseFloat($('#accCap').value) : '',
+    normalRate: (isBank && $('#accNormalRate').value) ? parseFloat($('#accNormalRate').value) : '',
+    interestFreqMonths: isBank ? (parseInt($('#accInterestFreq').value, 10) || 1) : '',
     note: $('#accNote').value,
     favorite: $('#accFavorite').checked
   };
@@ -2797,8 +2844,9 @@ $('#accountForm').addEventListener('submit', async e => {
 $('#accCancel').addEventListener('click', resetAccountForm);
 function resetAccountForm(){
   $('#accId').value=''; $('#accName').value=''; $('#accType').value='現金';
-  $('#accBalance').value=''; $('#accRate').value=''; $('#accCap').value=''; $('#accNormalRate').value=''; $('#accNote').value='';
+  $('#accBalance').value=''; $('#accRate').value=''; $('#accCap').value=''; $('#accNormalRate').value=''; $('#accInterestFreq').value='1'; $('#accNote').value='';
   $('#accFavorite').checked = true;
+  syncAccBankFieldsVisibility();
 }
 window.editAccount = id => {
   const a = state.accounts.find(x => x.id === id);
@@ -2806,8 +2854,10 @@ window.editAccount = id => {
   $('#accId').value=a.id; $('#accName').value=a.name; $('#accType').value=a.type;
   $('#accBalance').value=a.balance; $('#accRate').value=a.interestRate || '';
   $('#accCap').value=a.interestCap || ''; $('#accNormalRate').value=a.normalRate || '';
+  $('#accInterestFreq').value = a.interestFreqMonths || '1';
   $('#accNote').value=a.note || '';
   $('#accFavorite').checked = isAccountFavorite(a);
+  syncAccBankFieldsVisibility();
   $('#accountDetails').open = true;
   $('#accountDetails').scrollIntoView({behavior:'smooth', block:'start'});
 };
@@ -2836,6 +2886,23 @@ window.toggleAccountFavorite = async id => {
 };
 
 // ---------- Interest CRUD ----------
+// 選帳戶時直接把「估算下期利息」帶入金額欄位，方便使用者對照銀行實際撥的
+// 金額；如果使用者自己手動改過金額，之後畫面重新整理（例如在別的分頁存檔
+// 觸發 renderAll）就不會又把打好的數字蓋掉，只有「換選別的帳戶」才會強制
+// 重新帶入新帳戶的估算值。
+let intAmountUserEdited = false;
+$('#intAmount').addEventListener('input', () => { intAmountUserEdited = true; });
+function syncIntAmountFromEstimate_(force){
+  const sel = $('#intAccount');
+  if(!sel || !sel.value) return;
+  if(!force && intAmountUserEdited) return;
+  const acc = state.accounts.find(a => a.id === sel.value);
+  if(!acc) return;
+  const est = estimateAccountNextInterest_(acc);
+  $('#intAmount').value = est ? est.toFixed(2) : '';
+  intAmountUserEdited = false;
+}
+$('#intAccount').addEventListener('change', () => syncIntAmountFromEstimate_(true));
 $('#interestForm').addEventListener('submit', async e => {
   e.preventDefault();
   const accountId = $('#intAccount').value;
@@ -2851,6 +2918,7 @@ $('#interestForm').addEventListener('submit', async e => {
         upsertLocal('accounts', updatedAcc);
       }
       $('#interestForm').reset();
+      intAmountUserEdited = false;
       renderAll();
     }, '新增中…');
   }catch(err){ alert('新增失敗：' + err.message); }
