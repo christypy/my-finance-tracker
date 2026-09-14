@@ -39,7 +39,7 @@
 // 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
 // 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
 // FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
-const BACKEND_VERSION_ = '2026-09-14-2';
+const BACKEND_VERSION_ = '2026-09-14-3';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -985,6 +985,17 @@ function doGet(e) {
       const truncated = txResult.rows.length < txResult.fullCount;
       const tzNow = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
       const currentMonth = Utilities.formatDate(new Date(), tzNow, 'yyyy-MM');
+      // 效能重點：本月固定項目完成清單直接從剛剛已經讀出來的 txResult.rows 篩選，
+      // 不要再另外呼叫 recurringDoneIdsForMonth_（那個函式內部會重新完整掃一次
+      // Transactions 的 id+date 欄，等於每次「載入首頁」都把同一張表的 id/date
+      // 欄整欄讀兩遍，記帳筆數愈多、首次載入愈慢，是原本最大的浪費）。
+      // since 一定 ≤ 這個月 1 號（或 since 為 null 代表已經拿到全部資料），
+      // 所以 txResult.rows 保證涵蓋這個月全部資料，這裡篩選出來的結果
+      // 跟原本呼叫 recurringDoneIdsForMonth_ 完全一樣，只是不用重讀一次表。
+      const doneIdsSet_ = {};
+      txResult.rows.forEach(function (t) {
+        if ((t.date || '').slice(0, 7) === currentMonth && t.recurringId) doneIdsSet_[String(t.recurringId)] = true;
+      });
       return jsonOut_({
         ok: true,
         data: {
@@ -996,9 +1007,7 @@ function doGet(e) {
           categories: getCategoryTreeData_(),
           transactionsTruncated: truncated,
           transactionsSince: since,
-          // 「本月」固定項目已完成清單，獨立、即時算出（見 recurringDoneIdsForMonth_
-          // 的說明），前端不必再靠「近 3 個月」精簡資料自己猜，第一次畫面就準確。
-          recurringDoneIds: recurringDoneIdsForMonth_(currentMonth),
+          recurringDoneIds: Object.keys(doneIdsSet_),
           recurringDoneMonth: currentMonth
         }
       });
