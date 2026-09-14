@@ -59,7 +59,9 @@ const SHEET_HEADERS = {
   //           空字串／未設定＝視為常用（相容舊資料，既有帳戶不會突然消失）；
   //           'false' 或 false＝不常用，記帳/模板/共同帳本結算的帳戶選單預設不顯示，
   //           但如果某筆舊紀錄已經用了這個帳戶，編輯那筆紀錄時還是看得到、選得到它。
-  accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'interestCap', 'normalRate', 'note', 'updatedAt', 'favorite'],
+  // interestCap / normalRate 新增於陣列最後面（原因同上：ensureHeaders_ 只會在
+  // 「最後面」補齊缺少的欄位，插在中間會讓既有欄位對不起來，寫入/讀取整個錯位）。
+  accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'note', 'updatedAt', 'favorite', 'interestCap', 'normalRate'],
   liabilities: ['id', 'name', 'amount', 'dueDate', 'paid', 'note', 'updatedAt'],
   interest: ['id', 'accountId', 'date', 'amount', 'note', 'createdAt'],
   // 記帳紀錄：
