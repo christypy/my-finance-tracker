@@ -39,7 +39,7 @@
 // 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
 // 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
 // FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
-const BACKEND_VERSION_ = '2026-09-14-6';
+const BACKEND_VERSION_ = '2026-09-14-7';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -1025,26 +1025,103 @@ function buildCategorySubsMap_(tree) {
 // typeValues / mainNameValues：跟列數一一對應、依序排好的 type / 主類別 陣列，
 // 由呼叫端準備好（不在這裡另外讀表，方便重複利用呼叫端已經讀出來的資料）。
 // null 規則＝清除該儲存格的資料驗證（type 或主類別是空的/查無對應清單時）。
+//
+// 重要：這個函式內部把任何例外都吞掉（只記錄到執行紀錄，不會往外丟）。
+// 原因：這個函式會被 addRow_ / updateRow_ 掛勾呼叫（新增/編輯記帳的過程中），
+// 也會被 addMainCategory_ 等類別管理函式掛勾呼叫（新增/刪除/改名類別的過程
+// 中）。如果這裡任何一步出錯又沒接住，會導致「本來應該成功的記帳寫入／
+// 類別異動」整個回傳失敗給前端，即使實際上資料已經寫進試算表——網站會
+// 顯示錯誤、畫面可能沒更新，統計分析等後續畫面就會看起來「壞掉」或
+// 「無法顯示」，但其實只是下拉選單這個附加功能出了問題，不應該連累到
+// 核心的記帳/類別功能。想除錯的話，到 Apps Script 編輯器左側「執行項目」
+// 找失敗紀錄，或手動執行 rebuildAllTransactionValidations() 看回傳訊息。
 function applyValidationRange_(sheet, startRow, typeValues, mainNameValues, tree) {
-  const numRows = typeValues.length;
-  if (!numRows) return;
-  const subsMap = buildCategorySubsMap_(tree);
-  const catRules = new Array(numRows);
-  const subRules = new Array(numRows);
-  for (let i = 0; i < numRows; i++) {
-    const type = typeValues[i];
-    const mainName = mainNameValues[i];
-    const mainNames = (tree[type] || []).map(m => m.name);
-    catRules[i] = [mainNames.length
-      ? SpreadsheetApp.newDataValidation().requireValueInList(mainNames, true).setAllowInvalid(true).build()
-      : null];
-    const subs = subsMap[type + '||' + mainName] || [];
-    subRules[i] = [subs.length
-      ? SpreadsheetApp.newDataValidation().requireValueInList(subs, true).setAllowInvalid(true).build()
-      : null];
+  try {
+    const numRows = typeValues.length;
+    if (!numRows) return;
+    const subsMap = buildCategorySubsMap_(tree);
+    const catRules = new Array(numRows);
+    const subRules = new Array(numRows);
+    for (let i = 0; i < numRows; i++) {
+      const type = typeValues[i];
+      const mainName = mainNameValues[i];
+      const mainNames = (tree[type] || []).map(m => m.name);
+      catRules[i] = [mainNames.length
+        ? SpreadsheetApp.newDataValidation().requireValueInList(mainNames, true).setAllowInvalid(true).build()
+        : null];
+      const subs = subsMap[type + '||' + mainName] || [];
+      subRules[i] = [subs.length
+        ? SpreadsheetApp.newDataValidation().requireValueInList(subs, true).setAllowInvalid(true).build()
+        : null];
+    }
+    sheet.getRange(startRow, TX_CATEGORY_COL_, numRows, 1).setDataValidations(catRules);
+    sheet.getRange(startRow, TX_SUBCATEGORY_COL_, numRows, 1).setDataValidations(subRules);
+  } catch (err) {
+    console.error('applyValidationRange_ 失敗（不影響記帳/類別本身的資料）: ' + err);
   }
-  sheet.getRange(startRow, TX_CATEGORY_COL_, numRows, 1).setDataValidations(catRules);
-  sheet.getRange(startRow, TX_SUBCATEGORY_COL_, numRows, 1).setDataValidations(subRules);
+}
+
+// ---------- 診斷工具：檢查 Transactions 裡的主類別文字，有哪些對不到 Categories ----------
+// 子類別下拉選單「依賴」該列目前的主類別文字要跟 Categories 表裡的某個主類別
+// 完全一樣（一字不差），才查得到子類別清單；對不上的話子類別欄就不會有下拉
+// （這是正常行為，不是錯誤——但代表那些列的主類別文字跟目前的 Categories
+// 清單不一致，通常是手動輸入的錯字、CSV 匯入的舊文字、或類別改名時沒有
+// 一起更新造成的）。
+// 用法：到 Apps Script 編輯器選這個函式、按「執行」，執行完到「執行項目」
+// 或按 Ctrl+Enter 看 Logger 輸出，也可以看函式回傳值。會列出「主類別完全
+// 對不上 Categories 清單」的文字，以及各自有幾筆記帳用到，方便你判斷要
+// 修 Categories 表還是修 Transactions 裡的文字。
+function checkCategoryMismatches() {
+  const sheet = getSheet_('transactions');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) { Logger.log('沒有記帳資料。'); return '沒有記帳資料。'; }
+
+  const numRows = lastRow - 1;
+  const minCol = Math.min(TX_TYPE_COL_, TX_CATEGORY_COL_);
+  const maxCol = Math.max(TX_TYPE_COL_, TX_CATEGORY_COL_);
+  const values = sheet.getRange(2, minCol, numRows, maxCol - minCol + 1).getValues();
+  const typeOffset = TX_TYPE_COL_ - minCol;
+  const catOffset = TX_CATEGORY_COL_ - minCol;
+
+  const tree = getCategoryTreeData_();
+  const validMainNames = {}; // 'type||mainName' -> true
+  Object.keys(tree).forEach(type => {
+    (tree[type] || []).forEach(m => { validMainNames[type + '||' + m.name] = true; });
+  });
+
+  const mismatchCounts = {}; // 'type||mainName' -> 筆數
+  let matchedCount = 0;
+  for (let i = 0; i < values.length; i++) {
+    const type = String(values[i][typeOffset] || '').trim();
+    const mainName = String(values[i][catOffset] || '').trim();
+    if (type !== 'expense' && type !== 'income') continue; // 轉帳/結算不適用主類別下拉
+    const key = type + '||' + mainName;
+    if (validMainNames[key]) {
+      matchedCount++;
+    } else {
+      mismatchCounts[key] = (mismatchCounts[key] || 0) + 1;
+    }
+  }
+
+  const lines = [];
+  lines.push('對得上 Categories 目前清單的記帳列：' + matchedCount + ' 筆。');
+  const mismatchKeys = Object.keys(mismatchCounts);
+  if (!mismatchKeys.length) {
+    lines.push('沒有任何一筆的主類別文字對不上 Categories 清單——如果子類別下拉還是沒出現，' +
+      '很可能是那個主類別本身在 Categories 裡就沒有設定任何子類別（例如「其他」）。');
+  } else {
+    lines.push('對不上 Categories 清單的主類別文字，共 ' + mismatchKeys.length + ' 種：');
+    mismatchKeys
+      .sort((a, b) => mismatchCounts[b] - mismatchCounts[a])
+      .forEach(key => {
+        const parts = key.split('||');
+        lines.push('  type=' + parts[0] + '，主類別="' + parts[1] + '"，' + mismatchCounts[key] + ' 筆');
+      });
+    lines.push('這些文字要嘛是打錯字/多空格，要嘛是 Categories 裡已經改名或刪掉了但沒有回頭改這些舊紀錄。');
+  }
+  const report = lines.join('\n');
+  Logger.log(report);
+  return report;
 }
 
 function onEdit(e) {
@@ -1081,9 +1158,13 @@ function onEdit(e) {
 // 幫「單一一列」的 category / subcategory 欄位重新套用資料驗證。
 // 給 addRow_ / updateRow_ 這種一次只處理一列的情境使用。
 function applyTransactionRowValidation_(sheet, row) {
-  const type = String(sheet.getRange(row, TX_TYPE_COL_).getValue() || '').trim();
-  const mainName = String(sheet.getRange(row, TX_CATEGORY_COL_).getValue() || '').trim();
-  applyValidationRange_(sheet, row, [type], [mainName], getCategoryTreeData_());
+  try {
+    const type = String(sheet.getRange(row, TX_TYPE_COL_).getValue() || '').trim();
+    const mainName = String(sheet.getRange(row, TX_CATEGORY_COL_).getValue() || '').trim();
+    applyValidationRange_(sheet, row, [type], [mainName], getCategoryTreeData_());
+  } catch (err) {
+    console.error('applyTransactionRowValidation_ 失敗（不影響這筆記帳本身的儲存）: ' + err);
+  }
 }
 
 // 一次幫「整張 Transactions 表」現有每一列重新套用資料驗證清單。
@@ -1094,20 +1175,28 @@ function applyTransactionRowValidation_(sheet, row) {
 // 只做 1 次讀取（type/category 連續範圍一起讀）＋固定 2 次
 // setDataValidations() 寫入（category 欄一次、subcategory 欄一次），
 // 記帳筆數再多也是固定成本，不會逾時。
+// 整個函式包在 try/catch 裡、永遠不會往外丟例外：這是「幫下拉選單補資料驗證」
+// 的附加功能，就算失敗也絕對不能連累呼叫它的 addMainCategory_ 等類別管理
+// 函式，讓類別新增/改名/刪除本身失敗。
 function rebuildAllTransactionValidations() {
-  const sheet = getSheet_('transactions');
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return '沒有資料列，不需要處理。';
-  const numRows = lastRow - 1;
-  const minCol = Math.min(TX_TYPE_COL_, TX_CATEGORY_COL_);
-  const maxCol = Math.max(TX_TYPE_COL_, TX_CATEGORY_COL_);
-  const values = sheet.getRange(2, minCol, numRows, maxCol - minCol + 1).getValues();
-  const typeOffset = TX_TYPE_COL_ - minCol;
-  const catOffset = TX_CATEGORY_COL_ - minCol;
-  const typeValues = values.map(r => String(r[typeOffset] || '').trim());
-  const mainNameValues = values.map(r => String(r[catOffset] || '').trim());
-  applyValidationRange_(sheet, 2, typeValues, mainNameValues, getCategoryTreeData_());
-  return '已重新套用 ' + numRows + ' 列的下拉選單驗證。';
+  try {
+    const sheet = getSheet_('transactions');
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return '沒有資料列，不需要處理。';
+    const numRows = lastRow - 1;
+    const minCol = Math.min(TX_TYPE_COL_, TX_CATEGORY_COL_);
+    const maxCol = Math.max(TX_TYPE_COL_, TX_CATEGORY_COL_);
+    const values = sheet.getRange(2, minCol, numRows, maxCol - minCol + 1).getValues();
+    const typeOffset = TX_TYPE_COL_ - minCol;
+    const catOffset = TX_CATEGORY_COL_ - minCol;
+    const typeValues = values.map(r => String(r[typeOffset] || '').trim());
+    const mainNameValues = values.map(r => String(r[catOffset] || '').trim());
+    applyValidationRange_(sheet, 2, typeValues, mainNameValues, getCategoryTreeData_());
+    return '已重新套用 ' + numRows + ' 列的下拉選單驗證。';
+  } catch (err) {
+    console.error('rebuildAllTransactionValidations 失敗（不影響 Categories/Transactions 本身的資料）: ' + err);
+    return '下拉選單驗證更新失敗（不影響資料本身）：' + err;
+  }
 }
 
 function jsonOut_(obj) {

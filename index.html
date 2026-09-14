@@ -692,6 +692,7 @@
         <div class="sub">
           <div>資產<b id="netHeroAssets">$0</b></div>
           <div>未繳負債<b id="netHeroDebt">$0</b></div>
+          <div>預估下期利息<b id="netHeroInterest">$0</b></div>
         </div>
       </div>
       <div class="summary-grid" id="summaryGrid"></div>
@@ -737,6 +738,14 @@
       <div class="dash-list-head">
         <h2 id="dashboardAccountsTitle">帳戶一覽</h2>
         <button type="button" class="dash-list-reset" id="dashboardFilterReset" style="display:none;">顯示全部</button>
+      </div>
+      <div class="acc-bulk-bar" id="accBulkBar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--ink-soft);cursor:pointer;">
+          <input type="checkbox" id="accSelectAll"> 全選
+        </label>
+        <button type="button" class="small" id="accBulkFavorite">移入常用</button>
+        <button type="button" class="small" id="accBulkUnfavorite">移出常用</button>
+        <span id="accBulkCount" style="font-size:12px;color:var(--ink-soft);"></span>
       </div>
       <div class="item-list" id="dashboardAccountsList"></div>
     </div>
@@ -1684,10 +1693,17 @@ function renderDashboard(){
     .filter(l => String(l.paid) !== 'true')
     .reduce((s,l) => s + (Number(l.amount)||0), 0);
   const net = totalAssets - totalDebt;
+  // 加總所有有填年利率的帳戶，估算「下一期」全部帳戶合計會拿到的利息（單利、按月估算）
+  const totalEstInterest = state.accounts.reduce((s,a) => {
+    const rate = a.interestRate ? Number(a.interestRate) : 0;
+    if(!rate) return s;
+    return s + (Number(a.balance)||0) * rate / 100 / 12;
+  }, 0);
 
   $('#netHeroValue').textContent = '$' + fmt(net);
   $('#netHeroAssets').textContent = '$' + fmt(totalAssets);
   $('#netHeroDebt').textContent = '$' + fmt(totalDebt);
+  $('#netHeroInterest').textContent = '$' + fmt(totalEstInterest);
 
   // 如果目前篩選的類型已經沒有任何帳戶了（例如帳戶被刪除或改了類型），自動取消篩選
   if(dashboardFilterType && !byType.hasOwnProperty(dashboardFilterType)) dashboardFilterType = null;
@@ -1738,13 +1754,17 @@ function renderAccountsList(){
       const rate = a.interestRate ? Number(a.interestRate) : 0;
       const est = rate ? (Number(a.balance)||0) * rate / 100 / 12 : null;
       const favorite = isAccountFavorite(a);
+      const checked = selectedAccountIds.has(a.id);
       return `<div class="item-card">
         <div class="item-top">
-          <div>
-            <div class="item-name">${a.name}</div>
-            <span class="badge">${a.type}</span>
-            ${favorite ? '' : '<span class="badge">不常用</span>'}
-            ${a.note ? `<div class="item-note">${a.note}</div>` : ''}
+          <div style="display:flex; gap:8px; align-items:flex-start;">
+            <input type="checkbox" class="acc-select-cb" data-id="${a.id}" ${checked ? 'checked' : ''} style="margin-top:4px;">
+            <div>
+              <div class="item-name">${a.name}</div>
+              <span class="badge">${a.type}</span>
+              ${favorite ? '' : '<span class="badge">不常用</span>'}
+              ${a.note ? `<div class="item-note">${a.note}</div>` : ''}
+            </div>
           </div>
           <div class="item-value">$${fmt(a.balance)}</div>
         </div>
@@ -1759,8 +1779,58 @@ function renderAccountsList(){
         </div>
       </div>`;
     }).join('');
+    $$('#dashboardAccountsList .acc-select-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.id;
+        if(cb.checked) selectedAccountIds.add(id); else selectedAccountIds.delete(id);
+        updateAccBulkBar(accountsToShow);
+      });
+    });
+  }
+  updateAccBulkBar(accountsToShow);
+}
+
+// ---------- 帳戶一覽：勾選多筆後一次「移入常用／移出常用」 ----------
+// 用 Set 記住目前勾選了哪些帳戶 id，切換篩選類型或重新整理清單後仍保留勾選狀態，
+// 直到使用者執行完批次動作或手動取消勾選。
+let selectedAccountIds = new Set();
+function updateAccBulkBar(accountsToShow){
+  const countEl = $('#accBulkCount');
+  if(countEl) countEl.textContent = selectedAccountIds.size ? `已勾選 ${selectedAccountIds.size} 個帳戶` : '尚未勾選帳戶';
+  const selectAllCb = $('#accSelectAll');
+  if(selectAllCb){
+    const shownIds = accountsToShow.map(a => a.id);
+    selectAllCb.checked = shownIds.length > 0 && shownIds.every(id => selectedAccountIds.has(id));
   }
 }
+$('#accSelectAll').addEventListener('change', () => {
+  const accountsToShow = dashboardFilterType ? state.accounts.filter(a => a.type === dashboardFilterType) : state.accounts;
+  if($('#accSelectAll').checked) accountsToShow.forEach(a => selectedAccountIds.add(a.id));
+  else accountsToShow.forEach(a => selectedAccountIds.delete(a.id));
+  renderAccountsList();
+});
+// 批次把勾選的帳戶都設成「常用」或「不常用」，只有真的需要改變狀態的帳戶才會呼叫 API，
+// 已經是目標狀態的帳戶會直接略過，減少不必要的請求。
+async function bulkSetAccountFavorite_(favorite){
+  const ids = [...selectedAccountIds].filter(id => state.accounts.some(a => a.id === id));
+  if(!ids.length){ alert('請先在下方帳戶清單勾選要調整的帳戶。'); return; }
+  const targets = ids.map(id => state.accounts.find(a => a.id === id)).filter(a => isAccountFavorite(a) !== favorite);
+  if(!targets.length){ alert(`勾選的帳戶已經都是「${favorite ? '常用' : '不常用'}」了。`); return; }
+  if(!confirm(`確定將勾選的 ${targets.length} 個帳戶${favorite ? '移入常用' : '移出常用'}嗎？`)) return;
+  try{
+    await runBusy(async () => {
+      for(const a of targets){
+        const saved = await apiPost('update','accounts',{ ...a, favorite });
+        upsertLocal('accounts', saved);
+      }
+      renderAll();
+    }, '更新中…');
+    selectedAccountIds.clear();
+    renderAccountsList();
+  }catch(err){ alert('更新失敗：' + err.message); }
+}
+$('#accBulkFavorite').addEventListener('click', () => bulkSetAccountFavorite_(true));
+$('#accBulkUnfavorite').addEventListener('click', () => bulkSetAccountFavorite_(false));
 
 // 各表單的帳戶下拉選單（記帳、轉帳、利息、模板共用）
 // 記帳/模板/共同帳本結算的帳戶選單，預設只列出打勾「常用」的帳戶（favoriteAccounts）；
@@ -1775,6 +1845,27 @@ function pickerAccountList_(favoriteAccounts, orderedAccounts, currentValue){
     if(extra) return [...base, extra];
   }
   return base;
+}
+// 記帳表單「轉帳」的帳戶選單（從／到）：轉帳通常會轉到不常用的帳戶（例如把錢存進
+// 平常不太記帳的銀行帳戶），如果沿用「常用支付工具」篩選，會導致那個銀行帳戶根本
+// 選不到。所以轉帳的兩個選單一律列出「全部帳戶」，不受常用篩選影響；
+// 非轉帳（一般記帳的帳戶欄）則維持原本只顯示常用帳戶的邏輯。
+function renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor){
+  const isTransfer = $('#trType').value === 'transfer';
+  const trBase = isTransfer ? orderedAccounts : favoriteAccounts;
+
+  const trSel = $('#trAccount');
+  const keepVal = trSel.value;
+  trSel.innerHTML = `<option value="">不指定</option>` + optionsHtmlFor(pickerAccountList_(trBase, orderedAccounts, keepVal));
+  trSel.value = keepVal; // 新增記帳的帳戶預設維持「不指定」，不自動帶入現金帳戶
+
+  // 記帳表單「轉帳」類型的「到（轉入帳戶）」選單：一樣列出全部帳戶（全部銀行），不只常用銀行
+  const trToSel = $('#trToAccount');
+  if(trToSel){
+    const keepTo = trToSel.value;
+    trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtmlFor(pickerAccountList_(trBase, orderedAccounts, keepTo));
+    trToSel.value = keepTo;
+  }
 }
 function renderAccountSelects(){
   const orderedAccounts = sortAccountsForSelect(state.accounts);
@@ -1792,18 +1883,7 @@ function renderAccountSelects(){
     : `<option value="">尚無銀行帳戶</option>`;
   if(bankAccounts.some(a => a.id === keepIntVal)) sel.value = keepIntVal;
 
-  const trSel = $('#trAccount');
-  const keepVal = trSel.value;
-  trSel.innerHTML = `<option value="">不指定</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepVal));
-  trSel.value = keepVal; // 新增記帳的帳戶預設維持「不指定」，不自動帶入現金帳戶
-
-  // 記帳表單「轉帳」類型的「到（轉入帳戶）」選單
-  const trToSel = $('#trToAccount');
-  if(trToSel){
-    const keepTo = trToSel.value;
-    trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepTo));
-    trToSel.value = keepTo;
-  }
+  renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
 
   // 模板管理表單的帳戶選單，跟記帳表單共用同一套「常用支付工具」篩選規則
   const tplSel = $('#tplAccount');
@@ -2161,6 +2241,12 @@ function setTrType(type, selectedCategory, selectedSub){
   $('#trAccountLabel').textContent = isTransfer ? '從（轉出帳戶）' : '帳戶（選填，會自動增減餘額）';
   $('#trAccount').required = isTransfer;
   $('#trToAccount').required = isTransfer;
+  // 切換「轉帳」與其他類型時，重新整理帳戶選單：轉帳要看得到全部帳戶（全部銀行），
+  // 其他類型則維持只顯示常用支付工具。
+  const orderedAccounts = sortAccountsForSelect(state.accounts);
+  const favoriteAccounts = orderedAccounts.filter(isAccountFavorite);
+  const optionsHtmlFor = list => list.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+  renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
   if(isTransfer){
     $('#trShared').checked = false;
     $('#trLedgerFields').style.display = 'none';
