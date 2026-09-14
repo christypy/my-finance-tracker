@@ -39,7 +39,7 @@
 // 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
 // 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
 // FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
-const BACKEND_VERSION_ = '2026-09-14-5';
+const BACKEND_VERSION_ = '2026-09-14-6';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -1001,26 +1001,50 @@ function readTransactionsSince_(since) {
 // rebuildAllTransactionValidations()、自己在試算表上確認清單裡沒有出現
 // 「三角形警告」的舊資料，再切換成完全擋死，避免不小心卡住既有紀錄。
 // 效能重點（避免「已超過執行階段時間上限」）：Apps Script 每次執行有時間
-// 上限（網頁應用程式／從選單觸發約 6 分鐘），如果記帳筆數有幾百到上千筆，
-// 逐列呼叫 setDataValidation()（每一列都是一次跟 Sheets 後端的來回）很容易
-// 把時間吃光。這裡全部改成「先在記憶體裡把列依清單內容分組，再用
-// Sheet.getRangeList(...).setDataValidation(...) 一次套用同一組」，
-// 呼叫次數只跟「主類別/子類別的組合數」有關（通常幾十個），不會再隨著
-// 記帳筆數線性增加，資料再多也不會逾時。
+// 上限，如果記帳筆數有幾百到上千筆，逐格呼叫 setDataValidation()（每一格
+// 都是一次跟 Sheets 後端的來回）很容易把時間吃光。
+// 這裡改用 Range.setDataValidations(rules) —— 一次把「一整欄、每一列各自
+// 的規則」組成一個陣列，寫入一次搞定：category 欄一次呼叫、subcategory 欄
+// 一次呼叫，總共固定 2 次，不會再隨記帳筆數線性增加，資料再多也不會逾時。
+// （備註：RangeList 沒有 setDataValidation 方法，只有 setDataValidations()
+// 這個「整段連續範圍、規則陣列」的寫法才是 Apps Script 支援的批次寫法。）
 const TX_TYPE_COL_ = SHEET_HEADERS.transactions.indexOf('type') + 1;
 const TX_CATEGORY_COL_ = SHEET_HEADERS.transactions.indexOf('category') + 1;
 const TX_SUBCATEGORY_COL_ = SHEET_HEADERS.transactions.indexOf('subcategory') + 1;
-const TX_CATEGORY_COL_LETTER_ = columnToLetter_(TX_CATEGORY_COL_);
-const TX_SUBCATEGORY_COL_LETTER_ = columnToLetter_(TX_SUBCATEGORY_COL_);
 
-function columnToLetter_(col) {
-  let letter = '';
-  while (col > 0) {
-    const rem = (col - 1) % 26;
-    letter = String.fromCharCode(65 + rem) + letter;
-    col = Math.floor((col - 1) / 26);
+// 把 Categories 樹整理成 'type||主類別名稱' -> 子類別陣列 的查詢表，方便查詢。
+function buildCategorySubsMap_(tree) {
+  const subsMap = {};
+  Object.keys(tree).forEach(type => {
+    (tree[type] || []).forEach(m => { subsMap[type + '||' + m.name] = m.subs || []; });
+  });
+  return subsMap;
+}
+
+// 對「連續一段列」(startRow ~ startRow+numRows-1) 一次套用資料驗證。
+// typeValues / mainNameValues：跟列數一一對應、依序排好的 type / 主類別 陣列，
+// 由呼叫端準備好（不在這裡另外讀表，方便重複利用呼叫端已經讀出來的資料）。
+// null 規則＝清除該儲存格的資料驗證（type 或主類別是空的/查無對應清單時）。
+function applyValidationRange_(sheet, startRow, typeValues, mainNameValues, tree) {
+  const numRows = typeValues.length;
+  if (!numRows) return;
+  const subsMap = buildCategorySubsMap_(tree);
+  const catRules = new Array(numRows);
+  const subRules = new Array(numRows);
+  for (let i = 0; i < numRows; i++) {
+    const type = typeValues[i];
+    const mainName = mainNameValues[i];
+    const mainNames = (tree[type] || []).map(m => m.name);
+    catRules[i] = [mainNames.length
+      ? SpreadsheetApp.newDataValidation().requireValueInList(mainNames, true).setAllowInvalid(true).build()
+      : null];
+    const subs = subsMap[type + '||' + mainName] || [];
+    subRules[i] = [subs.length
+      ? SpreadsheetApp.newDataValidation().requireValueInList(subs, true).setAllowInvalid(true).build()
+      : null];
   }
-  return letter;
+  sheet.getRange(startRow, TX_CATEGORY_COL_, numRows, 1).setDataValidations(catRules);
+  sheet.getRange(startRow, TX_SUBCATEGORY_COL_, numRows, 1).setDataValidations(subRules);
 }
 
 function onEdit(e) {
@@ -1034,28 +1058,20 @@ function onEdit(e) {
     const startCol = e.range.getColumn();
     const endCol = startCol + e.range.getNumColumns() - 1;
     // 貼上/拖曳填滿可能一次改到多欄多列，只要範圍有碰到 type 或 category 欄，
-    // 就把「整個被編輯到的每一列」都重新算一次驗證。
+    // 就把「整個被編輯到的這段列」一起重新算一次驗證。
     const touchesRelevantCol = (startCol <= TX_TYPE_COL_ && TX_TYPE_COL_ <= endCol) ||
       (startCol <= TX_CATEGORY_COL_ && TX_CATEGORY_COL_ <= endCol);
     if (!touchesRelevantCol) return;
 
-    const startRow = row;
     const numRows = e.range.getNumRows();
     const minCol = Math.min(TX_TYPE_COL_, TX_CATEGORY_COL_);
     const maxCol = Math.max(TX_TYPE_COL_, TX_CATEGORY_COL_);
-    const values = sheet.getRange(startRow, minCol, numRows, maxCol - minCol + 1).getValues();
+    const values = sheet.getRange(row, minCol, numRows, maxCol - minCol + 1).getValues();
     const typeOffset = TX_TYPE_COL_ - minCol;
     const catOffset = TX_CATEGORY_COL_ - minCol;
-
-    const rowInfos = [];
-    for (let i = 0; i < values.length; i++) {
-      rowInfos.push({
-        row: startRow + i,
-        type: String(values[i][typeOffset] || '').trim(),
-        mainName: String(values[i][catOffset] || '').trim()
-      });
-    }
-    applyValidationGroups_(sheet, rowInfos, getCategoryTreeData_());
+    const typeValues = values.map(r => String(r[typeOffset] || '').trim());
+    const mainNameValues = values.map(r => String(r[catOffset] || '').trim());
+    applyValidationRange_(sheet, row, typeValues, mainNameValues, getCategoryTreeData_());
   } catch (err) {
     // onEdit 觸發器裡的例外不會顯示給使用者看，這裡刻意吞掉避免打斷正常編輯；
     // 如果要除錯，到 Apps Script 編輯器左側「執行項目」可以看到失敗紀錄。
@@ -1067,61 +1083,7 @@ function onEdit(e) {
 function applyTransactionRowValidation_(sheet, row) {
   const type = String(sheet.getRange(row, TX_TYPE_COL_).getValue() || '').trim();
   const mainName = String(sheet.getRange(row, TX_CATEGORY_COL_).getValue() || '').trim();
-  applyValidationGroups_(sheet, [{ row: row, type: type, mainName: mainName }], getCategoryTreeData_());
-}
-
-// 核心批次套用邏輯：輸入一批 {row, type, mainName}，依「驗證清單內容」分組
-// （同一個 type 的主類別清單一樣、同一個 type+mainName 的子類別清單一樣），
-// 每組只呼叫一次 RangeList.setDataValidation()，而不是每一列各呼叫一次。
-function applyValidationGroups_(sheet, rowInfos, tree) {
-  if (!rowInfos.length) return 0;
-  const subsMap = {}; // 'type||mainName' -> subs[]
-  Object.keys(tree).forEach(type => {
-    (tree[type] || []).forEach(m => { subsMap[type + '||' + m.name] = m.subs || []; });
-  });
-
-  const catGroups = {};   // type -> { list, a1:[] }
-  const subGroups = {};   // 'type||mainName' -> { list, a1:[] }
-  const clearCatA1 = [];
-  const clearSubA1 = [];
-
-  rowInfos.forEach(info => {
-    const mainNames = (tree[info.type] || []).map(m => m.name);
-    const catA1 = TX_CATEGORY_COL_LETTER_ + info.row;
-    if (mainNames.length) {
-      if (!catGroups[info.type]) catGroups[info.type] = { list: mainNames, a1: [] };
-      catGroups[info.type].a1.push(catA1);
-    } else {
-      clearCatA1.push(catA1);
-    }
-
-    const subs = subsMap[info.type + '||' + info.mainName] || [];
-    const subA1 = TX_SUBCATEGORY_COL_LETTER_ + info.row;
-    if (subs.length) {
-      const key = info.type + '||' + info.mainName;
-      if (!subGroups[key]) subGroups[key] = { list: subs, a1: [] };
-      subGroups[key].a1.push(subA1);
-    } else {
-      clearSubA1.push(subA1);
-    }
-  });
-
-  Object.keys(catGroups).forEach(key => {
-    const g = catGroups[key];
-    sheet.getRangeList(g.a1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(g.list, true).setAllowInvalid(true).build()
-    );
-  });
-  Object.keys(subGroups).forEach(key => {
-    const g = subGroups[key];
-    sheet.getRangeList(g.a1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(g.list, true).setAllowInvalid(true).build()
-    );
-  });
-  if (clearCatA1.length) sheet.getRangeList(clearCatA1).clearDataValidations();
-  if (clearSubA1.length) sheet.getRangeList(clearSubA1).clearDataValidations();
-
-  return rowInfos.length;
+  applyValidationRange_(sheet, row, [type], [mainName], getCategoryTreeData_());
 }
 
 // 一次幫「整張 Transactions 表」現有每一列重新套用資料驗證清單。
@@ -1129,33 +1091,23 @@ function applyValidationGroups_(sheet, rowInfos, tree) {
 //  1) 第一次要啟用這個功能時，到 Apps Script 編輯器手動執行一次，
 //     幫所有既有的記帳列補上下拉選單。
 //  2) Categories 表有異動時，程式碼會自動呼叫（見 addMainCategory_ 等函式）。
-// 只做 2 次整欄批次讀取（type/category 各一次連續範圍）＋依組合分組後批次
-// 套用，記帳筆數幾千筆也能在時間上限內跑完。
+// 只做 1 次讀取（type/category 連續範圍一起讀）＋固定 2 次
+// setDataValidations() 寫入（category 欄一次、subcategory 欄一次），
+// 記帳筆數再多也是固定成本，不會逾時。
 function rebuildAllTransactionValidations() {
   const sheet = getSheet_('transactions');
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return '沒有資料列，不需要處理。';
-  const idCol = SHEET_HEADERS.transactions.indexOf('id') + 1;
   const numRows = lastRow - 1;
-  const minCol = Math.min(idCol, TX_TYPE_COL_, TX_CATEGORY_COL_);
-  const maxCol = Math.max(idCol, TX_TYPE_COL_, TX_CATEGORY_COL_);
+  const minCol = Math.min(TX_TYPE_COL_, TX_CATEGORY_COL_);
+  const maxCol = Math.max(TX_TYPE_COL_, TX_CATEGORY_COL_);
   const values = sheet.getRange(2, minCol, numRows, maxCol - minCol + 1).getValues();
-  const idOffset = idCol - minCol;
   const typeOffset = TX_TYPE_COL_ - minCol;
   const catOffset = TX_CATEGORY_COL_ - minCol;
-
-  const rowInfos = [];
-  for (let i = 0; i < values.length; i++) {
-    if (values[i][idOffset] === '' || values[i][idOffset] === null) continue; // 跳過刪除後留下的空列
-    rowInfos.push({
-      row: 2 + i,
-      type: String(values[i][typeOffset] || '').trim(),
-      mainName: String(values[i][catOffset] || '').trim()
-    });
-  }
-  if (!rowInfos.length) return '沒有資料列，不需要處理。';
-  const count = applyValidationGroups_(sheet, rowInfos, getCategoryTreeData_());
-  return '已重新套用 ' + count + ' 列的下拉選單驗證。';
+  const typeValues = values.map(r => String(r[typeOffset] || '').trim());
+  const mainNameValues = values.map(r => String(r[catOffset] || '').trim());
+  applyValidationRange_(sheet, 2, typeValues, mainNameValues, getCategoryTreeData_());
+  return '已重新套用 ' + numRows + ' 列的下拉選單驗證。';
 }
 
 function jsonOut_(obj) {
