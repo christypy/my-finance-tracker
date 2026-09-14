@@ -1259,7 +1259,7 @@ function reportBackendVersion_(version){
   }
 }
 
-let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null };
+let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null, recurringDoneIds: [], recurringDoneMonth: null };
 
 // 記帳品項（主類別 + 子類別，依收入/支出分開）。
 // 這份清單現在存在後端試算表的「Categories」表（跟 Accounts/Transactions 一樣），
@@ -1474,6 +1474,10 @@ async function loadAll(){
       state.categories = all.categories || { expense: [], income: [] };
       state.transactionsFullyLoaded = !all.transactionsTruncated;
       state.transactionsSince = all.transactionsSince || null;
+      // 後端直接針對「目前月份」即時算好的固定項目完成清單（不受「近 3 個月」
+      // 精簡讀取影響），讓第一次畫面就是正確答案，不會等背景補齊完整歷史後才變。
+      state.recurringDoneIds = all.recurringDoneIds || [];
+      state.recurringDoneMonth = all.recurringDoneMonth || null;
       renderAll();
     }, '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
@@ -3066,6 +3070,13 @@ function pendingRecurringForMonth(month){
   const doneIds = new Set(
     state.transactions.filter(t => (t.date||'').slice(0,7) === month && t.recurringId).map(t => String(t.recurringId))
   );
+  // 併入後端載入當下就針對「這個月」即時算好的完成清單（見 loadAll 裡的
+  // state.recurringDoneIds），不管本地這份 state.transactions 當下是精簡版
+  // 還是完整版，只要問的剛好是「這個月」，一律以後端當時讀到的最新結果為準，
+  // 避免「先顯示還沒加入，背景補齊資料後才變成已加入」的畫面閃爍。
+  if(state.recurringDoneMonth === month){
+    (state.recurringDoneIds || []).forEach(id => doneIds.add(String(id)));
+  }
   return state.recurring.filter(t => String(t.active) !== 'false' && !doneIds.has(String(t.id)));
 }
 

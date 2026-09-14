@@ -679,10 +679,28 @@ function replaceCategoryTree_(type, tree) {
 // 按鈕、或用時間驅動觸發器自動呼叫，都不會重複新增。
 function pendingRecurringTemplates_(month) {
   const templates = readAll_('recurring').filter(t => String(t.active) === 'true' || t.active === true);
-  const monthTx = readAll_('transactions').filter(t => (t.date || '').slice(0, 7) === month);
+  const doneIds = recurringDoneIdsForMonth_(month);
+  return templates.filter(t => doneIds.indexOf(String(t.id)) === -1);
+}
+
+// 只針對「某個月份」找出哪些固定項目已經有對應的記帳紀錄（recurringId）。
+// 前端首頁載入時帶的 sheet=all&recentMonths=3 為了效能只回傳「近 3 個月」的
+// 精簡記帳資料，用那份資料判斷「本月待加入」理論上沒問題（本月一定落在
+// 近 3 個月內），但如果讀取當下剛好遇到背景自動觸發器（autoAddMonthlyRecurring）
+// 同時在寫入、或 Apps Script 冷啟動造成的讀取時間差，就可能讀到還沒寫入
+// 完成的暫時性狀態，等前端背景補齊完整歷史後才發現其實已經加過，畫面因此
+// 「跳」一次。這裡改成：只針對「這個月」直接、獨立地從試算表重新讀一次
+// 最新資料（用 readTransactionsSince_ 只讀當月範圍，不必整張表全讀，效能
+// 跟精簡讀取一樣快），當作最準確的答案，讓 doGet(sheet=all) 可以直接把這份
+// 「已完成清單」一起回傳，前端載入的第一次畫面就已經是正確答案。
+function recurringDoneIdsForMonth_(month) {
+  const since = month + '-01';
+  const txResult = readTransactionsSince_(since);
   const doneIds = {};
-  monthTx.forEach(t => { if (t.recurringId) doneIds[String(t.recurringId)] = true; });
-  return templates.filter(t => !doneIds[String(t.id)]);
+  txResult.rows.forEach(t => {
+    if ((t.date || '').slice(0, 7) === month && t.recurringId) doneIds[String(t.recurringId)] = true;
+  });
+  return Object.keys(doneIds);
 }
 
 function runRecurringTemplates_(month, ids) {
@@ -875,6 +893,8 @@ function doGet(e) {
       }
       const txResult = readTransactionsSince_(since);
       const truncated = txResult.rows.length < txResult.fullCount;
+      const tzNow = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+      const currentMonth = Utilities.formatDate(new Date(), tzNow, 'yyyy-MM');
       return jsonOut_({
         ok: true,
         data: {
@@ -885,7 +905,11 @@ function doGet(e) {
           recurring: readAll_('recurring'),
           categories: getCategoryTreeData_(),
           transactionsTruncated: truncated,
-          transactionsSince: since
+          transactionsSince: since,
+          // 「本月」固定項目已完成清單，獨立、即時算出（見 recurringDoneIdsForMonth_
+          // 的說明），前端不必再靠「近 3 個月」精簡資料自己猜，第一次畫面就準確。
+          recurringDoneIds: recurringDoneIdsForMonth_(currentMonth),
+          recurringDoneMonth: currentMonth
         }
       });
     }
