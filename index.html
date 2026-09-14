@@ -1704,6 +1704,10 @@ function estimateAccountMonthlyInterest_(a){
 
 
 
+// 點擊「帳戶一覽」上方的類型卡片（銀行／現金／行動支付…）可以篩選下方清單只顯示該類型的帳戶，
+// 再點一次或按「顯示全部」可以取消篩選。
+let dashboardFilterType = null;
+
 function renderDashboard(){
   const byType = {};
   let totalAssets = 0;
