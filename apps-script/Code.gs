@@ -39,7 +39,7 @@
 // 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
 // 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
 // FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
-const BACKEND_VERSION_ = '2026-09-14-3';
+const BACKEND_VERSION_ = '2026-09-14-4';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -282,6 +282,12 @@ function addRow_(key, data) {
   if (key === 'interest') data.createdAt = new Date().toISOString();
   const row = headers.map(h => (data[h] !== undefined ? data[h] : ''));
   sheet.appendRow(row);
+  // 記帳（Transactions）新增一列後，順手幫這一列的 category / subcategory
+  // 欄位套上「目前 Categories 表」的下拉選單驗證，這樣不管是網站寫入、還是
+  // 之後使用者直接在試算表上手動編輯這一列，都能跟 Categories 保持一致。
+  if (key === 'transactions') {
+    applyTransactionRowValidation_(sheet, sheet.getLastRow());
+  }
   return data;
 }
 
@@ -296,6 +302,9 @@ function updateRow_(key, data, knownRowIndex) {
   data.updatedAt = new Date().toISOString();
   const row = headers.map(h => (data[h] !== undefined ? data[h] : ''));
   sheet.getRange(rowIndex, 1, 1, headers.length).setValues([row]);
+  if (key === 'transactions') {
+    applyTransactionRowValidation_(sheet, rowIndex);
+  }
   return data;
 }
 
@@ -604,6 +613,7 @@ function addMainCategory_(type, name) {
   const rows = categorySheetRows_();
   if (rows.some(r => r.type === type && String(r.mainName) === name)) throw new Error('主類別已存在');
   getSheet_('categories').appendRow([Utilities.getUuid(), type, name, '', new Date().toISOString()]);
+  rebuildAllTransactionValidations();
   return { name: name };
 }
 
@@ -614,6 +624,7 @@ function addSubCategory_(type, mainName, subName) {
   if (!rows.some(r => r.type === type && String(r.mainName) === mainName)) throw new Error('主類別不存在');
   if (rows.some(r => r.type === type && String(r.mainName) === mainName && String(r.subName) === subName)) throw new Error('子類別已存在');
   getSheet_('categories').appendRow([Utilities.getUuid(), type, mainName, subName, new Date().toISOString()]);
+  rebuildAllTransactionValidations();
   return { name: subName };
 }
 
@@ -621,6 +632,7 @@ function removeMainCategory_(type, name) {
   const rows = categorySheetRows_();
   const kept = rows.filter(r => !(r.type === type && String(r.mainName) === name));
   rewriteCategorySheet_(kept);
+  rebuildAllTransactionValidations();
   return { removed: rows.length - kept.length };
 }
 
@@ -628,6 +640,7 @@ function removeSubCategory_(type, mainName, subName) {
   const rows = categorySheetRows_();
   const kept = rows.filter(r => !(r.type === type && String(r.mainName) === mainName && String(r.subName) === subName));
   rewriteCategorySheet_(kept);
+  rebuildAllTransactionValidations();
   return { removed: rows.length - kept.length };
 }
 
@@ -653,6 +666,7 @@ function renameMainCategory_(type, oldName, newName) {
   if (!changed) throw new Error('找不到這個主類別');
   rewriteCategorySheet_(rows);
   const txResult = renameCategoryEverywhere_({ txType: type, level: 'main', oldValue: oldName, newValue: newName });
+  rebuildAllTransactionValidations();
   return { changed: changed, transactionsUpdated: txResult.updated };
 }
 
@@ -675,6 +689,7 @@ function renameSubCategory_(type, mainName, oldSub, newSub) {
   if (!changed) throw new Error('找不到這個子類別');
   rewriteCategorySheet_(rows);
   const txResult = renameCategoryEverywhere_({ txType: type, level: 'sub', mainName: mainName, oldValue: oldSub, newValue: newSub });
+  rebuildAllTransactionValidations();
   return { changed: changed, transactionsUpdated: txResult.updated };
 }
 
@@ -753,6 +768,7 @@ function replaceCategoryTree_(type, tree) {
     }
   });
   rewriteCategorySheet_(kept);
+  rebuildAllTransactionValidations();
   return { count: kept.filter(r => r.type === type).length };
 }
 
@@ -953,6 +969,122 @@ function readTransactionsSince_(since) {
     if (!since || (obj.date || '') >= since) rows.push(obj);
   }
   return { rows: rows, fullCount: fullCount };
+}
+
+// ============ Transactions 主類別／子類別下拉選單同步 ============
+// 目的：讓 Transactions 表的 category（主類別）／subcategory（子類別）欄位，
+// 不管是網站寫入、還是使用者直接在 Google Sheets 上手動編輯，永遠只能從
+// Categories 表「目前」有的清單裡選，避免打錯字、或選到已經被刪除/改名的
+// 舊類別，導致試算表跟網站看到的類別對不起來。
+//
+// 做法：
+// 1. onEdit(e) 簡易觸發器：使用者手動改動 Transactions 的 type 或 category
+//    欄位時，即時重新計算「同一列」category / subcategory 的下拉選單內容
+//    （category 依 type 決定可選哪些主類別；subcategory 依已選的主類別決定
+//    可選哪些子類別，兩層是連動的）。
+// 2. addRow_ / updateRow_ 寫入 Transactions 時（不管是網站的「新增記帳」
+//    還是「編輯記帳」），也會順手幫那一列套用最新的驗證，讓網站寫入的資料
+//    一樣看得到、選得到跟 Categories 一致的下拉選單。
+// 3. Categories 表本身有異動（新增/刪除/改名主類別或子類別）時，最後都會
+//    呼叫 rebuildAllTransactionValidations()，讓「所有既有列」的下拉選單
+//    清單同步更新成最新的 Categories 內容（例如：某個子類別被刪掉後，
+//    原本用到它的那些列，下拉選單也要重新反映「現在還剩哪些子類別可選」）。
+//
+// 注意「setAllowInvalid(true)」：這裡刻意允許儲存格目前的值不在清單裡
+// （只會在儲存格右上角顯示一個小提示三角形、不會擋掉編輯、也不會清空原本
+// 的文字）。原因是 CSV 匯入、或是舊資料裡本來就可能有跟目前 Categories
+// 清單對不起來的文字（見 SHEET_HEADERS.transactions 上面的註解：
+// 「CSV 匯入的品項可以是任意文字」），如果改成 setAllowInvalid(false)
+// （完全擋死、不准跟清單不符的值存在），舊資料或匯入資料反而會被卡住無法
+// 儲存。想要「過往紀錄也強制只能是清單內的值」的話，把下面兩處
+// .setAllowInvalid(true) 改成 .setAllowInvalid(false) 即可，但建議先跑一次
+// rebuildAllTransactionValidations()、自己在試算表上確認清單裡沒有出現
+// 「三角形警告」的舊資料，再切換成完全擋死，避免不小心卡住既有紀錄。
+const TX_TYPE_COL_ = SHEET_HEADERS.transactions.indexOf('type') + 1;
+const TX_CATEGORY_COL_ = SHEET_HEADERS.transactions.indexOf('category') + 1;
+const TX_SUBCATEGORY_COL_ = SHEET_HEADERS.transactions.indexOf('subcategory') + 1;
+
+function onEdit(e) {
+  try {
+    if (!e || !e.range) return;
+    const sheet = e.range.getSheet();
+    if (sheet.getName() !== SHEET_NAMES.transactions) return;
+    const row = e.range.getRow();
+    if (row < 2) return; // 表頭不處理
+
+    const startCol = e.range.getColumn();
+    const endCol = startCol + e.range.getNumColumns() - 1;
+    // 貼上/拖曳填滿可能一次改到多欄多列，只要範圍有碰到 type 或 category 欄，
+    // 就把「整個被編輯到的每一列」都重新算一次驗證。
+    const touchesRelevantCol = (startCol <= TX_TYPE_COL_ && TX_TYPE_COL_ <= endCol) ||
+      (startCol <= TX_CATEGORY_COL_ && TX_CATEGORY_COL_ <= endCol);
+    if (!touchesRelevantCol) return;
+
+    const numRows = e.range.getNumRows();
+    for (let r = row; r < row + numRows; r++) {
+      applyTransactionRowValidation_(sheet, r);
+    }
+  } catch (err) {
+    // onEdit 觸發器裡的例外不會顯示給使用者看，這裡刻意吞掉避免打斷正常編輯；
+    // 如果要除錯，到 Apps Script 編輯器左側「執行項目」可以看到失敗紀錄。
+  }
+}
+
+// 幫 Transactions 某一列的 category / subcategory 欄位重新套用資料驗證。
+function applyTransactionRowValidation_(sheet, row) {
+  const type = String(sheet.getRange(row, TX_TYPE_COL_).getValue() || '').trim();
+  const tree = getCategoryTreeData_(); // { expense: [{name, subs:[...]}], income: [...] }
+  const mainList = tree[type] || [];
+  const mainNames = mainList.map(m => m.name);
+
+  const catCell = sheet.getRange(row, TX_CATEGORY_COL_);
+  if (mainNames.length) {
+    catCell.setDataValidation(
+      SpreadsheetApp.newDataValidation()
+        .requireValueInList(mainNames, true)
+        .setAllowInvalid(true)
+        .build()
+    );
+  } else {
+    catCell.clearDataValidations();
+  }
+
+  const mainName = String(sheet.getRange(row, TX_CATEGORY_COL_).getValue() || '').trim();
+  const matched = mainList.find(m => m.name === mainName);
+  const subCell = sheet.getRange(row, TX_SUBCATEGORY_COL_);
+  if (matched && matched.subs && matched.subs.length) {
+    subCell.setDataValidation(
+      SpreadsheetApp.newDataValidation()
+        .requireValueInList(matched.subs, true)
+        .setAllowInvalid(true)
+        .build()
+    );
+  } else {
+    subCell.clearDataValidations();
+  }
+}
+
+// 一次幫「整張 Transactions 表」現有每一列重新套用資料驗證清單。
+// 使用時機：
+//  1) 第一次要啟用這個功能時，到 Apps Script 編輯器手動執行一次，
+//     幫所有既有的記帳列補上下拉選單。
+//  2) Categories 表有異動時，程式碼會自動呼叫（見 addMainCategory_ 等函式）。
+// 效能提醒：資料驗證沒有「整欄批次設定不同清單」的 API，仍然要逐列呼叫，
+// 記帳筆數很多（例如上千筆）時這個函式會跑比較久，屬於正常現象；一般
+// 使用（幾百筆內）幾秒內就會完成。
+function rebuildAllTransactionValidations() {
+  const sheet = getSheet_('transactions');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return '沒有資料列，不需要處理。';
+  const idCol = SHEET_HEADERS.transactions.indexOf('id') + 1;
+  const ids = sheet.getRange(2, idCol, lastRow - 1, 1).getValues();
+  let count = 0;
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0] === '' || ids[i][0] === null) continue; // 跳過刪除後留下的空列
+    applyTransactionRowValidation_(sheet, 2 + i);
+    count++;
+  }
+  return '已重新套用 ' + count + ' 列的下拉選單驗證。';
 }
 
 function jsonOut_(obj) {
