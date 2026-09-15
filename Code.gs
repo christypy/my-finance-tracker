@@ -387,12 +387,12 @@ function addRow_(key, data) {
   data.updatedAt = new Date().toISOString();
   const row = buildRowArray_(key, data); // 依試算表目前實際的欄位順序組列，不假設固定順序
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
-  // 記帳（Transactions）新增一列後，順手幫這一列的 category / subcategory
-  // 欄位套上「目前 Categories 表」的下拉選單驗證，這樣不管是網站寫入、還是
-  // 之後使用者直接在試算表上手動編輯這一列，都能跟 Categories 保持一致。
-  if (key === 'transactions') {
-    applyTransactionRowValidation_(sheet, sheet.getLastRow());
-  }
+  // 效能：故意不再於這裡同步更新 category/subcategory 下拉驗證。
+  // 這個下拉選單只影響「直接在 Google 試算表手動編輯」時看不看得到選單，
+  // 跟網站前端完全無關，卻會讓每一次網站存檔都多花好幾次 Sheets API 來回
+  // （多讀一次整張 Categories 表＋兩次寫入），是拖慢「儲存中…」的主因之一。
+  // 想要手動編輯試算表時也有下拉選單，到 Apps Script 編輯器手動執行一次
+  // rebuildAllTransactionValidations() 即可，不需要每筆記帳都自動觸發。
   return data;
 }
 
@@ -406,9 +406,7 @@ function updateRow_(key, data, knownRowIndex) {
   data.updatedAt = new Date().toISOString();
   const row = buildRowArray_(key, data); // 依試算表目前實際的欄位順序組列，不假設固定順序
   sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
-  if (key === 'transactions') {
-    applyTransactionRowValidation_(sheet, rowIndex);
-  }
+  // 效能考量同 addRow_，故意不再同步更新下拉驗證，見上方註解。
   return data;
 }
 
@@ -612,7 +610,12 @@ function updateTransactionTx_(data) {
 function deleteTransactionTx_(id) {
   const sheet = getSheet_('transactions');
   const rowIndex = findRowIndexById_('transactions', id);
-  if (rowIndex === -1) throw new Error('找不到這筆記帳: ' + id);
+  // 找不到這筆資料時，直接當成「已經刪除成功」回傳，而不是丟例外。
+  // 原因：網路不穩、逾時後前端重送同一個刪除請求時，這筆資料其實在第一次
+  // 就已經刪掉了；這裡如果丟例外，前端會顯示「刪除失敗」、畫面上那筆紀錄
+  // 也不會被移除，要重新整理才會發現其實早就刪除成功——這正是
+  // 「刪除顯示失敗、但重新整理後又不見了」的成因之一。
+  if (rowIndex === -1) return { id: id, account: null, accounts: [] };
   const old = readRowObj_('transactions', rowIndex);
   sheet.deleteRow(rowIndex);
   const accountsTouched = applyBalanceEffect_(old, -1);
@@ -1504,41 +1507,56 @@ function doPost(e) {
     const body = JSON.parse(e.postData.contents);
     if (!checkToken_(body.token)) return jsonOut_({ ok: false, error: '密鑰錯誤' });
 
-    const action = body.action;
-
-    // 複合操作：記帳＋帳戶餘額、批次匯入、共同帳本結算，都在同一次 exec 內完成
-    if (action === 'addTransactionTx') return jsonOut_({ ok: true, data: addTransactionTx_(body.data) });
-    if (action === 'updateTransactionTx') return jsonOut_({ ok: true, data: updateTransactionTx_(body.data) });
-    if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });
-    if (action === 'batchDeleteTransactionsTx') return jsonOut_({ ok: true, data: batchDeleteTransactionsTx_((body.data && body.data.ids) || []) });
-    if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
-    if (action === 'settleLedger') return jsonOut_({ ok: true, data: settleLedger_((body.data && body.data.ids) || [], body.data && body.data.settlement) });
-    if (action === 'runRecurringTemplates') return jsonOut_({ ok: true, data: runRecurringTemplates_(body.data && body.data.month, (body.data && body.data.ids) || null) });
-
-    // 類別管理：新增/改名/刪除主類別、子類別，改名時會一併更新過去的記帳／固定項目資料
-    if (action === 'addMainCategory') return jsonOut_({ ok: true, data: addMainCategory_(body.data.type, body.data.name) });
-    if (action === 'addSubCategory') return jsonOut_({ ok: true, data: addSubCategory_(body.data.type, body.data.mainName, body.data.subName) });
-    if (action === 'removeMainCategory') return jsonOut_({ ok: true, data: removeMainCategory_(body.data.type, body.data.name) });
-    if (action === 'removeSubCategory') return jsonOut_({ ok: true, data: removeSubCategory_(body.data.type, body.data.mainName, body.data.subName) });
-    if (action === 'renameMainCategory') return jsonOut_({ ok: true, data: renameMainCategory_(body.data.type, body.data.oldName, body.data.newName) });
-    if (action === 'renameSubCategory') return jsonOut_({ ok: true, data: renameSubCategory_(body.data.type, body.data.mainName, body.data.oldSub, body.data.newSub) });
-    if (action === 'replaceCategoryTree') return jsonOut_({ ok: true, data: replaceCategoryTree_(body.data.type, body.data.tree) });
-    if (action === 'reorderMainCategories') return jsonOut_({ ok: true, data: reorderMainCategories_(body.data.type, body.data.order) });
-
-    const sheetKey = body.sheet;
-    if (!SHEET_NAMES[sheetKey]) return jsonOut_({ ok: false, error: '未知的資料表' });
-
-    let result;
-    if (action === 'add') {
-      result = addRow_(sheetKey, body.data);
-    } else if (action === 'update') {
-      result = updateRow_(sheetKey, body.data);
-    } else if (action === 'delete') {
-      result = deleteRow_(sheetKey, body.data.id);
-    } else {
-      return jsonOut_({ ok: false, error: '未知的動作' });
+    // 效能／正確性重點：底下每個函式都是「先讀出資料在第幾列，再寫入」
+    // 這種分兩步的操作。如果同一份試算表同時有兩個請求在跑（使用者連續
+    // 操作、或背景補齊完整記帳歷史剛好跟這次操作撞在一起），列號可能被
+    // 另一個請求改變過，就會出現「找不到這筆資料」這類錯誤，或改/刪到
+    // 錯的列——這是「顯示失敗、但資料其實已經被動過」的主因之一。
+    // 用 LockService 把整個寫入動作鎖起來，同一時間只讓一個請求真正執行，
+    // 其餘請求在這裡排隊（最多等 30 秒），比大家同時搶著讀寫更快也更穩。
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) {
+      return jsonOut_({ ok: false, error: '系統忙碌中，請稍後再試一次。' });
     }
-    return jsonOut_({ ok: true, data: result });
+    try {
+      const action = body.action;
+
+      // 複合操作：記帳＋帳戶餘額、批次匯入、共同帳本結算，都在同一次 exec 內完成
+      if (action === 'addTransactionTx') return jsonOut_({ ok: true, data: addTransactionTx_(body.data) });
+      if (action === 'updateTransactionTx') return jsonOut_({ ok: true, data: updateTransactionTx_(body.data) });
+      if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });
+      if (action === 'batchDeleteTransactionsTx') return jsonOut_({ ok: true, data: batchDeleteTransactionsTx_((body.data && body.data.ids) || []) });
+      if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
+      if (action === 'settleLedger') return jsonOut_({ ok: true, data: settleLedger_((body.data && body.data.ids) || [], body.data && body.data.settlement) });
+      if (action === 'runRecurringTemplates') return jsonOut_({ ok: true, data: runRecurringTemplates_(body.data && body.data.month, (body.data && body.data.ids) || null) });
+
+      // 類別管理：新增/改名/刪除主類別、子類別，改名時會一併更新過去的記帳／固定項目資料
+      if (action === 'addMainCategory') return jsonOut_({ ok: true, data: addMainCategory_(body.data.type, body.data.name) });
+      if (action === 'addSubCategory') return jsonOut_({ ok: true, data: addSubCategory_(body.data.type, body.data.mainName, body.data.subName) });
+      if (action === 'removeMainCategory') return jsonOut_({ ok: true, data: removeMainCategory_(body.data.type, body.data.name) });
+      if (action === 'removeSubCategory') return jsonOut_({ ok: true, data: removeSubCategory_(body.data.type, body.data.mainName, body.data.subName) });
+      if (action === 'renameMainCategory') return jsonOut_({ ok: true, data: renameMainCategory_(body.data.type, body.data.oldName, body.data.newName) });
+      if (action === 'renameSubCategory') return jsonOut_({ ok: true, data: renameSubCategory_(body.data.type, body.data.mainName, body.data.oldSub, body.data.newSub) });
+      if (action === 'replaceCategoryTree') return jsonOut_({ ok: true, data: replaceCategoryTree_(body.data.type, body.data.tree) });
+      if (action === 'reorderMainCategories') return jsonOut_({ ok: true, data: reorderMainCategories_(body.data.type, body.data.order) });
+
+      const sheetKey = body.sheet;
+      if (!SHEET_NAMES[sheetKey]) return jsonOut_({ ok: false, error: '未知的資料表' });
+
+      let result;
+      if (action === 'add') {
+        result = addRow_(sheetKey, body.data);
+      } else if (action === 'update') {
+        result = updateRow_(sheetKey, body.data);
+      } else if (action === 'delete') {
+        result = deleteRow_(sheetKey, body.data.id);
+      } else {
+        return jsonOut_({ ok: false, error: '未知的動作' });
+      }
+      return jsonOut_({ ok: true, data: result });
+    } finally {
+      lock.releaseLock();
+    }
   } catch (err) {
     return jsonOut_({ ok: false, error: String(err) });
   }

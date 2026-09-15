@@ -1495,19 +1495,37 @@ const CATEGORIES = {
 };
 
 // ---------- API ----------
+// 效能重點：fetch 預設沒有逾時機制，Apps Script 沒回應時畫面會無限期卡在
+// 「儲存中…／刪除中…」。這裡統一加上逾時保護，超過時間就中止並丟出明確的
+// 逾時訊息，至少讓使用者知道發生什麼事、可以重試，而不是永遠卡著等。
+const API_TIMEOUT_MS = 45000;
+async function fetchWithTimeout_(url, options){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try{
+    return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+  }catch(err){
+    if(err.name === 'AbortError'){
+      throw new Error('連線逾時（超過 ' + Math.round(API_TIMEOUT_MS/1000) + ' 秒沒有回應），請檢查網路後再試一次；如果剛剛的操作其實已經送出，重新整理頁面確認一下再決定要不要重做。');
+    }
+    throw err;
+  }finally{
+    clearTimeout(timer);
+  }
+}
 async function apiGet(sheet, params){
   let url = `${cfg.url}?token=${encodeURIComponent(cfg.token)}&sheet=${sheet}`;
   if(params){
     Object.keys(params).forEach(k => { url += `&${k}=${encodeURIComponent(params[k])}`; });
   }
-  const res = await fetch(url);
+  const res = await fetchWithTimeout_(url);
   const json = await res.json();
   reportBackendVersion_(json.version);
   if(!json.ok) throw new Error(json.error || '讀取失敗');
   return json.data;
 }
 async function apiPost(action, sheet, data){
-  const res = await fetch(cfg.url, {
+  const res = await fetchWithTimeout_(cfg.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ token: cfg.token, action, sheet, data })
