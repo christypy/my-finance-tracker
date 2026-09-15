@@ -411,6 +411,22 @@
   .segmented button{ flex:1; min-height:38px; padding:8px 10px; font-size:13px; border-radius:999px; }
   .segmented button.active{ background:var(--ink); color:#fff; border-color:var(--ink); font-weight:600; }
 
+  /* ---- 帳戶總覽：近期資產趨勢折線圖 ---- */
+  .trend-card{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-sm);
+    padding:14px 14px 10px;
+    margin-bottom:18px;
+    box-shadow:0 2px 8px rgba(58,43,18,.05);
+  }
+  .trend-change{ font-size:13px; color:var(--ink-soft); margin-bottom:6px; }
+  .trend-change b{ font-family:'Roboto Slab', serif; font-size:15px; font-weight:700; margin-left:4px; }
+  .trend-change b.up{ color:var(--green); }
+  .trend-change b.down{ color:var(--red); }
+  #trendSvg{ width:100%; height:140px; display:block; }
+  .trend-x-labels{ display:flex; justify-content:space-between; font-size:11px; color:var(--ink-soft); margin-top:4px; }
+
   .period-row{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
   .period-row input, .period-row select{ min-height:38px; padding:7px 10px; width:auto; }
   .filter-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; font-size:13px; color:var(--ink-soft); }
@@ -703,6 +719,21 @@
         </div>
       </div>
       <div class="summary-grid" id="summaryGrid"></div>
+
+      <div class="dash-list-head">
+        <h2 style="font-size:15px;">近期資產趨勢</h2>
+        <div class="segmented" id="trendRangeNav" style="margin:0;">
+          <button type="button" data-days="7">7天</button>
+          <button type="button" class="active" data-days="30">30天</button>
+          <button type="button" data-days="90">90天</button>
+        </div>
+      </div>
+      <div class="trend-card" id="trendCard">
+        <div class="trend-change" id="trendChangeLabel"></div>
+        <svg id="trendSvg" viewBox="0 0 640 200" preserveAspectRatio="none"></svg>
+        <div class="trend-x-labels" id="trendXLabels"></div>
+        <p class="hint" style="margin:8px 0 0;">依記帳（收入/支出）、共同帳本結算、利息入帳逐日反推的總資產走勢；如果帳戶餘額是直接手動改的（不是透過記帳），該段期間會跟實際有落差。</p>
+      </div>
 
       <h2 style="font-size:15px;">帳戶管理</h2>
       <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。只有「銀行」類型的帳戶需要填年利率等利息相關欄位，用來估算利息；撥息週期可選每月／每季／每半年／每年（不是所有帳戶都是每月撥息）。如果帳戶是「優惠利率有上限金額，超過部分改用一般利率」的類型，可以填「優惠利率上限金額」與「超過上限部分年利率」，估算時會自動分兩段計算（實際入帳請到「利息紀錄」新增）。</p>
@@ -1763,6 +1794,101 @@ function estimateAccountNextInterest_(a){
   return balance * rate / 100 * periodFraction;
 }
 
+// ---------- 帳戶總覽：近期資產趨勢（折線圖） ----------
+// 資料庫沒有存「每天的總資產」歷史，這裡改用「目前各帳戶餘額加總」往回推算：
+// 記帳（收入/支出）、共同帳本結算、利息入帳，這幾種動作都會讓總資產增減，
+// 把每一天造成的淨變動算出來，再從「今天」逐天往回減掉當天的變動量，
+// 就能反推出過去每一天「那天結束時」大概的總資產，畫成走勢線。
+// 限制：如果帳戶餘額是直接手動改的（不是透過記帳或利息紀錄），這段期間的
+// 走勢會跟實際有落差——資料本身沒有記錄「手動調整」的歷史可以反推。
+let trendRangeDays = 30;
+function dailyNetChangeMap_(){
+  const map = {};
+  const add = (date, delta) => { if(!date) return; map[date] = (map[date] || 0) + delta; };
+  state.transactions.forEach(t => {
+    if(t.type === 'expense') add(t.date, -(Number(t.amount)||0));
+    else if(t.type === 'income') add(t.date, Number(t.amount)||0);
+    else if(t.type === 'settlement') add(t.date, (t.payer === 'partner' ? 1 : -1) * (Number(t.amount)||0));
+    // transfer：同一個人自己帳戶互轉，對「總資產」沒有影響，不列入計算
+  });
+  (state.interest || []).forEach(r => add(r.date, Number(r.amount)||0));
+  return map;
+}
+function computeAssetTrend_(days){
+  const netChangeByDate = dailyNetChangeMap_();
+  const totalAssetsNow = state.accounts.reduce((s,a) => s + (Number(a.balance)||0), 0);
+  const today = new Date();
+  const dateList = [];
+  for(let i = days - 1; i >= 0; i--){
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    dateList.push(d.toISOString().slice(0,10));
+  }
+  // running 代表「當天結束時」的總資產，從今天往回推算：先記下今天的值，
+  // 再減掉今天的淨變動得到「昨天結束時」的值，依此類推
+  let running = totalAssetsNow;
+  const valuesDesc = [];
+  for(let i = dateList.length - 1; i >= 0; i--){
+    const d = dateList[i];
+    valuesDesc.push({ date: d, value: running });
+    running -= (netChangeByDate[d] || 0);
+  }
+  return valuesDesc.reverse(); // 由舊到新，畫圖用
+}
+function renderTrendChart_(){
+  const svg = $('#trendSvg');
+  if(!svg) return;
+  const points = computeAssetTrend_(trendRangeDays);
+  const W = 640, H = 200, padTop = 16, padBottom = 8;
+  const values = points.map(p => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = (max - min) || 1;
+  const stepX = points.length > 1 ? W / (points.length - 1) : 0;
+  const coords = points.map((p, i) => {
+    const x = points.length > 1 ? i * stepX : W/2;
+    const y = padTop + (1 - (p.value - min) / range) * (H - padTop - padBottom);
+    return [x, y];
+  });
+  const first = values[0];
+  const last = values[values.length - 1];
+  const diff = last - first;
+  const up = diff >= 0;
+
+  const linePath = coords.map((c,i) => `${i===0?'M':'L'}${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(' ');
+  const lastX = coords[coords.length-1][0].toFixed(1);
+  const firstX = coords[0][0].toFixed(1);
+  const areaPath = `${linePath} L${lastX},${H} L${firstX},${H} Z`;
+  const color = up ? 'var(--green)' : 'var(--red)';
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="trendFillGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaPath}" fill="url(#trendFillGrad)" stroke="none"></path>
+    <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></path>
+  `;
+
+  const pct = first ? (diff / Math.abs(first) * 100) : 0;
+  const diffLabel = `${up ? '+' : '-'}$${fmt(Math.abs(diff))}（${up ? '+' : '-'}${Math.abs(pct).toFixed(1)}%）`;
+  $('#trendChangeLabel').innerHTML = `近 ${trendRangeDays} 天總資產變化<b class="${up?'up':'down'}">${diffLabel}</b>`;
+
+  const xLabels = $('#trendXLabels');
+  if(xLabels && points.length){
+    xLabels.innerHTML = `<span>${points[0].date}</span><span>${points[points.length-1].date}</span>`;
+  }
+}
+$$('#trendRangeNav button').forEach(b => {
+  b.addEventListener('click', () => {
+    trendRangeDays = parseInt(b.dataset.days, 10) || 30;
+    $$('#trendRangeNav button').forEach(x => x.classList.toggle('active', x === b));
+    renderTrendChart_();
+  });
+});
+
 
 
 // 點擊「帳戶一覽」上方的類型卡片（銀行／現金／行動支付…）可以篩選下方清單只顯示該類型的帳戶，
@@ -1830,6 +1956,7 @@ function renderDashboard(){
   });
 
   renderAccountsList();
+  renderTrendChart_();
 }
 $('#dashboardFilterReset').addEventListener('click', () => {
   dashboardFilterType = null;
