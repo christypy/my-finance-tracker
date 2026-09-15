@@ -39,7 +39,13 @@
 // 後端版本號：每次修改這份 Code.gs、並且重新部署「新版本」時，記得順手
 // 更新這個字串（例如改成今天的日期），前端「設定」頁會拿這個值跟前端
 // FRONTEND_VERSION 比對，用來提醒「忘記部署新版本」這種最常見的連線失敗原因。
-const BACKEND_VERSION_ = '2026-09-15-1';
+// 2026-09-15-2：把「利息紀錄」整合進「記帳」——不再有獨立的 InterestRecords
+// 分頁／表格。利息／股息現在就是一筆普通的「收入」記帳（類別建議用「投資收益」，
+// 子類別「利息」或「股息」），走跟其他記帳完全一樣的 addTransactionTx_ 複合流程，
+// 好處：帳戶餘額調整、編輯、刪除還原、重複記帳偵測、月/年統計，全部不用重寫一套，
+// 直接沿用既有、已經測過的記帳邏輯。因為改動當下使用者還沒有任何利息歷史紀錄，
+// 直接移除舊的 interest 相關欄位/邏輯，不需要額外寫資料搬移程式。
+const BACKEND_VERSION_ = '2026-09-15-2';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -48,7 +54,6 @@ const ADVANCE_CATEGORY_NAME_ = '代墊';
 const SHEET_NAMES = {
   accounts: 'Accounts',
   liabilities: 'Liabilities',
-  interest: 'InterestRecords',
   transactions: 'Transactions',
   recurring: 'RecurringTemplates',
   categories: 'Categories'
@@ -65,7 +70,6 @@ const SHEET_HEADERS = {
   // 3=每季、6=每半年、12=每年），空值／未設定時前端會當成 1（每月），相容舊資料。
   accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'note', 'updatedAt', 'favorite', 'interestCap', 'normalRate', 'interestFreqMonths'],
   liabilities: ['id', 'name', 'amount', 'dueDate', 'paid', 'note', 'updatedAt'],
-  interest: ['id', 'accountId', 'date', 'amount', 'note', 'createdAt'],
   // 記帳紀錄：
   //   type       'expense'（支出）| 'income'（收入）| 'settlement'（共同帳本結算轉帳，記錄用不算收支）
   //   category   品項（餐飲/交通/薪資...），CSV 匯入的品項可以是任意文字
@@ -370,7 +374,6 @@ function addRow_(key, data) {
   const sheet = getSheet_(key);
   data.id = Utilities.getUuid();
   data.updatedAt = new Date().toISOString();
-  if (key === 'interest') data.createdAt = new Date().toISOString();
   const row = buildRowArray_(key, data); // 依試算表目前實際的欄位順序組列，不假設固定順序
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
   // 記帳（Transactions）新增一列後，順手幫這一列的 category / subcategory
@@ -1366,7 +1369,7 @@ function doGet(e) {
     const token = e.parameter.token;
     if (!checkToken_(token)) return jsonOut_({ ok: false, error: '密鑰錯誤' });
 
-    const sheetKey = e.parameter.sheet; // accounts | liabilities | interest | transactions | all
+    const sheetKey = e.parameter.sheet; // accounts | liabilities | transactions | recurring | all
 
     // 一次回傳四張表，前端首次載入只需 1 次 HTTP 請求，減少等待時間。
     // 記帳紀錄（Transactions）累積久了資料量會很大，如果帶了 recentMonths 參數，
@@ -1401,7 +1404,6 @@ function doGet(e) {
         data: {
           accounts: readAll_('accounts'),
           liabilities: readAll_('liabilities'),
-          interest: readAll_('interest'),
           transactions: txResult.rows,
           recurring: readAll_('recurring'),
           categories: getCategoryTreeData_(),

@@ -707,7 +707,7 @@
       <div class="summary-grid" id="summaryGrid"></div>
 
       <h2 style="font-size:15px;">帳戶管理</h2>
-      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。只有「銀行」類型的帳戶需要填年利率等利息相關欄位，用來估算利息；撥息週期可選每月／每季／每半年／每年（不是所有帳戶都是每月撥息）。如果帳戶是「優惠利率有上限金額，超過部分改用一般利率」的類型，可以填「優惠利率上限金額」與「超過上限部分年利率」，估算時會自動分兩段計算（實際入帳請到「利息紀錄」新增）。</p>
+      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。只有「銀行」類型的帳戶需要填年利率等利息相關欄位，用來估算利息；撥息週期可選每月／每季／每半年／每年（不是所有帳戶都是每月撥息）。如果帳戶是「優惠利率有上限金額，超過部分改用一般利率」的類型，可以填「優惠利率上限金額」與「超過上限部分年利率」，估算時會自動分兩段計算（實際入帳請到「記帳」頁點選「記一筆利息／股息」）。</p>
       <details class="entry-wrap" id="accountDetails">
         <summary><span class="plus">＋</span>新增 / 編輯帳戶</summary>
         <form class="entry" id="accountForm">
@@ -780,33 +780,6 @@
       <div class="item-list" id="dashboardAccountsList"></div>
     </div>
 
-    <!-- 利息紀錄 -->
-    <div class="view" id="view-interest">
-      <h2>利息紀錄</h2>
-      <p class="hint">銀行真的撥利息、或股票配發股利（股票利息）時，在這裡新增一筆，系統會自動把金額加進該帳戶的餘額。帳戶選單列出餘額大於 100 元的銀行帳戶與投資（股票）帳戶；選銀行帳戶時金額欄位會先帶入系統估算的下期利息，如果跟銀行實際撥的金額不同，直接改成實際數字再存檔即可（投資帳戶沒有估算利率，直接手動輸入實際配息金額）。</p>
-      <details class="entry-wrap" open id="interestDetails">
-        <summary><span class="plus">＋</span>新增利息入帳</summary>
-        <form class="entry" id="interestForm">
-          <label>帳戶
-            <select id="intAccount" required></select>
-          </label>
-          <label>入帳日期
-            <input type="date" id="intDate" required>
-          </label>
-          <label>金額
-            <input type="number" id="intAmount" step="0.01" required>
-          </label>
-          <label class="full">備註
-            <input type="text" id="intNote" placeholder="例如：3月活儲利息">
-          </label>
-          <div class="form-actions">
-            <button type="submit" class="primary">新增並加入餘額</button>
-          </div>
-        </form>
-      </details>
-      <div class="item-list" id="interestList"></div>
-    </div>
-
     <!-- 負債 -->
     <div class="view" id="view-liabilities">
       <h2>負債（含國民年金未繳款）</h2>
@@ -868,6 +841,14 @@
         <!-- 本月支出／當日支出／月預算剩餘（超支） -->
         <div class="summary-grid" id="trStatsGrid"></div>
         <!-- <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。有存好的模板時，表單最上面會出現一排模板按鈕，點一下就能帶入內容，只要調整日期或金額就能存檔；模板的新增／編輯／每月自動加入／刪除，請到「模板管理」分頁統一設定。</p> -->
+        <!-- 利息／股息快速入帳：本質上就是一筆「收入」記帳（類別預設「投資收益」），
+             點一下會開啟下方記帳表單並自動切成收入、帶入類別，選好帳戶後金額欄位
+             會自動帶入系統估算的下期利息／股息，跟銀行實際撥的金額不同的話，
+             直接改成實際數字再存檔即可；存檔後就跟其他記帳一樣，會自動增加帳戶
+             餘額、可在下方清單雙擊編輯或刪除，也會計入收入統計，不用另外管理。 -->
+        <div class="quick-actions-row" style="margin-bottom:10px;">
+          <button type="button" class="small" id="trQuickInterestBtn">💰 記一筆利息／股息</button>
+        </div>
         <details class="entry-wrap" id="trDetails">
           <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
           <form class="entry" id="trForm">
@@ -1264,7 +1245,6 @@ async function runBusy(fn, text){
 const ICONS = {
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>',
   accounts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M16 14h2"/></svg>',
-  interest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15V9l3 2 3-2v6"/></svg>',
   liabilities: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
   transactions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h4"/><path d="M8 4v3M16 4v3"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>'
@@ -1272,7 +1252,6 @@ const ICONS = {
 const TAB_DEFS = [
   { view:'transactions', label:'記帳' },
   { view:'dashboard', label:'總覽' },
-  { view:'interest', label:'利息' },
   { view:'liabilities', label:'負債' },
   { view:'settings', label:'設定' }
 ];
@@ -1323,7 +1302,9 @@ const cfg = {
 // 前端版本號：每次你改完這個檔案、要重新上傳到 GitHub Pages 時，
 // 記得順手更新這個字串（例如改成今天的日期），才能在「設定」頁看出
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
-const FRONTEND_VERSION = '2026-09-14-3';
+// 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
+// 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
+const FRONTEND_VERSION = '2026-09-15-2';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -1340,7 +1321,7 @@ function reportBackendVersion_(version){
   }
 }
 
-let state = { accounts: [], liabilities: [], interest: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null, recurringDoneIds: [], recurringDoneMonth: null };
+let state = { accounts: [], liabilities: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null, recurringDoneIds: [], recurringDoneMonth: null };
 
 // 記帳品項（主類別 + 子類別，依收入/支出分開）。
 // 這份清單現在存在後端試算表的「Categories」表（跟 Accounts/Transactions 一樣），
@@ -1549,7 +1530,6 @@ async function loadAll(){
       const all = await apiGet('all', { recentMonths: INITIAL_LOAD_RECENT_MONTHS });
       state.accounts = all.accounts;
       state.liabilities = all.liabilities;
-      state.interest = all.interest;
       state.transactions = all.transactions;
       state.recurring = all.recurring || [];
       state.categories = all.categories || { expense: [], income: [] };
@@ -1692,13 +1672,12 @@ function removeLocal(key, id){
 // （dirty），實際重畫延後到「使用者真的切過去那個分頁」的當下才做；
 // 分頁本身也記住「目前顯示哪個」，切分頁時只補畫剛好變成需要的那一塊。
 // 這樣「存一筆記帳」只要重畫記帳清單本身，不用連統計圖表、共同帳本都算一次。
-const dirty = { dashboard:true, interest:true, liabilities:true, transactions:true, ledger:true, templates:true, stats:true, categories:true };
+const dirty = { dashboard:true, liabilities:true, transactions:true, ledger:true, templates:true, stats:true, categories:true };
 function markAllDirty(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
 let currentView = 'transactions';
 let currentTrSub = 'records';
 const SECTION_RENDERERS = {
   dashboard: renderDashboardSection_,
-  interest: renderInterestSection_,
   liabilities: renderLiabilitiesSection_,
   transactions: renderTransactionsSection_,
   ledger: renderLedgerSection_,
@@ -1707,7 +1686,6 @@ const SECTION_RENDERERS = {
   categories: renderCategoriesSection_
 };
 function renderDashboardSection_(){ renderDashboard(); }
-function renderInterestSection_(){ renderInterest(); }
 function renderLiabilitiesSection_(){ renderLiabilities(); }
 function renderTransactionsSection_(){ renderTransactions(); renderTrTemplateChips(); renderRecurringBanner(); renderRecurringPending(); }
 function renderLedgerSection_(){ renderLedger(); }
@@ -1721,7 +1699,7 @@ function visibleSectionKey_(){
     if(['ledger','templates','stats','categories'].includes(currentTrSub)) return currentTrSub;
     return 'transactions'; // records / import 子分頁都只需要記帳清單那份資料
   }
-  return currentView; // dashboard / interest / liabilities / settings
+  return currentView; // dashboard / liabilities / settings
 }
 // 補畫「目前看得到」的那個區塊（如果它被標記為 dirty），不管別的分頁乾不乾淨
 function renderVisibleSection(){
@@ -1971,9 +1949,21 @@ function pickerAccountList_(favoriteAccounts, orderedAccounts, currentValue){
 // 平常不太記帳的銀行帳戶），如果沿用「常用支付工具」篩選，會導致那個銀行帳戶根本
 // 選不到。所以轉帳的兩個選單一律列出「全部帳戶」，不受常用篩選影響；
 // 非轉帳（一般記帳的帳戶欄）則維持原本只顯示常用帳戶的邏輯。
+// 「記一筆利息／股息」快速入口用的旗標：點下那顆按鈕後設為 true，讓記帳表單
+// 的帳戶選單暫時改列出「利息／股息適用帳戶」（銀行、投資），而不是平常的常用
+// 支付工具；一旦使用者手動切換回支出／收入／轉帳的一般記帳流程，或表單被清空、
+// 送出，就會重設回 false，恢復成平常的帳戶選單邏輯。
+let trQuickInterestMode = false;
+// 利息／股息只會發生在「銀行」「投資」類型帳戶；餘額太小（<=100）的帳戶通常
+// 不會真的有利息/配息，先篩掉避免選單徒增選擇困難。如果目前選單本來選著的值
+// 剛好不符合條件（例如編輯當下餘額已降到 100 以下），呼叫端會用 pickerAccountList_
+// 額外把它補進選項，不會悄悄把原本選的帳戶換掉。
+function interestEligibleAccounts_(orderedAccounts){
+  return orderedAccounts.filter(a => (a.type === '銀行' || a.type === '投資') && (Number(a.balance)||0) > 100);
+}
 function renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor){
   const isTransfer = $('#trType').value === 'transfer';
-  const trBase = isTransfer ? orderedAccounts : favoriteAccounts;
+  const trBase = isTransfer ? orderedAccounts : (trQuickInterestMode ? interestEligibleAccounts_(orderedAccounts) : favoriteAccounts);
 
   const trSel = $('#trAccount');
   const keepVal = trSel.value;
@@ -2011,32 +2001,6 @@ function renderAccountSelects(){
   const favoriteAccounts = orderedAccounts.filter(isAccountFavorite);
   const optionsHtmlFor = list => list.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
 
-  // 利息紀錄只會發生在銀行帳戶，選單只顯示「銀行」類型、而且餘額大於 100 的帳戶——
-  // 金額太小（例如 0 元、幾十元）的銀行帳戶通常不會真的產生利息，選單列出來只是
-  // 徒增選擇困難，所以先篩掉。如果「目前這個選單本來選著的值」剛好是一個不符合
-  // 條件的帳戶（例如編輯當下餘額已經降到 100 以下），一樣額外把它補進選項，
-  // 避免選單悄悄把原本選的帳戶換掉。
-  // 利息紀錄原本只開放「銀行」類型帳戶；現在也開放「投資」類型帳戶，
-  // 這樣股票配息／股利（股票利息）也可以在這裡記一筆，一樣會自動加進
-  // 該帳戶的餘額。餘額太小（<=100）的帳戶通常不會真的有利息/配息，
-  // 選單先篩掉，避免徒增選擇困難。如果「目前這個選單本來選著的值」剛好是
-  // 一個不符合條件的帳戶（例如編輯當下餘額已經降到 100 以下），一樣額外
-  // 把它補進選項，避免選單悄悄把原本選的帳戶換掉。
-  const bankAccounts = orderedAccounts.filter(a => (a.type === '銀行' || a.type === '投資') && (Number(a.balance)||0) > 100);
-  const sel = $('#intAccount');
-  const keepIntVal = sel.value;
-  let bankOptions = bankAccounts;
-  if(keepIntVal && !bankOptions.some(a => a.id === keepIntVal)){
-    const extra = orderedAccounts.find(a => a.id === keepIntVal && (a.type === '銀行' || a.type === '投資'));
-    if(extra) bankOptions = [...bankOptions, extra];
-  }
-  sel.innerHTML = bankOptions.length
-    ? bankOptions.map(a => `<option value="${a.id}">${a.name}${a.type === '投資' ? '（股票利息）' : ''}</option>`).join('')
-    : `<option value="">尚無符合條件的帳戶</option>`;
-  if(bankOptions.some(a => a.id === keepIntVal)) sel.value = keepIntVal;
-  // 選好帳戶後，把「估算下期利息」直接帶入金額欄位（使用者還是可以自己改成銀行實際撥的金額）
-  syncIntAmountFromEstimate_();
-
   // 模板管理表單的帳戶選單（從／到）：跟記帳表單共用同一套邏輯（見
   // renderTransferAccountOptions_），一般模板只顯示常用支付工具，轉帳模板則列出全部帳戶。
   renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
@@ -2052,29 +2016,6 @@ function renderAccountSelects(){
       const cashId = defaultCashAccountId();
       if(cashId) ledgerSel.value = cashId;
     }
-  }
-}
-
-function renderInterest(){
-  const list = $('#interestList');
-  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
-  const rows = [...state.interest].sort((a,b) => (a.date < b.date ? 1 : -1));
-  if(!rows.length){
-    list.innerHTML = `<div class="empty">尚無利息紀錄。</div>`;
-  } else {
-    list.innerHTML = rows.map(r => `
-      <div class="item-card">
-        <div class="item-top">
-          <div>
-            <div class="item-name">${byId[r.accountId] || '（帳戶已刪除）'}</div>
-            <div class="item-note">${r.date}${r.note ? ' · ' + r.note : ''}</div>
-          </div>
-          <div class="item-value">+$${fmt(r.amount)}</div>
-        </div>
-        <div class="item-actions">
-          <button class="small danger" onclick="deleteInterest('${r.id}')">刪除</button>
-        </div>
-      </div>`).join('');
   }
 }
 
@@ -3101,54 +3042,31 @@ window.toggleAccountFavorite = async id => {
   }catch(err){ alert('更新失敗：' + err.message); }
 };
 
-// ---------- Interest CRUD ----------
-// 選帳戶時直接把「估算下期利息」帶入金額欄位，方便使用者對照銀行實際撥的
-// 金額；如果使用者自己手動改過金額，之後畫面重新整理（例如在別的分頁存檔
-// 觸發 renderAll）就不會又把打好的數字蓋掉，只有「換選別的帳戶」才會強制
-// 重新帶入新帳戶的估算值。
-let intAmountUserEdited = false;
-$('#intAmount').addEventListener('input', () => { intAmountUserEdited = true; });
-function syncIntAmountFromEstimate_(force){
-  const sel = $('#intAccount');
-  if(!sel || !sel.value) return;
-  if(!force && intAmountUserEdited) return;
-  const acc = state.accounts.find(a => a.id === sel.value);
+// ---------- 利息／股息快速入帳（整合進記帳，不再是獨立的一張表／一個分頁） ----------
+// 「利息／股息」本質上就是一筆收入記帳，跟其他收入走同一套 addTransactionTx_
+// 複合流程：新增時自動增加帳戶餘額，之後不管編輯金額還是刪除，餘額都會正確地
+// 一起調整／還原，也會自動計入收入統計、出現在記帳清單／日曆上，之後想改成
+// 銀行實際撥的金額，直接雙擊那筆紀錄修改即可，不需要另一套獨立的 CRUD。
+// 這裡的按鈕只是「幫使用者把記帳表單先設定好」的捷徑：切成收入、帶入類別
+// 「投資收益」、把帳戶選單暫時換成銀行／投資帳戶、選好帳戶後自動帶入估算金額。
+$('#trQuickInterestBtn').addEventListener('click', () => {
+  resetTransactionForm();
+  trQuickInterestMode = true;
+  $('#trDetails').open = true;
+  setTrType('income', '投資收益', '利息');
+  renderAccountSelects(); // 立刻把帳戶選單換成銀行／投資帳戶（見 trQuickInterestMode）
+  setTimeout(() => $('#trAccount').focus(), 150);
+});
+// 選好帳戶後，把「估算下期利息」直接帶入金額欄位（使用者還是可以自己改成銀行
+// 實際撥的金額）；只有在快速入帳模式、而且金額欄位還是空的時候才自動帶入，
+// 不會蓋掉使用者已經手動填好的一般記帳金額。
+$('#trAccount').addEventListener('change', () => {
+  if(!trQuickInterestMode || $('#trAmount').value) return;
+  const acc = state.accounts.find(a => a.id === $('#trAccount').value);
   if(!acc) return;
   const est = estimateAccountNextInterest_(acc);
-  $('#intAmount').value = est ? est.toFixed(2) : '';
-  intAmountUserEdited = false;
-}
-$('#intAccount').addEventListener('change', () => syncIntAmountFromEstimate_(true));
-$('#interestForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const accountId = $('#intAccount').value;
-  const amount = parseFloat($('#intAmount').value) || 0;
-  const data = { accountId, date: $('#intDate').value, amount, note: $('#intNote').value };
-  try{
-    await runBusy(async () => {
-      const saved = await apiPost('add','interest',data);
-      upsertLocal('interest', saved);
-      const acc = state.accounts.find(a => a.id === accountId);
-      if(acc){
-        const updatedAcc = await apiPost('update','accounts',{ ...acc, balance: (Number(acc.balance)||0) + amount });
-        upsertLocal('accounts', updatedAcc);
-      }
-      $('#interestForm').reset();
-      intAmountUserEdited = false;
-      renderAll();
-    }, '新增中…');
-  }catch(err){ alert('新增失敗：' + err.message); }
+  if(est) $('#trAmount').value = est.toFixed(2);
 });
-window.deleteInterest = async id => {
-  if(!confirm('確定刪除這筆利息紀錄？（不會自動從餘額扣回，請自行到帳戶調整）')) return;
-  try{
-    await runBusy(async () => {
-      await apiPost('delete','interest',{id});
-      removeLocal('interest', id);
-      renderAll();
-    }, '刪除中…');
-  }catch(err){ alert('刪除失敗：' + err.message); }
-};
 
 // ---------- Liabilities CRUD ----------
 $('#liabilityForm').addEventListener('submit', async e => {
@@ -3206,7 +3124,7 @@ window.deleteLiability = async id => {
 })();
 
 $$('#trForm .type-toggle button').forEach(btn => {
-  btn.addEventListener('click', () => setTrType(btn.dataset.type));
+  btn.addEventListener('click', () => { trQuickInterestMode = false; setTrType(btn.dataset.type); });
 });
 
 $('#trShared').addEventListener('change', () => {
@@ -3357,6 +3275,7 @@ $('#trFab').addEventListener('click', () => {
 $('#trFormBackdrop').addEventListener('click', () => { $('#trDetails').open = false; });
 
 function resetTransactionForm(){
+  trQuickInterestMode = false; // 表單重置／關閉時一併取消利息快速入帳模式，帳戶選單才會恢復正常
   $('#trId').value = '';
   $('#trDate').value = new Date().toISOString().slice(0,10);
   $('#trAmount').value = '';
@@ -3377,6 +3296,7 @@ function resetTransactionForm(){
 window.editTransaction = id => {
   const t = state.transactions.find(x => x.id === id);
   if(!t) return;
+  trQuickInterestMode = false; // 編輯既有記帳一律用一般帳戶選單，不受先前的利息快速入帳模式影響
   $('#trId').value = t.id;
   $('#trDate').value = t.date;
   $('#trAmount').value = t.amount;
@@ -4131,7 +4051,6 @@ $('#csvImportBtn').addEventListener('click', async () => {
       const all = await apiGet('all');
       state.accounts = all.accounts;
       state.liabilities = all.liabilities;
-      state.interest = all.interest;
       state.transactions = all.transactions;
       state.recurring = all.recurring || [];
       state.categories = all.categories || state.categories;
