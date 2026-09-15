@@ -412,10 +412,6 @@
   .segmented button.active{ background:var(--ink); color:#fff; border-color:var(--ink); font-weight:600; }
 
   /* ---- 帳戶一覽：每個帳戶旁邊顯示近期增減金額 ---- */
-  .item-change{ font-size:11.5px; margin-top:3px; text-align:right; font-weight:500; }
-  .item-change.up{ color:var(--green); }
-  .item-change.down{ color:var(--red); }
-  .item-change.flat{ color:var(--ink-soft); }
 
   .period-row{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
   .period-row input, .period-row select{ min-height:38px; padding:7px 10px; width:auto; }
@@ -767,11 +763,6 @@
       <div class="dash-list-head">
         <h2 id="dashboardAccountsTitle">帳戶一覽</h2>
         <button type="button" class="dash-list-reset" id="dashboardFilterReset" style="display:none;">顯示全部</button>
-      </div>
-      <div class="segmented" id="trendRangeNav">
-        <button type="button" data-days="7">近 7 天增減</button>
-        <button type="button" class="active" data-days="30">近 30 天增減</button>
-        <button type="button" data-days="90">近 90 天增減</button>
       </div>
       <div class="acc-fav-filter" id="accFavFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
         <button type="button" class="small" data-fav="all">全部帳戶</button>
@@ -1774,49 +1765,6 @@ function estimateAccountNextInterest_(a){
   return balance * rate / 100 * periodFraction;
 }
 
-// ---------- 帳戶一覽：每個帳戶旁邊顯示「近期增減」----------
-// 資料庫沒有存「每個帳戶每天的餘額」歷史，這裡改用「該帳戶在這段期間內的
-// 記帳/轉帳/共同帳本結算/利息入帳」加總出這段期間造成這個帳戶餘額變動了多少：
-//   支出/收入：直接影響這個帳戶
-//   轉帳：轉出帳戶算負、轉入帳戶算正
-//   共同帳本結算：對方轉給你算正、你轉給對方算負
-//   利息入帳：一律算正
-// 限制：如果帳戶餘額是直接手動改的（不是透過上面這些動作），不會反映在這裡。
-let trendRangeDays = 30;
-function accountNetChangeMap_(days){
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(start.getDate() - (days - 1));
-  const startStr = start.toISOString().slice(0,10);
-  const map = {};
-  const add = (id, delta) => { if(!id) return; map[id] = (map[id] || 0) + delta; };
-  state.transactions.forEach(t => {
-    if(!t.date || t.date < startStr) return;
-    if(t.type === 'expense') add(t.accountId, -(Number(t.amount)||0));
-    else if(t.type === 'income') add(t.accountId, Number(t.amount)||0);
-    else if(t.type === 'transfer'){
-      add(t.accountId, -(Number(t.amount)||0));
-      add(t.toAccountId, Number(t.amount)||0);
-    } else if(t.type === 'settlement'){
-      add(t.accountId, (t.payer === 'partner' ? 1 : -1) * (Number(t.amount)||0));
-    }
-  });
-  (state.interest || []).forEach(r => {
-    if(!r.date || r.date < startStr) return;
-    add(r.accountId, Number(r.amount)||0);
-  });
-  return map;
-}
-$$('#trendRangeNav button').forEach(b => {
-  b.addEventListener('click', () => {
-    trendRangeDays = parseInt(b.dataset.days, 10) || 30;
-    $$('#trendRangeNav button').forEach(x => x.classList.toggle('active', x === b));
-    renderAccountsList();
-  });
-});
-
-
-
 // 點擊「帳戶一覽」上方的類型卡片（銀行／現金／行動支付…）可以篩選下方清單只顯示該類型的帳戶，
 // 再點一次或按「顯示全部」可以取消篩選。
 let dashboardFilterType = null;
@@ -1909,7 +1857,6 @@ function renderAccountsList(){
     list.innerHTML = `<div class="empty">${dashboardFavFilter === 'favorite' ? '目前沒有常用帳戶。' : dashboardFavFilter === 'unfavorite' ? '目前沒有不常用的帳戶。' : '這個類型尚無帳戶。'}</div>`;
   } else {
     const sortedAccounts = [...accountsToShow].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
-    const changeMap = accountNetChangeMap_(trendRangeDays);
     list.innerHTML = sortedAccounts.map(a => {
       const rate = a.interestRate ? Number(a.interestRate) : 0;
       const cap = a.interestCap ? Number(a.interestCap) : 0;
@@ -1919,9 +1866,6 @@ function renderAccountsList(){
       const freqLabel = accountInterestFreqLabel_(a);
       const favorite = isAccountFavorite(a);
       const checked = selectedAccountIds.has(a.id);
-      const change = changeMap[a.id] || 0;
-      const changeCls = change > 0 ? 'up' : change < 0 ? 'down' : 'flat';
-      const changeLabel = Math.abs(change) < 0.005 ? '持平' : `${change > 0 ? '+' : '-'}$${fmt(Math.abs(change))}`;
       return `<div class="item-card">
         <div class="item-top">
           <div style="display:flex; gap:8px; align-items:flex-start;">
@@ -1935,7 +1879,6 @@ function renderAccountsList(){
           </div>
           <div>
             <div class="item-value">$${fmt(a.balance)}</div>
-            <div class="item-change ${changeCls}">${changeLabel}</div>
           </div>
         </div>
         ${rate ? `<div class="item-meta">
