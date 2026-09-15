@@ -2260,14 +2260,23 @@ function populateSubcategorySelect_(selEl, subs, selectedSub){
   return value;
 }
 // 把「主類別／子類別新增」的選單邏輯綁到一組選單上（記帳表單、模板表單都會用到）
+// 注意：addMainCategory / addSubCategory 都是 async（要先呼叫後端 API 成功後，
+// 才會把新項目加進 state.categories 裡），所以這裡一定要 await 完再重畫選單
+// (populateMainFn / populateSubFn)，不然選單會在新項目還沒真的存進 state 之前
+// 就重畫，畫出來的清單看不到剛剛新增的那個，要重新整理頁面才會出現。
 function bindInlineCategoryCreation_(mainSel, subSel, typeGetter, populateMainFn, populateSubFn){
-  mainSel.addEventListener('change', () => {
+  mainSel.addEventListener('change', async () => {
     const type = typeGetter();
     if(mainSel.value === CAT_ADD_MAIN){
       const name = (prompt('請輸入新的主類別名稱：') || '').trim();
       if(name){
-        if(!getCategoryNames(type).includes(name)) addMainCategory(type, name);
-        populateMainFn(type, name);
+        try{
+          if(!getCategoryNames(type).includes(name)) await runBusy(() => addMainCategory(type, name), '新增中…');
+          populateMainFn(type, name);
+        } catch(err){
+          alert('新增主類別失敗：' + (err && err.message ? err.message : err));
+          mainSel.value = mainSel.dataset.prev || '';
+        }
       } else {
         mainSel.value = mainSel.dataset.prev || '';
       }
@@ -2276,14 +2285,19 @@ function bindInlineCategoryCreation_(mainSel, subSel, typeGetter, populateMainFn
     mainSel.dataset.prev = mainSel.value;
     populateSubFn(type, mainSel.value);
   });
-  subSel.addEventListener('change', () => {
+  subSel.addEventListener('change', async () => {
     const type = typeGetter();
     const mainName = mainSel.value;
     if(subSel.value === CAT_ADD_SUB){
       const name = (prompt('請輸入新的子類別名稱：') || '').trim();
       if(name){
-        if(!getSubcategories(type, mainName).includes(name)) addSubCategory(type, mainName, name);
-        populateSubFn(type, mainName, name);
+        try{
+          if(!getSubcategories(type, mainName).includes(name)) await runBusy(() => addSubCategory(type, mainName, name), '新增中…');
+          populateSubFn(type, mainName, name);
+        } catch(err){
+          alert('新增子類別失敗：' + (err && err.message ? err.message : err));
+          subSel.value = subSel.dataset.prev || '';
+        }
       } else {
         subSel.value = subSel.dataset.prev || '';
       }
