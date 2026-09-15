@@ -29,6 +29,10 @@
  * - sheet=all 帶 recentMonths 時，只會先讀 Transactions 的「日期」這一欄
  *   （單欄讀取很快）找出符合的資料從第幾列開始，再只讀那個範圍，不會像
  *   之前一樣每次都把整張記帳表全部讀出來才篩選，記帳筆數愈多、效果愈明顯。
+ * - 防重複記帳檢查（findDuplicateTransaction_）也是同樣手法：先只讀「日期」
+ *   欄篩出同一天的少數列，才對那幾列細讀比對，不會每記一筆就整表全欄位掃描。
+ * - 主/子類別的新增、刪除、改名不會自動整表重建下拉驗證（那只影響直接在
+ *   試算表手動編輯時的下拉選單，跟網站前端無關），避免類別小異動被拖慢。
  *
  * 連線速度的提醒：Apps Script 網頁應用程式沒有常駐伺服器，每次呼叫都可能
  * 要重新啟動執行環境（尤其是閒置一段時間後的第一次呼叫），這是 Google
@@ -45,7 +49,14 @@
 // 好處：帳戶餘額調整、編輯、刪除還原、重複記帳偵測、月/年統計，全部不用重寫一套，
 // 直接沿用既有、已經測過的記帳邏輯。因為改動當下使用者還沒有任何利息歷史紀錄，
 // 直接移除舊的 interest 相關欄位/邏輯，不需要額外寫資料搬移程式。
-const BACKEND_VERSION_ = '2026-09-15-2';
+// 2026-09-15-3：效能優化——①findDuplicateTransaction_ 改成先只讀「日期」欄
+// 篩出同一天的少數列，才對那幾列細讀比對，不再每記一筆就整表全欄位掃描；
+// ②主類別/子類別的新增、刪除、改名，都不再自動觸發 rebuildAllTransactionValidations()
+// 整表重建下拉驗證（那個動作只影響「直接在試算表手動編輯」時看不看得到下拉
+// 選單，跟網站前端無關，卻會讓每次類別小異動都要重寫整張 Transactions 表，
+// 記帳筆數一多就變得很慢）。需要重建下拉選單的話，到 Apps Script 編輯器手動
+// 執行一次 rebuildAllTransactionValidations() 即可。
+const BACKEND_VERSION_ = '2026-09-15-3';
 
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
@@ -489,22 +500,40 @@ function txDupKey_(data) {
 
 // 掃描 Transactions 表找出跟 data 完全同 key 的既有紀錄（若有）。
 // excludeId：編輯某一筆時，要排除自己這一筆，不要跟自己比對成重複。
+// 效能重點：原本這裡會把「整張表、所有欄位、每一列」讀出來逐列比對，記帳
+// 筆數一多（幾百、上千筆），每記一筆都要整表掃過一次，新增/編輯記帳就會
+// 越用越慢。改成分兩步：先只讀「日期」這一欄（單欄讀取很快，且日期不符
+// 的話其他欄位不用比對，一定不是重複），篩出「日期相同」的少數幾列列號後，
+// 才針對那幾列個別讀出完整內容細比對——同一天的記帳通常只有幾筆到十幾筆，
+// 比對成本幾乎是常數，不會再隨總筆數線性變慢。
 function findDuplicateTransaction_(data, excludeId) {
   if (data.type === 'transfer' || data.type === 'settlement') return null;
   const sheet = getSheet_('transactions');
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
-  const lastCol = sheet.getLastColumn();
   const headerRow = getActualHeaderRow_('transactions'); // 依實際表頭順序，不假設固定欄號
   const idIdx = headerRow.indexOf('id');
-  const values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const dateIdx = headerRow.indexOf('date');
+  if (dateIdx === -1) return null; // 表頭異常找不到日期欄，安全起見放棄比對，不擋記帳
+
+  const numRows = lastRow - 1;
+  const targetDate = normalizeCellValue_('date', data.date);
+  const dateValues = sheet.getRange(2, dateIdx + 1, numRows, 1).getValues();
+  const matchedRows = [];
+  for (let i = 0; i < dateValues.length; i++) {
+    if (normalizeCellValue_('date', dateValues[i][0]) === targetDate) matchedRows.push(i + 2); // 轉成 1-based 列號
+  }
+  if (!matchedRows.length) return null;
+
+  const lastCol = sheet.getLastColumn();
   const targetKey = txDupKey_(data);
-  for (let i = 0; i < values.length; i++) {
-    const r = values[i];
-    if (r[idIdx] === '' || r[idIdx] === null) continue;
-    if (excludeId && String(r[idIdx]) === String(excludeId)) continue;
+  for (let i = 0; i < matchedRows.length; i++) {
+    const row = matchedRows[i];
+    const values = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
+    if (values[idIdx] === '' || values[idIdx] === null) continue;
+    if (excludeId && String(values[idIdx]) === String(excludeId)) continue;
     const obj = {};
-    headerRow.forEach((h, hi) => { if (h) obj[h] = normalizeCellValue_(h, r[hi]); });
+    headerRow.forEach((h, hi) => { if (h) obj[h] = normalizeCellValue_(h, values[hi]); });
     if (txDupKey_(obj) === targetKey) return obj;
   }
   return null;
@@ -737,7 +766,14 @@ function addMainCategory_(type, name) {
   const rows = categorySheetRows_();
   if (rows.some(r => r.type === type && String(r.mainName) === name)) throw new Error('主類別已存在');
   getSheet_('categories').appendRow([Utilities.getUuid(), type, name, '', new Date().toISOString()]);
-  rebuildAllTransactionValidations();
+  // 效能：故意不在這裡呼叫 rebuildAllTransactionValidations()。那個函式會重寫
+  // 「整張」Transactions 表既有列的下拉驗證，記帳筆數一多，每次新增類別都要
+  // 跟著整表重建一次，會讓「新增主類別」這種小操作變得異常緩慢。而且這個
+  // 下拉驗證只有你「直接在 Google 試算表裡手動編輯」時才用得到——網站前端
+  // 的類別選單是即時從 Categories 表資料組出來的，跟這個驗證完全無關，新增
+  // 主類別後網站馬上就能選到新類別，不需要靠它。如果你確實常常直接在試算表
+  // 手動編輯記帳、也想要下拉選單同步更新，到 Apps Script 編輯器手動執行一次
+  // rebuildAllTransactionValidations() 即可。
   return { name: name };
 }
 
@@ -748,7 +784,7 @@ function addSubCategory_(type, mainName, subName) {
   if (!rows.some(r => r.type === type && String(r.mainName) === mainName)) throw new Error('主類別不存在');
   if (rows.some(r => r.type === type && String(r.mainName) === mainName && String(r.subName) === subName)) throw new Error('子類別已存在');
   getSheet_('categories').appendRow([Utilities.getUuid(), type, mainName, subName, new Date().toISOString()]);
-  rebuildAllTransactionValidations();
+  // 效能考量同 addMainCategory_，故意不自動重建整表下拉驗證，見上方註解。
   return { name: subName };
 }
 
@@ -756,7 +792,9 @@ function removeMainCategory_(type, name) {
   const rows = categorySheetRows_();
   const kept = rows.filter(r => !(r.type === type && String(r.mainName) === name));
   rewriteCategorySheet_(kept);
-  rebuildAllTransactionValidations();
+  // 效能考量同 addMainCategory_，故意不自動重建整表下拉驗證，見上方註解。
+  // 刪除主類別後，既有記帳列的下拉選單只是「暫時還看得到已刪除的舊選項」，
+  // 不影響資料本身，也不影響網站前端（前端選單一樣是即時組出來的）。
   return { removed: rows.length - kept.length };
 }
 
@@ -764,7 +802,7 @@ function removeSubCategory_(type, mainName, subName) {
   const rows = categorySheetRows_();
   const kept = rows.filter(r => !(r.type === type && String(r.mainName) === mainName && String(r.subName) === subName));
   rewriteCategorySheet_(kept);
-  rebuildAllTransactionValidations();
+  // 效能考量同 addMainCategory_，故意不自動重建整表下拉驗證，見上方註解。
   return { removed: rows.length - kept.length };
 }
 
@@ -790,7 +828,11 @@ function renameMainCategory_(type, oldName, newName) {
   if (!changed) throw new Error('找不到這個主類別');
   rewriteCategorySheet_(rows);
   const txResult = renameCategoryEverywhere_({ txType: type, level: 'main', oldValue: oldName, newValue: newName });
-  rebuildAllTransactionValidations();
+  // 效能考量同 addMainCategory_：故意不自動重建整表下拉驗證（那是另一個獨立、
+  // 較貴的動作，只影響「直接在試算表手動編輯」時的下拉選單，跟這裡真正需要
+  // 做的「把舊資料的類別文字改成新名稱」（renameCategoryEverywhere_）無關，
+  // 也不影響網站前端顯示）。需要的話到 Apps Script 編輯器手動執行一次
+  // rebuildAllTransactionValidations() 即可。
   return { changed: changed, transactionsUpdated: txResult.updated };
 }
 
@@ -813,7 +855,7 @@ function renameSubCategory_(type, mainName, oldSub, newSub) {
   if (!changed) throw new Error('找不到這個子類別');
   rewriteCategorySheet_(rows);
   const txResult = renameCategoryEverywhere_({ txType: type, level: 'sub', mainName: mainName, oldValue: oldSub, newValue: newSub });
-  rebuildAllTransactionValidations();
+  // 效能考量同 renameMainCategory_，故意不自動重建整表下拉驗證，見上方註解。
   return { changed: changed, transactionsUpdated: txResult.updated };
 }
 
@@ -899,7 +941,7 @@ function reorderMainCategories_(type, order) {
   finalOrder.forEach(n => { reordered.push.apply(reordered, groups[n]); });
 
   rewriteCategorySheet_(rowsOtherType.concat(reordered));
-  rebuildAllTransactionValidations();
+  // 純粹調整順序，不會動到任何一列的文字內容，完全不需要重建下拉驗證。
   return { order: finalOrder };
 }
 
