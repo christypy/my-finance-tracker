@@ -164,6 +164,13 @@
     transition:box-shadow .15s, transform .15s, border-color .15s;
   }
   #transactionsList .item-card:active{ transform:scale(.985); box-shadow:0 1px 4px rgba(58,43,18,.07); }
+  #transactionsList .item-card{ position:relative; transition:padding-left .15s; }
+  #transactionsList.batch-mode .item-card{ padding-left:38px; }
+  .tr-batch-check-wrap{ display:none; position:absolute; left:12px; top:14px; }
+  #transactionsList.batch-mode .tr-batch-check-wrap{ display:block; }
+  .tr-batch-check-wrap input{ width:19px; height:19px; }
+  .tr-batch-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .tr-batch-bar #trBatchControls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .item-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
   .item-name{ font-weight:600; font-size:15px; }
   .item-note{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
@@ -774,7 +781,7 @@
     <!-- 利息紀錄 -->
     <div class="view" id="view-interest">
       <h2>利息紀錄</h2>
-      <p class="hint">銀行真的撥利息給你時，在這裡新增一筆，系統會自動把金額加進該帳戶的餘額。帳戶選單只列出餘額大於 100 元的銀行帳戶；選好帳戶後金額欄位會先帶入系統估算的下期利息，如果跟銀行實際撥的金額不同，直接改成實際數字再存檔即可。</p>
+      <p class="hint">銀行真的撥利息、或股票配發股利（股票利息）時，在這裡新增一筆，系統會自動把金額加進該帳戶的餘額。帳戶選單列出餘額大於 100 元的銀行帳戶與投資（股票）帳戶；選銀行帳戶時金額欄位會先帶入系統估算的下期利息，如果跟銀行實際撥的金額不同，直接改成實際數字再存檔即可（投資帳戶沒有估算利率，直接手動輸入實際配息金額）。</p>
       <details class="entry-wrap" open id="interestDetails">
         <summary><span class="plus">＋</span>新增利息入帳</summary>
         <form class="entry" id="interestForm">
@@ -853,13 +860,8 @@
         </div>
         <!-- 可用金額：總資產扣掉股票（投資帳戶）跟固定預留金額後，真正可以動用的錢 -->
         <div class="net-hero" id="trAvailHero">
-          <div class="label">可用金額（總資產 − 股票 − 預留金）</div>
+          <div class="label">可用金額</div>
           <div class="value" id="trAvailValue">$0</div>
-          <div class="sub">
-            <span>總資產<b id="trAvailAssets">$0</b></span>
-            <span>股票<b id="trAvailStock">$0</b></span>
-            <span>預留金<b id="trAvailReserve">$0</b></span>
-          </div>
         </div>
         <!-- 本月支出／當日支出／月預算剩餘（超支） -->
         <div class="summary-grid" id="trStatsGrid"></div>
@@ -956,6 +958,16 @@
           </div>
           <div class="cal-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
           <div class="cal-grid" id="calGrid"></div>
+        </div>
+        <div class="tr-batch-bar" id="trBatchBar">
+          <button type="button" class="small" id="trBatchToggleBtn">批次刪除</button>
+          <div id="trBatchControls" style="display:none;">
+            <button type="button" class="small" id="trBatchSelectAllBtn">全選本頁</button>
+            <button type="button" class="small" id="trBatchClearBtn">取消全選</button>
+            <span class="hint" id="trBatchCount" style="margin:0 4px;">已選 0 筆</span>
+            <button type="button" class="small danger" id="trBatchDeleteBtn">刪除已選</button>
+            <button type="button" class="small" id="trBatchCancelBtn">取消</button>
+          </div>
         </div>
         <div class="item-list" id="transactionsList"></div>
       </div>
@@ -1978,17 +1990,23 @@ function renderAccountSelects(){
   // 徒增選擇困難，所以先篩掉。如果「目前這個選單本來選著的值」剛好是一個不符合
   // 條件的帳戶（例如編輯當下餘額已經降到 100 以下），一樣額外把它補進選項，
   // 避免選單悄悄把原本選的帳戶換掉。
-  const bankAccounts = orderedAccounts.filter(a => a.type === '銀行' && (Number(a.balance)||0) > 100);
+  // 利息紀錄原本只開放「銀行」類型帳戶；現在也開放「投資」類型帳戶，
+  // 這樣股票配息／股利（股票利息）也可以在這裡記一筆，一樣會自動加進
+  // 該帳戶的餘額。餘額太小（<=100）的帳戶通常不會真的有利息/配息，
+  // 選單先篩掉，避免徒增選擇困難。如果「目前這個選單本來選著的值」剛好是
+  // 一個不符合條件的帳戶（例如編輯當下餘額已經降到 100 以下），一樣額外
+  // 把它補進選項，避免選單悄悄把原本選的帳戶換掉。
+  const bankAccounts = orderedAccounts.filter(a => (a.type === '銀行' || a.type === '投資') && (Number(a.balance)||0) > 100);
   const sel = $('#intAccount');
   const keepIntVal = sel.value;
   let bankOptions = bankAccounts;
   if(keepIntVal && !bankOptions.some(a => a.id === keepIntVal)){
-    const extra = orderedAccounts.find(a => a.id === keepIntVal && a.type === '銀行');
+    const extra = orderedAccounts.find(a => a.id === keepIntVal && (a.type === '銀行' || a.type === '投資'));
     if(extra) bankOptions = [...bankOptions, extra];
   }
   sel.innerHTML = bankOptions.length
-    ? bankOptions.map(a => `<option value="${a.id}">${a.name}</option>`).join('')
-    : `<option value="">尚無符合條件的銀行帳戶</option>`;
+    ? bankOptions.map(a => `<option value="${a.id}">${a.name}${a.type === '投資' ? '（股票利息）' : ''}</option>`).join('')
+    : `<option value="">尚無符合條件的帳戶</option>`;
   if(bankOptions.some(a => a.id === keepIntVal)) sel.value = keepIntVal;
   // 選好帳戶後，把「估算下期利息」直接帶入金額欄位（使用者還是可以自己改成銀行實際撥的金額）
   syncIntAmountFromEstimate_();
@@ -2183,9 +2201,6 @@ function renderTrAvailAndBudget_(){
   const available = totalAssets - stockTotal - RESERVE_AMOUNT;
   $('#trAvailValue').textContent = '$' + fmt(available);
   $('#trAvailValue').style.color = available < 0 ? '#ffb4ab' : '';
-  $('#trAvailAssets').textContent = '$' + fmt(totalAssets);
-  $('#trAvailStock').textContent = '$' + fmt(stockTotal);
-  $('#trAvailReserve').textContent = '$' + fmt(RESERVE_AMOUNT);
 
   // 本月支出：固定看「今天」所在的真實月份（不受日曆瀏覽到別的月份影響），
   // 才能跟「每月預算」對得上
@@ -2216,6 +2231,66 @@ function renderTrAvailAndBudget_(){
     </div>
   `;
 }
+// ---------- 記帳頁面：批次刪除 ----------
+// 開啟批次模式後，每筆記帳前面會出現勾選框；勾好之後按「刪除已選」一次刪掉，
+// 帳戶餘額會透過後端 batchDeleteTransactionsTx（內部逐筆呼叫跟單筆刪除一樣的
+// 還原邏輯）自動還原，不用自己重新調整帳戶。
+let trBatchMode = false;
+let trBatchSelected = new Set();
+function trBatchCheckboxHtml_(id){
+  const checked = trBatchSelected.has(id) ? 'checked' : '';
+  return `<label class="tr-batch-check-wrap"><input type="checkbox" class="tr-batch-check" data-id="${id}" ${checked}></label>`;
+}
+function updateTrBatchBarUI_(){
+  $('#transactionsList').classList.toggle('batch-mode', trBatchMode);
+  $('#trBatchToggleBtn').style.display = trBatchMode ? 'none' : '';
+  $('#trBatchControls').style.display = trBatchMode ? '' : 'none';
+  $('#trBatchCount').textContent = `已選 ${trBatchSelected.size} 筆`;
+}
+$('#trBatchToggleBtn').addEventListener('click', () => {
+  trBatchMode = true;
+  trBatchSelected.clear();
+  updateTrBatchBarUI_();
+  renderTransactions();
+});
+$('#trBatchCancelBtn').addEventListener('click', () => {
+  trBatchMode = false;
+  trBatchSelected.clear();
+  updateTrBatchBarUI_();
+  renderTransactions();
+});
+$('#trBatchSelectAllBtn').addEventListener('click', () => {
+  $$('#transactionsList .tr-batch-check').forEach(cb => { trBatchSelected.add(cb.dataset.id); cb.checked = true; });
+  updateTrBatchBarUI_();
+});
+$('#trBatchClearBtn').addEventListener('click', () => {
+  trBatchSelected.clear();
+  $$('#transactionsList .tr-batch-check').forEach(cb => { cb.checked = false; });
+  updateTrBatchBarUI_();
+});
+$('#transactionsList').addEventListener('change', e => {
+  const cb = e.target.closest('.tr-batch-check');
+  if(!cb) return;
+  if(cb.checked) trBatchSelected.add(cb.dataset.id); else trBatchSelected.delete(cb.dataset.id);
+  updateTrBatchBarUI_();
+});
+$('#trBatchDeleteBtn').addEventListener('click', async () => {
+  const ids = Array.from(trBatchSelected);
+  if(!ids.length){ alert('請先勾選要刪除的記帳。'); return; }
+  if(!confirm(`確定刪除這 ${ids.length} 筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。`)) return;
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('batchDeleteTransactionsTx','transactions',{ ids });
+      (result.ids || ids).forEach(id => removeLocal('transactions', id));
+      (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      trBatchMode = false;
+      trBatchSelected.clear();
+      updateTrBatchBarUI_();
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('批次刪除失敗：' + err.message); }
+});
+
 function renderTransactions(){
   renderTrAvailAndBudget_();
   renderCalendar();
@@ -2258,7 +2333,8 @@ function renderTransactions(){
       const primary = t.note ? t.note : transferLabel;
       const metaParts = [t.date];
       if(t.note) metaParts.push(transferLabel);
-      return `<div class="item-card" ondblclick="if(!event.target.closest('.item-actions')) editTransaction('${t.id}')">
+      return `<div class="item-card" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
+        ${trBatchCheckboxHtml_(t.id)}
         <div class="item-top">
           <div>
             <div class="item-name">${primary}</div>
@@ -2281,6 +2357,7 @@ function renderTransactions(){
       const primary = t.note || '共同帳本結算';
       const metaParts = [t.date, `<span class="badge">結算</span> ${directionLabel} · ${accName}`];
       return `<div class="item-card">
+        ${trBatchCheckboxHtml_(t.id)}
         <div class="item-top">
           <div>
             <div class="item-name">${primary}</div>
@@ -2299,7 +2376,8 @@ function renderTransactions(){
     const metaParts = [t.date];
     if(t.note) metaParts.push(catLabel);
     if(acc) metaParts.push(acc);
-    return `<div class="item-card" ondblclick="if(!event.target.closest('.item-actions')) editTransaction('${t.id}')">
+    return `<div class="item-card" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
+      ${trBatchCheckboxHtml_(t.id)}
       <div class="item-top">
         <div>
           <div class="item-name">${primary}</div>

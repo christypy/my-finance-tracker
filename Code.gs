@@ -585,6 +585,28 @@ function deleteTransactionTx_(id) {
   return { id: id, account: accountsTouched[0] || null, accounts: accountsTouched };
 }
 
+// 批次刪除（記帳頁面「批次刪除」勾選功能用）：一次 exec 內把多筆記帳依序刪掉，
+// 每一筆都走跟單筆刪除一樣的 deleteTransactionTx_（含帳戶餘額還原邏輯）；
+// 找不到的 id（例如已經被刪過）直接略過，不中斷其他筆的刪除。
+// 回傳這批動作總共影響到的帳戶（同一個帳戶被多筆記帳影響時，只保留最後一次
+// 的餘額——因為每一筆都是依序套用完成，最後一次就是所有異動套用完的最終結果）。
+function batchDeleteTransactionsTx_(ids) {
+  const accountsById = {};
+  const deletedIds = [];
+  (ids || []).forEach(function (id) {
+    try {
+      const result = deleteTransactionTx_(id);
+      deletedIds.push(id);
+      (result.accounts || []).forEach(function (acc) {
+        if (acc && acc.id) accountsById[acc.id] = acc;
+      });
+    } catch (err) {
+      // 找不到的（可能已經被刪過）直接跳過，繼續刪下一筆
+    }
+  });
+  return { ids: deletedIds, accounts: Object.keys(accountsById).map(function (k) { return accountsById[k]; }) };
+}
+
 // 批次新增（CSV 匯入用）：一次 exec 內用陣列寫入所有列，不逐筆來回。
 // key 為 'transactions' 時，會順便擋掉「日期＋類型＋主/子類別＋金額」都
 // 跟既有紀錄一樣的重複列（例如同一份 CSV 不小心匯入兩次），以及 CSV 檔案
@@ -1390,6 +1412,7 @@ function doPost(e) {
     if (action === 'addTransactionTx') return jsonOut_({ ok: true, data: addTransactionTx_(body.data) });
     if (action === 'updateTransactionTx') return jsonOut_({ ok: true, data: updateTransactionTx_(body.data) });
     if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });
+    if (action === 'batchDeleteTransactionsTx') return jsonOut_({ ok: true, data: batchDeleteTransactionsTx_((body.data && body.data.ids) || []) });
     if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
     if (action === 'settleLedger') return jsonOut_({ ok: true, data: settleLedger_((body.data && body.data.ids) || [], body.data && body.data.settlement) });
     if (action === 'runRecurringTemplates') return jsonOut_({ ok: true, data: runRecurringTemplates_(body.data && body.data.month, (body.data && body.data.ids) || null) });
