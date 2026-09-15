@@ -620,6 +620,8 @@
   .main-cat-head{ display:flex; align-items:center; gap:8px; }
   .main-cat-head .main-cat-name{ font-weight:600; font-size:14.5px; flex:1; }
   .main-cat-head button{ min-height:28px; padding:4px 11px; font-size:12px; }
+  .main-cat-head button:disabled{ opacity:.35; cursor:default; }
+  .main-cat-head .catMoveUpBtn, .main-cat-head .catMoveDownBtn{ padding:4px 9px; }
   .sub-cat-row{ display:flex; flex-wrap:wrap; gap:6px; padding-left:2px; }
   .sub-chip{
     display:flex; align-items:center; gap:5px; background:var(--paper); border:1px solid var(--paper-line);
@@ -841,13 +843,16 @@
         <!-- 本月支出／當日支出／月預算剩餘（超支） -->
         <div class="summary-grid" id="trStatsGrid"></div>
         <!-- <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。有存好的模板時，表單最上面會出現一排模板按鈕，點一下就能帶入內容，只要調整日期或金額就能存檔；模板的新增／編輯／每月自動加入／刪除，請到「模板管理」分頁統一設定。</p> -->
-        <!-- 利息／股息快速入帳：本質上就是一筆「收入」記帳（類別預設「投資收益」），
-             點一下會開啟下方記帳表單並自動切成收入、帶入類別，選好帳戶後金額欄位
-             會自動帶入系統估算的下期利息／股息，跟銀行實際撥的金額不同的話，
-             直接改成實際數字再存檔即可；存檔後就跟其他記帳一樣，會自動增加帳戶
-             餘額、可在下方清單雙擊編輯或刪除，也會計入收入統計，不用另外管理。 -->
+        <!-- 利息／股息快速入帳：本質上就是一筆「收入」記帳，類別自動固定為
+             「利息收入」或「股息收入」（依點的是哪顆按鈕），不用使用者自己選
+             主／子類別，表單上的主／子類別欄位也會直接隱藏。點一下會開啟下方
+             記帳表單並自動切成收入、選好帳戶後金額欄位會自動帶入系統估算的
+             下期利息／股息，跟銀行實際撥的金額不同的話，直接改成實際數字再
+             存檔即可；存檔後就跟其他記帳一樣，會自動增加帳戶餘額、可在下方
+             清單雙擊編輯或刪除，也會計入收入統計，不用另外管理。 -->
         <div class="quick-actions-row" style="margin-bottom:10px;">
-          <button type="button" class="small" id="trQuickInterestBtn">💰 記一筆利息／股息</button>
+          <button type="button" class="small" id="trQuickInterestBtn">💰 記一筆利息</button>
+          <button type="button" class="small" id="trQuickDividendBtn">📈 記一筆股息</button>
         </div>
         <details class="entry-wrap" id="trDetails">
           <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
@@ -880,6 +885,7 @@
                 <select id="trSubcategory"><option value="">不指定</option></select>
               </label>
             </div>
+            <p class="hint full" id="trQuickIncomeHint" style="display:none; margin-top:-4px;">類別：<b id="trQuickIncomeHintName"></b>（利息／股息快速入帳，不用選主／子類別）</p>
             <label>日期
               <input type="date" id="trDate" required>
             </label>
@@ -1163,7 +1169,7 @@
 
       <!-- 記帳：類別設定 -->
       <div id="trSub-categories" style="display:none;">
-        <p class="hint">管理記帳的「主類別」與「子類別」，支出跟收入分開管理。刪除類別不會影響已經記過的舊資料，只是選單裡不會再出現。這些設定只存在這台裝置的瀏覽器裡。</p>
+        <p class="hint">管理記帳的「主類別」與「子類別」，支出跟收入分開管理。點主類別旁邊的「↑」「↓」可以調整主類別的顯示先後順序，記帳表單、統計分析的選單都會照這個順序顯示。刪除類別不會影響已經記過的舊資料，只是選單裡不會再出現。</p>
         <div class="category-manage">
           <h2 style="font-size:15px;">支出類別</h2>
           <div id="catBlocksExpense" style="display:flex; flex-direction:column; gap:10px;"></div>
@@ -2447,9 +2453,16 @@ function isAdvanceMode_(){
 }
 function syncCatRowVisibility(){
   const advance = isAdvanceMode_();
-  $('#trCatRow').style.display = ($('#trType').value === 'transfer' || advance) ? 'none' : '';
+  // 「利息／股息」快速入帳模式下類別已經固定好了（見 trQuickIncomeCategory），
+  // 不用讓使用者自己選主／子類別，所以這裡也一併隱藏。
+  $('#trCatRow').style.display = ($('#trType').value === 'transfer' || advance || trQuickInterestMode) ? 'none' : '';
   const hint = $('#trAdvanceHint');
   if(hint) hint.style.display = advance ? '' : 'none';
+  const quickHint = $('#trQuickIncomeHint');
+  if(quickHint){
+    quickHint.style.display = trQuickInterestMode ? '' : 'none';
+    if(trQuickInterestMode) $('#trQuickIncomeHintName').textContent = trQuickIncomeCategory;
+  }
 }
 function setTrType(type, selectedCategory, selectedSub){
   $('#trType').value = type;
@@ -3047,21 +3060,30 @@ window.toggleAccountFavorite = async id => {
 // 複合流程：新增時自動增加帳戶餘額，之後不管編輯金額還是刪除，餘額都會正確地
 // 一起調整／還原，也會自動計入收入統計、出現在記帳清單／日曆上，之後想改成
 // 銀行實際撥的金額，直接雙擊那筆紀錄修改即可，不需要另一套獨立的 CRUD。
-// 這裡的按鈕只是「幫使用者把記帳表單先設定好」的捷徑：切成收入、帶入類別
-// 「投資收益」、把帳戶選單暫時換成銀行／投資帳戶。跟舊版「利息紀錄」頁一樣，
-// 一開啟就直接自動選好第一個符合資格的帳戶、並立刻帶入該帳戶的估算利息，
-// 不用使用者自己再點一次帳戶選單才會有反應。
+// 這裡的兩顆按鈕（利息／股息各一顆）只是「幫使用者把記帳表單先設定好」的捷徑：
+// 切成收入、類別直接固定成「利息收入」或「股息收入」（不用使用者自己選主／
+// 子類別，主／子類別欄位也會跟著隱藏，見 syncCatRowVisibility），並把帳戶選單
+// 暫時換成銀行／投資帳戶。跟舊版「利息紀錄」頁一樣，一開啟就直接自動選好
+// 第一個符合資格的帳戶、並立刻帶入該帳戶的估算利息，不用使用者自己再點一次
+// 帳戶選單才會有反應。
+const INTEREST_CATEGORY_NAME = '利息收入';
+const DIVIDEND_CATEGORY_NAME = '股息收入';
+// 目前快速入帳鎖定使用的類別名稱（'利息收入' 或 '股息收入'），只有在
+// trQuickInterestMode 為 true 時才會用到，儲存時會直接取代 #trCategory 的值。
+let trQuickIncomeCategory = '';
 function autoFillQuickInterestAmount_(force){
   const acc = state.accounts.find(a => a.id === $('#trAccount').value);
   if(!acc) return;
   const est = estimateAccountNextInterest_(acc);
   if(force || !$('#trAmount').value) $('#trAmount').value = est ? est.toFixed(2) : '';
 }
-$('#trQuickInterestBtn').addEventListener('click', () => {
+function openQuickIncomeEntry_(categoryName){
   resetTransactionForm();
   trQuickInterestMode = true;
+  trQuickIncomeCategory = categoryName;
   $('#trDetails').open = true;
-  setTrType('income', '投資收益', '利息');
+  setTrType('income'); // 主／子類別欄位在快速入帳模式下會隱藏，這裡不用真的選類別
+  syncCatRowVisibility(); // 立刻隱藏主／子類別欄位，因為類別已經固定好了
   renderAccountSelects(); // 立刻把帳戶選單換成銀行／投資帳戶（見 trQuickInterestMode）
   // 還原舊版「利息紀錄」頁的行為：自動選好第一個符合資格（銀行／投資、餘額>100）的
   // 帳戶，不強迫使用者一定要自己手動點開下拉選單才看得到估算金額。
@@ -3071,9 +3093,12 @@ $('#trQuickInterestBtn').addEventListener('click', () => {
     autoFillQuickInterestAmount_(true);
   }
   setTimeout(() => $('#trAmount').focus(), 150);
-});
+}
+$('#trQuickInterestBtn').addEventListener('click', () => openQuickIncomeEntry_(INTEREST_CATEGORY_NAME));
+$('#trQuickDividendBtn').addEventListener('click', () => openQuickIncomeEntry_(DIVIDEND_CATEGORY_NAME));
 // 使用者手動換帳戶時，一律用新帳戶的估算值覆蓋金額（換帳戶代表要看新帳戶的估算，
-// 跟舊版 #intAccount 的 change 事件一樣一律強制覆蓋，不管金額欄位原本是不是空的）。
+// 跟舊版 #intAccount 的 change 事件一樣一律強制覆蓋，不管金額欄位原本是不是空的），
+// 這樣「利息／股息」快速入帳的預估金額才會跟著下拉選單選的帳戶同步更新。
 $('#trAccount').addEventListener('change', () => {
   if(!trQuickInterestMode) return;
   autoFillQuickInterestAmount_(true);
@@ -3135,7 +3160,7 @@ window.deleteLiability = async id => {
 })();
 
 $$('#trForm .type-toggle button').forEach(btn => {
-  btn.addEventListener('click', () => { trQuickInterestMode = false; setTrType(btn.dataset.type); });
+  btn.addEventListener('click', () => { trQuickInterestMode = false; trQuickIncomeCategory = ''; setTrType(btn.dataset.type); });
 });
 
 $('#trShared').addEventListener('change', () => {
@@ -3184,12 +3209,18 @@ $('#trForm').addEventListener('submit', async e => {
     // 全額代墊只有在「我先付」時才代表整筆是對方的花費，才統一存成「代墊」；
     // 「對方先付」代表整筆其實是我的花費，要保留使用者自己選的類別。
     const isAdvance = splitMode === 'advance' && payer !== 'partner';
+    // 「利息／股息」快速入帳模式下，類別一律固定用 trQuickIncomeCategory
+    // （'利息收入' 或 '股息收入'），不採用（已隱藏的）主／子類別欄位的值。
+    const category = isAdvance ? ADVANCE_CATEGORY_NAME
+      : trQuickInterestMode ? trQuickIncomeCategory
+      : $('#trCategory').value;
+    const subcategory = (isAdvance || trQuickInterestMode) ? '' : $('#trSubcategory').value;
     data = {
       id,
       date: $('#trDate').value,
       type,
-      category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#trCategory').value,
-      subcategory: isAdvance ? '' : $('#trSubcategory').value,
+      category,
+      subcategory,
       amount,
       accountId,
       note: $('#trNote').value,
@@ -3287,6 +3318,7 @@ $('#trFormBackdrop').addEventListener('click', () => { $('#trDetails').open = fa
 
 function resetTransactionForm(){
   trQuickInterestMode = false; // 表單重置／關閉時一併取消利息快速入帳模式，帳戶選單才會恢復正常
+  trQuickIncomeCategory = '';
   $('#trId').value = '';
   $('#trDate').value = new Date().toISOString().slice(0,10);
   $('#trAmount').value = '';
@@ -3308,6 +3340,7 @@ window.editTransaction = id => {
   const t = state.transactions.find(x => x.id === id);
   if(!t) return;
   trQuickInterestMode = false; // 編輯既有記帳一律用一般帳戶選單，不受先前的利息快速入帳模式影響
+  trQuickIncomeCategory = '';
   $('#trId').value = t.id;
   $('#trDate').value = t.date;
   $('#trAmount').value = t.amount;
@@ -3693,10 +3726,12 @@ function renderCategoryBlocks(type){
     wrap.innerHTML = `<div class="empty">尚無主類別，請在下方新增。</div>`;
     return;
   }
-  wrap.innerHTML = tree.map(m => `
+  wrap.innerHTML = tree.map((m,i) => `
     <div class="main-cat-block">
       <div class="main-cat-head">
         <span class="main-cat-name">${escapeHtml(m.name)}</span>
+        <button type="button" class="small catMoveUpBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" title="往上移" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="small catMoveDownBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" title="往下移" ${i === tree.length - 1 ? 'disabled' : ''}>↓</button>
         <button type="button" class="small catRenameMainBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}">重新命名</button>
         <button type="button" class="small danger catRemoveMainBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}">刪除</button>
       </div>
@@ -3716,6 +3751,24 @@ function renderCategoryBlocks(type){
 function renderCategories(){
   renderCategoryBlocks('expense');
   renderCategoryBlocks('income');
+}
+
+// 調整主類別顯示順序：在記憶體裡把該主類別跟相鄰的主類別互換位置，算出新的
+// 完整順序（主類別名稱陣列）後打後端 API 儲存；後端會把 Categories 表裡屬於
+// 同一個主類別的所有列（含子類別列）當成一個區塊整組搬動，達到「調整順序」
+// 的效果（不用額外加排序欄位）。
+async function reorderMainCategory(type, name, direction){
+  const tree = getCategoryTree(type);
+  const idx = tree.findIndex(m => m.name === name);
+  if(idx === -1) return;
+  const swapWith = idx + direction;
+  if(swapWith < 0 || swapWith >= tree.length) return;
+  const reordered = tree.slice();
+  const [moved] = reordered.splice(idx, 1);
+  reordered.splice(swapWith, 0, moved);
+  const order = reordered.map(m => m.name);
+  await apiPost('reorderMainCategories', null, { type, order });
+  state.categories[type] = reordered;
 }
 
 async function handleAddMainCategory(type, inputSel){
@@ -3741,6 +3794,24 @@ $('#catAddIncome').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.p
 // 用 runBusy 顯示「處理中」避免使用者以為沒反應而重複點擊，失敗時要明確
 // alert 出來，不能讓使用者以為已經刪除/改名成功、其實後端沒有真的動到。
 async function handleCategoryBlockClick(e){
+  const moveUp = e.target.closest('.catMoveUpBtn');
+  if(moveUp){
+    const { catType, catMain } = moveUp.dataset;
+    try{
+      await runBusy(() => reorderMainCategory(catType, catMain, -1), '調整順序中…');
+    }catch(err){ alert('調整順序失敗：' + err.message); return; }
+    renderCategories();
+    return;
+  }
+  const moveDown = e.target.closest('.catMoveDownBtn');
+  if(moveDown){
+    const { catType, catMain } = moveDown.dataset;
+    try{
+      await runBusy(() => reorderMainCategory(catType, catMain, 1), '調整順序中…');
+    }catch(err){ alert('調整順序失敗：' + err.message); return; }
+    renderCategories();
+    return;
+  }
   const renameMain = e.target.closest('.catRenameMainBtn');
   if(renameMain){
     const { catType, catMain } = renameMain.dataset;

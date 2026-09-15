@@ -872,6 +872,37 @@ function renameCategoryEverywhere_(payload) {
   return { updated: totalUpdated };
 }
 
+// 調整主類別的顯示先後順序：buildCategoryTree_ 是依照 Categories 表「列的先後順序」
+// 決定主類別在樹狀結構裡的順序（同一個主類別的第一次出現位置），所以這裡不用額外
+// 加排序欄位，只要把同一個 mainName 底下的所有列（含子類別列）當成一個區塊整組搬動、
+// 按照前端傳來的 order（主類別名稱陣列）重新排列區塊順序，再整批寫回即可。
+// order 裡沒提到、但其實存在的主類別，會照原本相對順序補在最後面，避免漏掉。
+function reorderMainCategories_(type, order) {
+  const rows = categorySheetRows_();
+  const rowsOfType = rows.filter(r => r.type === type);
+  const rowsOtherType = rows.filter(r => r.type !== type);
+
+  const groups = {};
+  const groupOrder = [];
+  rowsOfType.forEach(r => {
+    const name = String(r.mainName);
+    if (!groups[name]) { groups[name] = []; groupOrder.push(name); }
+    groups[name].push(r);
+  });
+
+  const requested = (Array.isArray(order) ? order : []).map(String);
+  const finalOrder = [];
+  requested.forEach(n => { if (groups[n] && finalOrder.indexOf(n) === -1) finalOrder.push(n); });
+  groupOrder.forEach(n => { if (finalOrder.indexOf(n) === -1) finalOrder.push(n); });
+
+  const reordered = [];
+  finalOrder.forEach(n => { reordered.push.apply(reordered, groups[n]); });
+
+  rewriteCategorySheet_(rowsOtherType.concat(reordered));
+  rebuildAllTransactionValidations();
+  return { order: finalOrder };
+}
+
 // 一次性搬移用：把前端瀏覽器原本存在 localStorage 的自訂類別樹整批寫進這張表，
 // 取代目前這個 type 底下的所有列。只有前端偵測到「這個瀏覽器有自訂過類別、
 // 但這是第一次接上這個試算表」時才會呼叫一次，之後不會再用到。
@@ -1450,6 +1481,7 @@ function doPost(e) {
     if (action === 'renameMainCategory') return jsonOut_({ ok: true, data: renameMainCategory_(body.data.type, body.data.oldName, body.data.newName) });
     if (action === 'renameSubCategory') return jsonOut_({ ok: true, data: renameSubCategory_(body.data.type, body.data.mainName, body.data.oldSub, body.data.newSub) });
     if (action === 'replaceCategoryTree') return jsonOut_({ ok: true, data: replaceCategoryTree_(body.data.type, body.data.tree) });
+    if (action === 'reorderMainCategories') return jsonOut_({ ok: true, data: reorderMainCategories_(body.data.type, body.data.order) });
 
     const sheetKey = body.sheet;
     if (!SHEET_NAMES[sheetKey]) return jsonOut_({ ok: false, error: '未知的資料表' });
