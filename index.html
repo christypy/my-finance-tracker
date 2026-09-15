@@ -3048,24 +3048,35 @@ window.toggleAccountFavorite = async id => {
 // 一起調整／還原，也會自動計入收入統計、出現在記帳清單／日曆上，之後想改成
 // 銀行實際撥的金額，直接雙擊那筆紀錄修改即可，不需要另一套獨立的 CRUD。
 // 這裡的按鈕只是「幫使用者把記帳表單先設定好」的捷徑：切成收入、帶入類別
-// 「投資收益」、把帳戶選單暫時換成銀行／投資帳戶、選好帳戶後自動帶入估算金額。
+// 「投資收益」、把帳戶選單暫時換成銀行／投資帳戶。跟舊版「利息紀錄」頁一樣，
+// 一開啟就直接自動選好第一個符合資格的帳戶、並立刻帶入該帳戶的估算利息，
+// 不用使用者自己再點一次帳戶選單才會有反應。
+function autoFillQuickInterestAmount_(force){
+  const acc = state.accounts.find(a => a.id === $('#trAccount').value);
+  if(!acc) return;
+  const est = estimateAccountNextInterest_(acc);
+  if(force || !$('#trAmount').value) $('#trAmount').value = est ? est.toFixed(2) : '';
+}
 $('#trQuickInterestBtn').addEventListener('click', () => {
   resetTransactionForm();
   trQuickInterestMode = true;
   $('#trDetails').open = true;
   setTrType('income', '投資收益', '利息');
   renderAccountSelects(); // 立刻把帳戶選單換成銀行／投資帳戶（見 trQuickInterestMode）
-  setTimeout(() => $('#trAccount').focus(), 150);
+  // 還原舊版「利息紀錄」頁的行為：自動選好第一個符合資格（銀行／投資、餘額>100）的
+  // 帳戶，不強迫使用者一定要自己手動點開下拉選單才看得到估算金額。
+  const firstEligible = interestEligibleAccounts_(sortAccountsForSelect(state.accounts))[0];
+  if(firstEligible){
+    $('#trAccount').value = firstEligible.id;
+    autoFillQuickInterestAmount_(true);
+  }
+  setTimeout(() => $('#trAmount').focus(), 150);
 });
-// 選好帳戶後，把「估算下期利息」直接帶入金額欄位（使用者還是可以自己改成銀行
-// 實際撥的金額）；只有在快速入帳模式、而且金額欄位還是空的時候才自動帶入，
-// 不會蓋掉使用者已經手動填好的一般記帳金額。
+// 使用者手動換帳戶時，一律用新帳戶的估算值覆蓋金額（換帳戶代表要看新帳戶的估算，
+// 跟舊版 #intAccount 的 change 事件一樣一律強制覆蓋，不管金額欄位原本是不是空的）。
 $('#trAccount').addEventListener('change', () => {
-  if(!trQuickInterestMode || $('#trAmount').value) return;
-  const acc = state.accounts.find(a => a.id === $('#trAccount').value);
-  if(!acc) return;
-  const est = estimateAccountNextInterest_(acc);
-  if(est) $('#trAmount').value = est.toFixed(2);
+  if(!trQuickInterestMode) return;
+  autoFillQuickInterestAmount_(true);
 });
 
 // ---------- Liabilities CRUD ----------
