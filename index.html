@@ -844,15 +844,14 @@
         <div class="summary-grid" id="trStatsGrid"></div>
         <!-- <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。有存好的模板時，表單最上面會出現一排模板按鈕，點一下就能帶入內容，只要調整日期或金額就能存檔；模板的新增／編輯／每月自動加入／刪除，請到「模板管理」分頁統一設定。</p> -->
         <!-- 利息／股息快速入帳：本質上就是一筆「收入」記帳，類別自動固定為
-             「利息收入」或「股息收入」（依點的是哪顆按鈕），不用使用者自己選
-             主／子類別，表單上的主／子類別欄位也會直接隱藏。點一下會開啟下方
-             記帳表單並自動切成收入、選好帳戶後金額欄位會自動帶入系統估算的
-             下期利息／股息，跟銀行實際撥的金額不同的話，直接改成實際數字再
-             存檔即可；存檔後就跟其他記帳一樣，會自動增加帳戶餘額、可在下方
-             清單雙擊編輯或刪除，也會計入收入統計，不用另外管理。 -->
+             「利息／股息收入」，不用使用者自己選主／子類別，表單上的主／子
+             類別欄位也會直接隱藏。點一下會開啟下方記帳表單並自動切成收入、
+             選好帳戶後金額欄位會自動帶入系統估算的下期利息／股息，跟銀行
+             實際撥的金額不同的話，直接改成實際數字再存檔即可；存檔後就跟
+             其他記帳一樣，會自動增加帳戶餘額、可在下方清單雙擊編輯或刪除，
+             也會計入收入統計，不用另外管理。 -->
         <div class="quick-actions-row" style="margin-bottom:10px;">
-          <button type="button" class="small" id="trQuickInterestBtn">💰 記一筆利息</button>
-          <button type="button" class="small" id="trQuickDividendBtn">📈 記一筆股息</button>
+          <button type="button" class="small" id="trQuickInterestBtn">💰 記一筆利息／股息</button>
         </div>
         <details class="entry-wrap" id="trDetails">
           <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
@@ -3060,16 +3059,15 @@ window.toggleAccountFavorite = async id => {
 // 複合流程：新增時自動增加帳戶餘額，之後不管編輯金額還是刪除，餘額都會正確地
 // 一起調整／還原，也會自動計入收入統計、出現在記帳清單／日曆上，之後想改成
 // 銀行實際撥的金額，直接雙擊那筆紀錄修改即可，不需要另一套獨立的 CRUD。
-// 這裡的兩顆按鈕（利息／股息各一顆）只是「幫使用者把記帳表單先設定好」的捷徑：
-// 切成收入、類別直接固定成「利息收入」或「股息收入」（不用使用者自己選主／
-// 子類別，主／子類別欄位也會跟著隱藏，見 syncCatRowVisibility），並把帳戶選單
-// 暫時換成銀行／投資帳戶。跟舊版「利息紀錄」頁一樣，一開啟就直接自動選好
-// 第一個符合資格的帳戶、並立刻帶入該帳戶的估算利息，不用使用者自己再點一次
-// 帳戶選單才會有反應。
-const INTEREST_CATEGORY_NAME = '利息收入';
-const DIVIDEND_CATEGORY_NAME = '股息收入';
-// 目前快速入帳鎖定使用的類別名稱（'利息收入' 或 '股息收入'），只有在
-// trQuickInterestMode 為 true 時才會用到，儲存時會直接取代 #trCategory 的值。
+// 這裡的按鈕只是「幫使用者把記帳表單先設定好」的捷徑：切成收入、類別直接
+// 固定成「利息／股息收入」（不用使用者自己選主／子類別，主／子類別欄位也
+// 會跟著隱藏，見 syncCatRowVisibility），並把帳戶選單暫時換成銀行／投資
+// 帳戶。跟舊版「利息紀錄」頁一樣，一開啟就直接自動選好第一個符合資格的
+// 帳戶、並立刻帶入該帳戶的估算利息，不用使用者自己再點一次帳戶選單才會
+// 有反應。
+const QUICK_INCOME_CATEGORY_NAME = '利息／股息收入';
+// 目前快速入帳鎖定使用的類別名稱，只有在 trQuickInterestMode 為 true 時
+// 才會用到，儲存時會直接取代 #trCategory 的值。
 let trQuickIncomeCategory = '';
 function autoFillQuickInterestAmount_(force){
   const acc = state.accounts.find(a => a.id === $('#trAccount').value);
@@ -3094,8 +3092,7 @@ function openQuickIncomeEntry_(categoryName){
   }
   setTimeout(() => $('#trAmount').focus(), 150);
 }
-$('#trQuickInterestBtn').addEventListener('click', () => openQuickIncomeEntry_(INTEREST_CATEGORY_NAME));
-$('#trQuickDividendBtn').addEventListener('click', () => openQuickIncomeEntry_(DIVIDEND_CATEGORY_NAME));
+$('#trQuickInterestBtn').addEventListener('click', () => openQuickIncomeEntry_(QUICK_INCOME_CATEGORY_NAME));
 // 使用者手動換帳戶時，一律用新帳戶的估算值覆蓋金額（換帳戶代表要看新帳戶的估算，
 // 跟舊版 #intAccount 的 change 事件一樣一律強制覆蓋，不管金額欄位原本是不是空的），
 // 這樣「利息／股息」快速入帳的預估金額才會跟著下拉選單選的帳戶同步更新。
