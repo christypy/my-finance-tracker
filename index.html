@@ -1528,6 +1528,13 @@ async function loadAll(){
       state.recurringDoneIds = all.recurringDoneIds || [];
       state.recurringDoneMonth = all.recurringDoneMonth || null;
       renderAll();
+      // 記帳／模板表單的主類別、子類別選單在頁面一開始（IIFE）就先畫過一次，
+      // 但那時候 state.categories 都還是空的（要等這裡 apiGet('all') 回來才有資料），
+      // 所以畫出來的選項是空的；這裡資料到手後要重新畫一次選單，不然要等使用者
+      // 自己把表單關掉重開（resetTransactionForm 會重畫）才會看到正確選項。
+      // 只有目前沒有正在編輯既有紀錄時才重畫，避免蓋掉使用者正在編輯的內容。
+      if(!$('#trId').value) populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
+      if(!$('#tplId').value) populateTplCategories($('#tplType').value, $('#tplCategory').value, $('#tplSubcategory').value);
     }, '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
