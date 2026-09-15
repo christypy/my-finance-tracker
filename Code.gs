@@ -88,7 +88,9 @@ const SHEET_HEADERS = {
   //   splitMode  共同帳本用：'personal'（個人，不分攤）| 'split'（平分50/50）| 'advance'（全額代墊算對方的）
   //              （新增於陣列最後面）；這筆範本被加入記帳時，payer/splitMode 會原封不動帶到
   //              產生出來的記帳紀錄，等同「保留這筆紀錄、只有日期會變」
-  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode'],
+  //   toAccountId 轉帳專用（type:'transfer'）：accountId 是轉出帳戶、toAccountId 是轉入帳戶，
+  //              跟記帳的轉帳同義，加入記帳時會產生一筆 type:'transfer' 的紀錄（新增於陣列最後面）
+  recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode', 'toAccountId'],
   // 類別設定（主類別／子類別）：以前存在前端瀏覽器的 localStorage，跟試算表資料完全分開，
   // 換裝置、清瀏覽器快取都會不見，也沒辦法在試算表上直接看到/管理。改成存在這張表：
   //   type      'expense' | 'income'
@@ -946,12 +948,25 @@ function runRecurringTemplates_(month, ids) {
     // 「代墊」；「對方先付」代表整筆其實是我的花費，要保留範本原本設定的類別，
     // 跟前端記帳表單／固定項目表單同一套規則（isAdvanceMode_ / isRecAdvanceMode_）。
     const isAdvance = splitMode === 'advance' && payer !== 'partner';
-    // force:true：固定項目本來就已經靠 recurringDoneIds（見
-    // recurringDoneIds­ForMonth_）確保同一個範本同一個月不會被重複加入，
-    // 不需要再套用「日期＋類型＋類別＋金額」的通用重複檢查——不然剛好跟
-    // 使用者自己手動記的某一筆撞上（例如金額、類別剛好一樣），固定項目
-    // 就會被誤判成重複而悄悄加不進去。
-    const result = addTransactionTx_({
+    const isTransfer = tpl.type === 'transfer';
+    // 轉帳範本（type:'transfer'）：跟記帳表單的轉帳同一套規則，主類別固定存
+    // 「轉帳」、不分主/子類別，也不算共同帳本（payer/splitMode 一律用預設值），
+    // accountId 是轉出帳戶、toAccountId 是轉入帳戶。
+    const payload = isTransfer ? {
+      date: date,
+      type: 'transfer',
+      category: '轉帳',
+      subcategory: '',
+      amount: Number(tpl.amount) || 0,
+      accountId: tpl.accountId || '',
+      toAccountId: tpl.toAccountId || '',
+      note: tpl.note || tpl.name,
+      payer: 'me',
+      splitMode: 'personal',
+      settled: false,
+      recurringId: tpl.id,
+      force: true
+    } : {
       date: date,
       type: tpl.type || 'expense',
       // 全額代墊的品項跟一般記帳表單一樣，主類別統一存成「代墊」
@@ -965,9 +980,17 @@ function runRecurringTemplates_(month, ids) {
       settled: false,
       recurringId: tpl.id,
       force: true
-    });
+    };
+    // force:true：固定項目本來就已經靠 recurringDoneIds（見
+    // recurringDoneIds­ForMonth_）確保同一個範本同一個月不會被重複加入，
+    // 不需要再套用「日期＋類型＋類別＋金額」的通用重複檢查——不然剛好跟
+    // 使用者自己手動記的某一筆撞上（例如金額、類別剛好一樣），固定項目
+    // 就會被誤判成重複而悄悄加不進去。
+    const result = addTransactionTx_(payload);
     created.push(result.transaction);
-    if (result.account) accountsTouched.push(result.account);
+    // 轉帳範本一次會影響「轉出＋轉入」兩個帳戶，這裡改用 result.accounts（完整清單）
+    // 而不是只取 result.account（單一帳戶），不然轉入那個帳戶的餘額不會回傳給前端。
+    (result.accounts || []).forEach(acc => accountsTouched.push(acc));
   });
   return { created: created, accounts: accountsTouched, skipped: pending.length - toRun.length };
 }

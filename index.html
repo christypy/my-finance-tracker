@@ -1004,6 +1004,7 @@
             <div class="full type-toggle">
               <button type="button" class="expense active" data-type="expense">支出</button>
               <button type="button" class="income" data-type="income">收入</button>
+              <button type="button" class="transfer" data-type="transfer">轉帳</button>
             </div>
             <input type="hidden" id="tplType" value="expense">
             <label class="full">模板名稱
@@ -1024,9 +1025,14 @@
                 <select id="tplSubcategory"><option value="">不指定</option></select>
               </label>
             </div>
-            <label id="tplAccountWrap"><span>帳戶（選填，加入記帳時會自動增減餘額）</span>
+            <label id="tplAccountWrap"><span id="tplAccountLabel">帳戶（選填，加入記帳時會自動增減餘額）</span>
               <select id="tplAccount">
                 <option value="">不指定</option>
+              </select>
+            </label>
+            <label class="full" id="tplTransferToWrap" style="display:none;">到（轉入帳戶）
+              <select id="tplToAccount">
+                <option value="">請選擇</option>
               </select>
             </label>
             <label>每月幾號繳（選填，僅供提醒）
@@ -1981,6 +1987,24 @@ function renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, option
     trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtmlFor(pickerAccountList_(trBase, orderedAccounts, keepTo));
     trToSel.value = keepTo;
   }
+
+  // 模板管理表單同理：模板類型是「轉帳」時，帳戶選單（從／到）也要列出全部帳戶，
+  // 不受常用篩選影響，邏輯跟上面記帳表單的轉帳完全一樣。
+  const tplSel = $('#tplAccount');
+  if(tplSel){
+    const tplIsTransfer = $('#tplType') && $('#tplType').value === 'transfer';
+    const tplBase = tplIsTransfer ? orderedAccounts : favoriteAccounts;
+    const keepTplVal = tplSel.value;
+    tplSel.innerHTML = `<option value="">${tplIsTransfer ? '請選擇' : '不指定'}</option>` + optionsHtmlFor(pickerAccountList_(tplBase, orderedAccounts, keepTplVal));
+    tplSel.value = keepTplVal;
+
+    const tplToSel = $('#tplToAccount');
+    if(tplToSel){
+      const keepTplTo = tplToSel.value;
+      tplToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtmlFor(pickerAccountList_(tplBase, orderedAccounts, keepTplTo));
+      tplToSel.value = keepTplTo;
+    }
+  }
 }
 function renderAccountSelects(){
   const orderedAccounts = sortAccountsForSelect(state.accounts);
@@ -2013,15 +2037,9 @@ function renderAccountSelects(){
   // 選好帳戶後，把「估算下期利息」直接帶入金額欄位（使用者還是可以自己改成銀行實際撥的金額）
   syncIntAmountFromEstimate_();
 
+  // 模板管理表單的帳戶選單（從／到）：跟記帳表單共用同一套邏輯（見
+  // renderTransferAccountOptions_），一般模板只顯示常用支付工具，轉帳模板則列出全部帳戶。
   renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
-
-  // 模板管理表單的帳戶選單，跟記帳表單共用同一套「常用支付工具」篩選規則
-  const tplSel = $('#tplAccount');
-  if(tplSel){
-    const keepTpl = tplSel.value;
-    tplSel.innerHTML = `<option value="">不指定</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepTpl));
-    tplSel.value = keepTpl;
-  }
 
   // 共同帳本「結算」用的轉帳帳戶選單：預設帶入現金帳戶，選了之後結算時
   // 會自動把這筆結算金額計入該帳戶餘額，不用自己手動再調整
@@ -3273,7 +3291,10 @@ $('#trForm').addEventListener('submit', async e => {
           result = await apiPost('addTransactionTx','transactions',data);
         }
         upsertLocal('transactions', result.transaction);
-        if(result.account) upsertLocal('accounts', result.account);
+        // 轉帳一次會影響「轉出＋轉入」兩個帳戶，之前這裡只用 result.account（單一帳戶），
+        // 導致新增轉帳後畫面上只有其中一個帳戶的餘額會更新，另一個要重新整理才會同步。
+        // 改用 result.accounts（後端回傳的完整清單）逐一寫回本地狀態，兩個帳戶都會即時更新。
+        (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
       }
       if(duplicateCancelled) return;
       if(continueBatch && !id){
@@ -3422,17 +3443,25 @@ window.applyTemplateToTr = id => {
   const t = state.recurring.find(x => x.id === id);
   if(!t) return;
   $('#trId').value = '';
-  setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
+  const trType = t.type === 'income' ? 'income' : t.type === 'transfer' ? 'transfer' : 'expense';
+  setTrType(trType, t.category, t.subcategory);
   $('#trAmount').value = t.amount || '';
   $('#trAccount').value = t.accountId || '';
   // 跟「模板」自動加入記帳時（runRecurringTemplates_）同一套規則：
   // 優先用模板的備註，沒有的話用模板名稱當作這筆記帳的名稱。
   $('#trNote').value = t.note || t.name || '';
-  const shared = recIsShared_(t);
-  $('#trShared').checked = shared;
-  $('#trLedgerFields').style.display = shared ? '' : 'none';
-  $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
-  $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  if(trType === 'transfer'){
+    // 轉帳範本不是共同帳本項目，帶入「到（轉入帳戶）」即可
+    $('#trToAccount').value = t.toAccountId || '';
+    $('#trShared').checked = false;
+    $('#trLedgerFields').style.display = 'none';
+  } else {
+    const shared = recIsShared_(t);
+    $('#trShared').checked = shared;
+    $('#trLedgerFields').style.display = shared ? '' : 'none';
+    $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+    $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  }
   syncCatRowVisibility();
   $('#trFormTitle').textContent = `新增記帳（已帶入模板：${t.name}）`;
   $('#trSaveContinue').style.display = ''; // 這一律是新增，可以繼續用批量記帳按鈕
@@ -3546,10 +3575,30 @@ function populateTplSubcategories(type, mainName, selectedSub){
 }
 bindInlineCategoryCreation_($('#tplCategory'), $('#tplSubcategory'), () => $('#tplType').value, populateTplCategories, populateTplSubcategories);
 
+// 跟記帳表單的 setTrType 同一套邏輯：模板類型是「轉帳」時，主/子類別跟共同帳本
+// 欄位都不需要（轉帳不算收支、也不會是共同帳本項目），改成顯示「到（轉入帳戶）」，
+// 帳戶（從）欄位也改成必填，並把帳戶選單換成列出全部帳戶（見 renderTransferAccountOptions_）。
 function setTplType(type, selectedCategory, selectedSub){
   $('#tplType').value = type;
   $$('#tplForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
-  populateTplCategories(type, selectedCategory, selectedSub);
+  const isTransfer = type === 'transfer';
+  $('#tplCatRow').style.display = isTransfer ? 'none' : '';
+  $('#tplSharedRow').style.display = isTransfer ? 'none' : '';
+  $('#tplTransferToWrap').style.display = isTransfer ? '' : 'none';
+  $('#tplAccountLabel').textContent = isTransfer ? '從（轉出帳戶）' : '帳戶（選填，加入記帳時會自動增減餘額）';
+  $('#tplAccount').required = isTransfer;
+  $('#tplToAccount').required = isTransfer;
+  if(isTransfer){
+    $('#tplShared').checked = false;
+    $('#tplLedgerFields').style.display = 'none';
+  } else {
+    populateTplCategories(type, selectedCategory, selectedSub);
+  }
+  // 帳戶選單的基底清單（常用 vs 全部帳戶）取決於是不是轉帳，切換類型時要重新整理選單
+  const orderedAccounts = sortAccountsForSelect(state.accounts);
+  const favoriteAccounts = orderedAccounts.filter(isAccountFavorite);
+  const optionsHtmlFor = list => list.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+  renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
 }
 $$('#tplForm .type-toggle button').forEach(btn => {
   btn.addEventListener('click', () => setTplType(btn.dataset.type));
@@ -3579,14 +3628,17 @@ window.editTemplateManage = id => {
   const t = state.recurring.find(x => x.id === id);
   if(!t) return;
   $('#tplId').value = t.id;
-  setTplType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
+  const tplType = t.type === 'income' ? 'income' : t.type === 'transfer' ? 'transfer' : 'expense';
+  setTplType(tplType, t.category, t.subcategory);
   $('#tplName').value = t.name || '';
   $('#tplAmount').value = t.amount || '';
   $('#tplAccount').value = t.accountId || '';
+  $('#tplToAccount').value = t.toAccountId || '';
   $('#tplDayOfMonth').value = t.dayOfMonth || '';
   $('#tplNote').value = t.note || '';
   $('#tplActive').checked = String(t.active) === 'true';
-  const shared = recIsShared_(t);
+  // 轉帳範本不算共同帳本項目，跟記帳表單同一套規則
+  const shared = tplType !== 'transfer' && recIsShared_(t);
   $('#tplShared').checked = shared;
   $('#tplLedgerFields').style.display = shared ? '' : 'none';
   $('#tplPayer').value = t.payer === 'partner' ? 'partner' : 'me';
@@ -3603,24 +3655,48 @@ $('#tplForm').addEventListener('submit', async e => {
   const type = $('#tplType').value;
   const name = $('#tplName').value.trim();
   if(!name){ alert('請輸入模板名稱。'); return; }
-  const shared = $('#tplShared').checked;
-  const splitMode = shared ? $('#tplSplitMode').value : 'personal';
-  const payer = shared ? $('#tplPayer').value : 'me';
-  const isAdvance = splitMode === 'advance' && payer !== 'partner';
-  const data = {
-    id: id || undefined,
-    name,
-    type,
-    category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#tplCategory').value,
-    subcategory: isAdvance ? '' : $('#tplSubcategory').value,
-    amount: parseFloat($('#tplAmount').value) || 0,
-    accountId: $('#tplAccount').value,
-    dayOfMonth: $('#tplDayOfMonth').value ? parseInt($('#tplDayOfMonth').value, 10) : '',
-    note: $('#tplNote').value.trim(),
-    active: $('#tplActive').checked,
-    payer,
-    splitMode
-  };
+  const amount = parseFloat($('#tplAmount').value) || 0;
+  let data;
+  if(type === 'transfer'){
+    const accountId = $('#tplAccount').value;
+    const toAccountId = $('#tplToAccount').value;
+    if(!accountId || !toAccountId){ alert('請選擇轉出與轉入帳戶。'); return; }
+    if(accountId === toAccountId){ alert('轉出與轉入帳戶不能是同一個。'); return; }
+    data = {
+      id: id || undefined,
+      name,
+      type: 'transfer',
+      category: '轉帳',
+      subcategory: '',
+      amount,
+      accountId,
+      toAccountId,
+      dayOfMonth: $('#tplDayOfMonth').value ? parseInt($('#tplDayOfMonth').value, 10) : '',
+      note: $('#tplNote').value.trim(),
+      active: $('#tplActive').checked,
+      payer: 'me',
+      splitMode: 'personal'
+    };
+  } else {
+    const shared = $('#tplShared').checked;
+    const splitMode = shared ? $('#tplSplitMode').value : 'personal';
+    const payer = shared ? $('#tplPayer').value : 'me';
+    const isAdvance = splitMode === 'advance' && payer !== 'partner';
+    data = {
+      id: id || undefined,
+      name,
+      type,
+      category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#tplCategory').value,
+      subcategory: isAdvance ? '' : $('#tplSubcategory').value,
+      amount,
+      accountId: $('#tplAccount').value,
+      dayOfMonth: $('#tplDayOfMonth').value ? parseInt($('#tplDayOfMonth').value, 10) : '',
+      note: $('#tplNote').value.trim(),
+      active: $('#tplActive').checked,
+      payer,
+      splitMode
+    };
+  }
   try{
     await runBusy(async () => {
       const saved = id
@@ -3645,15 +3721,20 @@ function renderTemplatesManage(){
   }
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
   list.innerHTML = state.recurring.map(t => {
-    const typeLabel = t.type === 'income' ? '收入' : '支出';
+    const isTransfer = t.type === 'transfer';
+    const typeLabel = isTransfer ? '轉帳' : t.type === 'income' ? '收入' : '支出';
     const activeOn = String(t.active) === 'true';
+    // 轉帳範本沒有主/子類別，改顯示「從帳戶 → 到帳戶」
+    const noteText = isTransfer
+      ? `${typeLabel} · ${escapeHtml(byId[t.accountId] || '（帳戶已刪除）')} → ${escapeHtml(byId[t.toAccountId] || '（帳戶已刪除）')}`
+      : `${typeLabel} · ${escapeHtml(t.category || '其他')}${t.subcategory ? ' · ' + escapeHtml(t.subcategory) : ''}${t.accountId && byId[t.accountId] ? ' · ' + escapeHtml(byId[t.accountId]) : ''}${recSharedLabel_(t)}`;
     return `<div class="item-card">
       <div class="item-top">
         <div>
           <div class="item-name">${escapeHtml(t.name)}</div>
-          <div class="item-note">${typeLabel} · ${escapeHtml(t.category || '其他')}${t.subcategory ? ' · ' + escapeHtml(t.subcategory) : ''}${t.accountId && byId[t.accountId] ? ' · ' + escapeHtml(byId[t.accountId]) : ''}${recSharedLabel_(t)}</div>
+          <div class="item-note">${noteText}</div>
         </div>
-        <div class="item-value ${t.type === 'income' ? 'income' : 'expense'}">$${fmt(t.amount)}</div>
+        <div class="item-value ${isTransfer ? '' : t.type === 'income' ? 'income' : 'expense'}">$${fmt(t.amount)}</div>
       </div>
       <div class="item-meta">
         ${t.dayOfMonth ? `<span>每月 <b>${t.dayOfMonth}</b> 號</span>` : ''}
