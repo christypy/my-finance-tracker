@@ -3,27 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#fdf8ec">
+<meta name="theme-color" content="#f6f0e2">
 <title>我的存摺 · 個人存款管理</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#3a2b12;
-    --ink-soft:#8a7a5c;
-    --paper:#fdf8ec;
-    --paper-line:#f0e2b8;
-    --card:#fffefb;
-    --cover:#fffefb;
-    --cover-soft:#fbf0cf;
+    --ink:#3b2a1a;
+    --ink-soft:#8a7658;
+    --paper:#f6f0e2;
+    --paper-line:#e3d5b8;
+    --card:#fffdf6;
+    --cover:#fffdf6;
+    --cover-soft:#efe1c4;
     --gold:#c98a00;
     --gold-soft:#fff3c4;
-    --red:#b1573c;
-    --red-bg:#f8e8e0;
-    --green:#3f6f8f;
-    --green-bg:#e8eef3;
-    --blue:#b8860b;
-    --blue-bg:#fdf1d9;
+    --red:#93503a;
+    --red-bg:#f2e5db;
+    --green:#4b6b43;
+    --green-bg:#e6ecdf;
+    --blue:#8a6a3f;
+    --blue-bg:#ece0c9;
     --radius:16px;
     --radius-sm:12px;
     --nav-h:64px;
@@ -34,8 +34,8 @@
     margin:0;
     background:var(--paper);
     background-image:
-      radial-gradient(circle at 10% 0%, rgba(230,181,33,.12), transparent 40%),
-      radial-gradient(circle at 92% 8%, rgba(255,205,60,.14), transparent 40%);
+      radial-gradient(circle at 10% 0%, rgba(230,181,33,.10), transparent 40%),
+      radial-gradient(circle at 92% 8%, rgba(75,107,67,.10), transparent 40%);
     background-attachment:fixed;
     font-family:'Noto Sans TC', sans-serif;
     color:var(--ink);
@@ -116,7 +116,7 @@
 
   /* ---- Dashboard summary ---- */
   .net-hero{
-    background:linear-gradient(135deg, #4a3510, #c98a00);
+    background:linear-gradient(135deg, #3b2a1a, var(--gold));
     color:#fff;
     border-radius:var(--radius);
     padding:20px;
@@ -347,7 +347,7 @@
     padding:10px 11px;
     border:1px solid var(--paper-line);
     border-radius:var(--radius-sm);
-    background:#f8fafc;
+    background:#fdfaf3;
     color:var(--ink);
     min-height:42px;
   }
@@ -488,7 +488,7 @@
   .checkbox-row input[type="checkbox"]{ min-height:auto; width:17px; height:17px; padding:0; }
 
   .ledger-hero{
-    background:linear-gradient(135deg, #4a3510, #c98a00);
+    background:linear-gradient(135deg, #3b2a1a, var(--gold));
     color:#fff; border-radius:var(--radius); padding:20px; margin-bottom:16px;
     box-shadow:0 14px 30px rgba(90,63,10,.30);
   }
@@ -542,7 +542,7 @@
   /* ---- 記帳表單：金額優先的大輸入區 ---- */
   .amount-hero{
     grid-column:1/-1;
-    background:linear-gradient(135deg, #4a3510, #c98a00);
+    background:linear-gradient(135deg, #3b2a1a, var(--gold));
     border-radius:var(--radius-sm);
     padding:16px 16px 14px;
     display:flex;
@@ -2220,7 +2220,7 @@ function renderTrAvailAndBudget_(){
   const stockTotal = state.accounts.filter(a => a.type === '投資').reduce((s,a) => s + (Number(a.balance)||0), 0);
   const available = totalAssets - stockTotal - RESERVE_AMOUNT;
   $('#trAvailValue').textContent = '$' + fmt(available);
-  $('#trAvailValue').style.color = available < 0 ? '#ffb4ab' : '';
+  $('#trAvailValue').style.color = available < 0 ? '#e3ad93' : '';
 
   // 本月支出：固定看「今天」所在的真實月份（不受日曆瀏覽到別的月份影響），
   // 才能跟「每月預算」對得上
@@ -2659,7 +2659,7 @@ function renderCompare(period, expenseTotal){
 }
 
 // ---------- 排行榜色標：同一色系深淺，取代原本的彩虹配色 ----------
-const RANK_COLORS = ['#8a5a12','#b8860b','#c98a00','#a56f1c','#d9a233','#9c7a2e','#e6b752','#7a5c2e'];
+const RANK_COLORS = ['#c98a00','#4b6b43','#8a6a3f','#5c7a4f','#93503a','#7a5c3a','#3f5c3a','#a8763f'];
 
 // ---------- 支出去了哪裡：排行榜（金額＋佔比＋筆數／平均＋跟上期比，可點開看子類別） ----------
 function categoryStatsFor(rows, type){
