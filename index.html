@@ -451,6 +451,12 @@
   .item-value.income{ color:var(--green); }
   .item-value.expense{ color:var(--red); }
 
+  /* ---- 共同帳本：純代墊（不是自己的花費）整筆灰階顯示；平分項目額外顯示自己的份額 ---- */
+  .item-card.advance-item{ opacity:.6; }
+  .item-card.advance-item .item-value{ color:var(--ink-soft); }
+  .item-share-note{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+  .item-share-note b{ color:var(--ink); font-family:'Roboto Slab', serif; }
+
   .stat-section{
     margin-bottom:14px;
     background:var(--card);
@@ -2346,14 +2352,27 @@ function renderTransactions(){
     const metaParts = [t.date];
     if(t.note) metaParts.push(catLabel);
     if(acc) metaParts.push(acc);
-    return `<div class="item-card" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
+    // 共同帳本項目：
+    //   全額代墊且是「我先付」→ 整筆其實是對方的花費，不是我自己的支出，
+    //   整張卡片用灰階顯示，數字前也不加 +/- 符號（不計入我的收支）。
+    //   平分（split）→ 這筆錢一半是我的、一半是對方的，除了顯示原始金額，
+    //   另外標出我自己實際要負擔的那一份（myExpenseShare_）。
+    const isPureAdvance = isExpense && t.splitMode === 'advance' && t.payer !== 'partner';
+    const isSplitShare = isExpense && t.splitMode === 'split';
+    const shareNote = isSplitShare
+      ? `<div class="item-share-note">我的部分：<b>$${fmt(myExpenseShare_(t))}</b></div>`
+      : '';
+    const valueClass = isPureAdvance ? '' : (isExpense ? 'expense' : 'income');
+    const sign = isPureAdvance ? '' : (isExpense ? '-' : '+');
+    return `<div class="item-card ${isPureAdvance ? 'advance-item' : ''}" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
       ${trBatchCheckboxHtml_(t.id)}
       <div class="item-top">
         <div>
           <div class="item-name">${primary}</div>
           <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
+          ${shareNote}
         </div>
-        <div class="item-value ${isExpense ? 'expense' : 'income'}">${isExpense ? '-' : '+'}$${fmt(t.amount)}</div>
+        <div class="item-value ${valueClass}">${sign}$${fmt(t.amount)}</div>
       </div>
       <div class="item-actions">
         <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
