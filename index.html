@@ -830,11 +830,6 @@
 
       <!-- 記帳：紀錄（含新增/編輯記帳與轉帳） -->
       <div id="trSub-records">
-        <div id="recurringBanner"></div>
-        <div id="recurringPendingSection" style="display:none;">
-          <h2 style="font-size:15px;">本月待加入</h2>
-          <div id="recurringPendingList"></div>
-        </div>
         <!-- 可用金額：總資產扣掉股票（投資帳戶）跟固定預留金額後，真正可以動用的錢 -->
         <div class="net-hero" id="trAvailHero">
           <div class="label">可用金額</div>
@@ -982,8 +977,7 @@
 
       <!-- 記帳：模板管理（獨立介面，可新增/編輯/刪除模板；記帳表單裡的模板按鈕仍可直接點擊套用） -->
       <div id="trSub-templates" style="display:none;">
-        <p class="hint">在這裡統一管理所有「模板」（房租、訂閱費、常買的東西…）。存好的模板會自動出現在「記帳」分頁表單最上方，點一下按鈕就能直接帶入內容快速記帳；勾選「每月自動出現在待加入清單」的模板，每個月都會提醒你加入記帳。</p>
-        <details class="entry-wrap" id="tplDetails">
+        <p class="hint">在這裡統一管理所有「模板」（房租、訂閱費、常買的東西…）。存好的模板會自動出現在「記帳」分頁表單最上方，點一下按鈕就能直接帶入內容快速記帳。</p>        <details class="entry-wrap" id="tplDetails">
           <summary><span class="plus">＋</span><span id="tplFormTitle">新增模板</span></summary>
           <form class="entry" id="tplForm">
             <input type="hidden" id="tplId">
@@ -1027,11 +1021,8 @@
             <label class="full">備註（加入記帳時的名稱，留空則用模板名稱）
               <input type="text" id="tplNote" placeholder="留空則沿用模板名稱">
             </label>
-            <div class="full checkbox-row">
-              <input type="checkbox" id="tplActive">
-              <label for="tplActive" style="margin:0;">每月自動出現在「記帳」分頁的「本月待加入」清單</label>
-            </div>
             <div class="full checkbox-row" id="tplSharedRow">
+            
               <input type="checkbox" id="tplShared">
               <label for="tplShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
             </div>
@@ -1326,8 +1317,7 @@ function reportBackendVersion_(version){
   }
 }
 
-let state = { accounts: [], liabilities: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null, recurringDoneIds: [], recurringDoneMonth: null };
-
+let state = { accounts: [], liabilities: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null };
 // 記帳品項（主類別 + 子類別，依收入/支出分開）。
 // 這份清單現在存在後端試算表的「Categories」表（跟 Accounts/Transactions 一樣），
 // 換裝置、清瀏覽器快取都不會不見，也可以直接在試算表上看到。前端只在「一開始
@@ -1558,10 +1548,6 @@ async function loadAll(){
       state.categories = all.categories || { expense: [], income: [] };
       state.transactionsFullyLoaded = !all.transactionsTruncated;
       state.transactionsSince = all.transactionsSince || null;
-      // 後端直接針對「目前月份」即時算好的固定項目完成清單（不受「近 3 個月」
-      // 精簡讀取影響），讓第一次畫面就是正確答案，不會等背景補齊完整歷史後才變。
-      state.recurringDoneIds = all.recurringDoneIds || [];
-      state.recurringDoneMonth = all.recurringDoneMonth || null;
       renderAll();
       // 記帳／模板表單的主類別、子類別選單在頁面一開始（IIFE）就先畫過一次，
       // 但那時候 state.categories 都還是空的（要等這裡 apiGet('all') 回來才有資料），
@@ -1710,7 +1696,7 @@ const SECTION_RENDERERS = {
 };
 function renderDashboardSection_(){ renderDashboard(); }
 function renderLiabilitiesSection_(){ renderLiabilities(); }
-function renderTransactionsSection_(){ renderTransactions(); renderTrTemplateChips(); renderRecurringBanner(); renderRecurringPending(); }
+function renderTransactionsSection_(){ renderTransactions(); renderTrTemplateChips(); }
 function renderLedgerSection_(){ renderLedger(); }
 function renderTemplatesManageSection_(){ renderTemplatesManage(); }
 function renderStatsSection_(){ renderStats(); }
@@ -2169,10 +2155,10 @@ const MONTHLY_BUDGET = 10000;    // 每月預算
 const RESERVE_AMOUNT = 400000;   // 可用金額要先扣掉的預留金（例如緊急預備金）
 function trExpenseOfDate_(dateStr){
   // 跟月/年統計一致：不含轉帳、結算，也不含「代墊」（代墊是幫對方先出的錢，
-  // 不算自己真正的花費）
+  // 不算自己真正的花費）；共同分攤的支出只算我自己該負擔的份額，不是全額。
   return state.transactions
     .filter(t => t.date === dateStr && t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME)
-    .reduce((s,t) => s + (Number(t.amount)||0), 0);
+    .reduce((s,t) => s + myExpenseShare_(t), 0);
 }
 function renderTrAvailAndBudget_(){
   const heroEl = $('#trAvailHero');
@@ -2465,6 +2451,19 @@ $('#tplAmount').addEventListener('wheel', () => { $('#tplAmount').blur(); }, { p
 // 只是對方先幫我出錢而已——這筆錢本來就要記在我自己的類別下（餐飲/交通...），
 // 所以這種情況不應該強制歸類成「代墊」，要讓使用者自己選類別。
 const ADVANCE_CATEGORY_NAME = '代墊';
+// 共同帳本的支出，不管誰付款，統計「我的花費」時都只該算我實際要負擔的那一份：
+//   personal 個人：全額都是我的
+//   split    平分：不管誰先付，我只要負擔一半
+//   advance  全額代墊：我先付 → 整筆其實是對方的，我的份額是 0（這種情況本來就會被存成
+//                      「代墊」類別，上層通常已經用 category !== ADVANCE_CATEGORY_NAME 濾掉了）
+//                      對方先付 → 整筆其實是我的，我的份額是全額
+function myExpenseShare_(t){
+  const amt = Number(t.amount) || 0;
+  if(!t.splitMode || t.splitMode === 'personal') return amt;
+  if(t.splitMode === 'split') return amt / 2;
+  if(t.splitMode === 'advance') return t.payer === 'partner' ? amt : 0;
+  return amt;
+}
 function isAdvanceMode_(){
   return $('#trType').value !== 'transfer' && $('#trShared').checked && $('#trSplitMode').value === 'advance' && $('#trPayer').value !== 'partner';
 }
@@ -2586,9 +2585,10 @@ function previousPeriodStr(period, mode){
   return String((parseInt(period, 10) || 0) - 1);
 }
 function expenseTotalOf(period){
+  // 共同分攤的支出只算我自己該負擔的份額（平分算一半、全額代墊看誰先付），不是整筆金額。
   return transactionsInPeriod(period)
     .filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME)
-    .reduce((s,t) => s + (Number(t.amount)||0), 0);
+    .reduce((s,t) => s + myExpenseShare_(t), 0);
 }
 // 所有「有資料」的期間（依模式為月或年），用來計算平均值
 function periodsWithData(mode){
@@ -2641,7 +2641,8 @@ function categoryStatsFor(rows, type){
     .filter(t => t.type === type && !(type === 'expense' && t.category === ADVANCE_CATEGORY_NAME))
     .forEach(t => {
       const cat = t.category || '其他';
-      const amt = Number(t.amount) || 0;
+      // 共同分攤的支出只算我自己該負擔的份額，不是整筆金額
+      const amt = type === 'expense' ? myExpenseShare_(t) : (Number(t.amount) || 0);
       if(!map[cat]) map[cat] = { total: 0, count: 0, subs: {} };
       map[cat].total += amt;
       map[cat].count += 1;
@@ -2718,12 +2719,12 @@ $('#statsCategoryRank').addEventListener('click', e => {
 // ---------- 固定支出 vs 彈性支出 ----------
 function renderFixedVsFlexible(container, rows){
   const expenseRows = rows.filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME);
-  const total = expenseRows.reduce((s,t) => s + (Number(t.amount)||0), 0);
+  const total = expenseRows.reduce((s,t) => s + myExpenseShare_(t), 0);
   if(!total){
     container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
     return;
   }
-  const fixed = expenseRows.filter(t => t.recurringId).reduce((s,t) => s + (Number(t.amount)||0), 0);
+  const fixed = expenseRows.filter(t => t.recurringId).reduce((s,t) => s + myExpenseShare_(t), 0);
   const flexible = total - fixed;
   const parts = [
     { label: '固定支出', val: fixed, cls: '' },
@@ -2789,12 +2790,13 @@ function renderStats(){
   $('#statsCategoryMonthSection').style.display = 'none';
 
   const rows = transactionsInPeriod(period);
-
   // 全額代墊給對方的款項（category === 代墊）雖然錢確實從帳戶流出，但那筆錢本來就不是
   // 自己的花費，只是先幫對方付、之後會透過共同帳本結算拿回來，所以不算進「支出」統計。
+  // 另外，共同分攤的支出（splitMode === 'split'）不管誰先付，「支出」統計都只算我自己
+  // 該負擔的那一份，不是整筆金額，見 myExpenseShare_。
   const isRealExpense_ = t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME;
   const incomeTotal = rows.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
-  const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+myExpenseShare_(t),0);
   // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
   // 沒有填帳戶的紀錄（多半是舊資料匯入，沒有對應到任何帳戶）只計入上面的收入／支出總額，
   // 單純知道花了多少、賺了多少，但不會影響結餘這個數字。
@@ -2844,12 +2846,12 @@ function renderStats(){
     const monthlyExpense = Array(12).fill(0);
     let maxVal = 0;
     state.transactions.forEach(t => {
-      if(t.type !== 'expense') return;
+      if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
       const d = t.date || '';
       if(!d.startsWith(period)) return;
       const m = parseInt(d.slice(5,7), 10) - 1;
       if(m >= 0 && m < 12){
-        monthlyExpense[m] += Number(t.amount) || 0;
+        monthlyExpense[m] += myExpenseShare_(t);
         maxVal = Math.max(maxVal, monthlyExpense[m]);
       }
     });
@@ -2889,7 +2891,7 @@ function renderCategoryMonthCharts(year){
     if(m < 0 || m > 11) return;
     const cat = t.category || '其他';
     if(!catMap[cat]) catMap[cat] = { arr: Array(12).fill(0), subs: {} };
-    const amt = Number(t.amount) || 0;
+    const amt = myExpenseShare_(t);
     catMap[cat].arr[m] += amt;
     const sub = (t.subcategory || '').trim() || '未分類';
     catMap[cat].subs[sub] = (catMap[cat].subs[sub] || 0) + amt;
@@ -3452,74 +3454,8 @@ function currentMonthStr(){
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 }
-// 找出目前這個月，啟用中但還沒被加入記帳的模板
-function pendingRecurringForMonth(month){
-  const doneIds = new Set(
-    state.transactions.filter(t => (t.date||'').slice(0,7) === month && t.recurringId).map(t => String(t.recurringId))
-  );
-  // 併入後端載入當下就針對「這個月」即時算好的完成清單（見 loadAll 裡的
-  // state.recurringDoneIds），不管本地這份 state.transactions 當下是精簡版
-  // 還是完整版，只要問的剛好是「這個月」，一律以後端當時讀到的最新結果為準，
-  // 避免「先顯示還沒加入，背景補齊資料後才變成已加入」的畫面閃爍。
-  if(state.recurringDoneMonth === month){
-    (state.recurringDoneIds || []).forEach(id => doneIds.add(String(id)));
-  }
-  return state.recurring.filter(t => String(t.active) !== 'false' && !doneIds.has(String(t.id)));
-}
-
-function renderRecurringBanner(){
-  const el = $('#recurringBanner');
-  const month = currentMonthStr();
-  const pending = pendingRecurringForMonth(month);
-  if(!pending.length){ el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="recurring-banner">
-    <div><b>本月（${month}）有 ${pending.length} 筆模板還沒加入記帳：</b>${pending.map(t=>t.name).join('、')}（見下方「本月待加入」）</div>
-  </div>`;
-}
-
-function renderRecurringPending(){
-  const wrap = $('#recurringPendingList');
-  const section = $('#recurringPendingSection');
-  const month = currentMonthStr();
-  const pending = pendingRecurringForMonth(month);
-  // 完全沒有任何模板時，不需要顯示這一整塊區域
-  if(section) section.style.display = state.recurring.length ? '' : 'none';
-  if(!state.recurring.length){
-    wrap.innerHTML = '';
-    return;
-  }
-  if(!pending.length){
-    wrap.innerHTML = `<div class="empty">本月（${month}）的模板都已經加入記帳了。</div>`;
-    return;
-  }
-  wrap.innerHTML = pending.map(t => `
-    <div class="recurring-pending-item">
-      <label><input type="checkbox" class="recPendingCheck" value="${t.id}" checked>
-        ${t.name}（${t.category || ''}）$${fmt(t.amount)}${t.dayOfMonth ? ' · 每月 ' + t.dayOfMonth + ' 號' : ''}${recSharedLabel_(t)}
-      </label>
-    </div>`).join('') +
-    `<div class="form-actions" style="margin-top:10px;">
-      <button type="button" class="primary" id="recRunSelectedBtn">把勾選的加入本月記帳</button>
-    </div>`;
-  $('#recRunSelectedBtn').addEventListener('click', runSelectedRecurring);
-}
-
-async function runSelectedRecurring(){
-  const ids = $$('.recPendingCheck:checked').map(cb => cb.value);
-  if(!ids.length){ alert('請先勾選要加入的模板。'); return; }
-  const month = currentMonthStr();
-  try{
-    await runBusy(async () => {
-      const result = await apiPost('runRecurringTemplates','transactions',{ month, ids });
-      (result.created || []).forEach(tx => upsertLocal('transactions', tx));
-      (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
-      renderAll();
-    }, '加入記帳中…');
-  }catch(err){ alert('加入失敗：' + err.message); }
-}
-
-// 模板若是共同帳本項目，在清單/待加入列表上標示誰付、怎麼分攤，
-// 方便一眼看出「這筆模板加入記帳時會自動算進共同帳本」
+// 模板若是共同帳本項目，在清單上標示誰付、怎麼分攤，
+// 方便一眼看出「這筆模板套用記帳時會自動算進共同帳本」
 function recIsShared_(t){
   return t.splitMode === 'split' || t.splitMode === 'advance';
 }
@@ -3528,10 +3464,6 @@ function recSharedLabel_(t){
   const payerLabel = t.payer === 'partner' ? '對方付' : '我付';
   const modeLabel = t.splitMode === 'advance' ? '全額代墊' : '平分';
   return ` · 共同帳本（${payerLabel}・${modeLabel}）`;
-}
-function renderRecurring(){
-  renderRecurringBanner();
-  renderRecurringPending();
 }
 window.deleteRecurring = async id => {
   if(!confirm('確定刪除這個模板？（已經加入過的記帳紀錄不會被刪除）')) return;
@@ -3615,7 +3547,6 @@ window.editTemplateManage = id => {
   $('#tplToAccount').value = t.toAccountId || '';
   $('#tplDayOfMonth').value = t.dayOfMonth || '';
   $('#tplNote').value = t.note || '';
-  $('#tplActive').checked = String(t.active) === 'true';
   // 轉帳範本不算共同帳本項目，跟記帳表單同一套規則
   const shared = tplType !== 'transfer' && recIsShared_(t);
   $('#tplShared').checked = shared;
@@ -3652,7 +3583,6 @@ $('#tplForm').addEventListener('submit', async e => {
       toAccountId,
       dayOfMonth: $('#tplDayOfMonth').value ? parseInt($('#tplDayOfMonth').value, 10) : '',
       note: $('#tplNote').value.trim(),
-      active: $('#tplActive').checked,
       payer: 'me',
       splitMode: 'personal'
     };
@@ -3671,7 +3601,6 @@ $('#tplForm').addEventListener('submit', async e => {
       accountId: $('#tplAccount').value,
       dayOfMonth: $('#tplDayOfMonth').value ? parseInt($('#tplDayOfMonth').value, 10) : '',
       note: $('#tplNote').value.trim(),
-      active: $('#tplActive').checked,
       payer,
       splitMode
     };
@@ -3682,7 +3611,6 @@ $('#tplForm').addEventListener('submit', async e => {
         ? await apiPost('update','recurring',data)
         : await apiPost('add','recurring',data);
       upsertLocal('recurring', saved);
-      renderRecurring();
       renderTrTemplateChips();
       renderTemplatesManage();
     }, id ? '更新模板中…' : '新增模板中…');
@@ -3702,7 +3630,6 @@ function renderTemplatesManage(){
   list.innerHTML = state.recurring.map(t => {
     const isTransfer = t.type === 'transfer';
     const typeLabel = isTransfer ? '轉帳' : t.type === 'income' ? '收入' : '支出';
-    const activeOn = String(t.active) === 'true';
     // 轉帳範本沒有主/子類別，改顯示「從帳戶 → 到帳戶」
     const noteText = isTransfer
       ? `${typeLabel} · ${escapeHtml(byId[t.accountId] || '（帳戶已刪除）')} → ${escapeHtml(byId[t.toAccountId] || '（帳戶已刪除）')}`
@@ -3717,7 +3644,6 @@ function renderTemplatesManage(){
       </div>
       <div class="item-meta">
         ${t.dayOfMonth ? `<span>每月 <b>${t.dayOfMonth}</b> 號</span>` : ''}
-        <span class="badge ${activeOn ? 'paid' : 'unpaid'}">${activeOn ? '每月自動提醒' : '不自動提醒'}</span>
       </div>
       <div class="item-actions">
         <button class="small" onclick="editTemplateManage('${t.id}')">編輯</button>

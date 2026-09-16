@@ -735,104 +735,9 @@ function replaceCategoryTree_(type, tree) {
   return { count: kept.filter(r => r.type === type).length };
 }
 
-function pendingRecurringTemplates_(month) {
-  const templates = readAll_('recurring').filter(t => String(t.active) === 'true' || t.active === true);
-  const doneIds = recurringDoneIdsForMonth_(month);
-  return templates.filter(t => doneIds.indexOf(String(t.id)) === -1);
-}
 
 
-function recurringDoneIdsForMonth_(month) {
-  const since = month + '-01';
-  const txResult = readTransactionsSince_(since);
-  const doneIds = {};
-  txResult.rows.forEach(t => {
-    if ((t.date || '').slice(0, 7) === month && t.recurringId) doneIds[String(t.recurringId)] = true;
-  });
-  return Object.keys(doneIds);
-}
 
-function runRecurringTemplates_(month, ids) {
-  if (!month) throw new Error('缺少月份參數');
-  const pending = pendingRecurringTemplates_(month);
-  const idSet = ids && ids.length ? {} : null;
-  if (idSet) ids.forEach(id => (idSet[String(id)] = true));
-  const toRun = idSet ? pending.filter(t => idSet[String(t.id)]) : pending;
-
-  const created = [];
-  const accountsTouched = [];
-  toRun.forEach(tpl => {
-    const day = Math.min(Math.max(parseInt(tpl.dayOfMonth, 10) || 1, 1), 28);
-    const date = month + '-' + String(day).padStart(2, '0');
-
-    const payer = tpl.payer === 'partner' ? 'partner' : 'me';
-    const splitMode = (tpl.splitMode === 'split' || tpl.splitMode === 'advance') ? tpl.splitMode : 'personal';
-
-    const isAdvance = splitMode === 'advance' && payer !== 'partner';
-    const isTransfer = tpl.type === 'transfer';
-
-    const payload = isTransfer ? {
-      date: date,
-      type: 'transfer',
-      category: '轉帳',
-      subcategory: '',
-      amount: Number(tpl.amount) || 0,
-      accountId: tpl.accountId || '',
-      toAccountId: tpl.toAccountId || '',
-      note: tpl.note || tpl.name,
-      payer: 'me',
-      splitMode: 'personal',
-      settled: false,
-      recurringId: tpl.id,
-      force: true
-    } : {
-      date: date,
-      type: tpl.type || 'expense',
-      // 全額代墊的品項跟一般記帳表單一樣，主類別統一存成「代墊」
-      category: isAdvance ? ADVANCE_CATEGORY_NAME_ : (tpl.category || tpl.name),
-      subcategory: isAdvance ? '' : (tpl.subcategory || ''),
-      amount: Number(tpl.amount) || 0,
-      accountId: tpl.accountId || '',
-      note: tpl.note || tpl.name,
-      payer: payer,
-      splitMode: splitMode,
-      settled: false,
-      recurringId: tpl.id,
-      force: true
-    };
-
-    const result = addTransactionTx_(payload);
-    created.push(result.transaction);
-
-    (result.accounts || []).forEach(acc => accountsTouched.push(acc));
-  });
-  return { created: created, accounts: accountsTouched, skipped: pending.length - toRun.length };
-}
-
-
-function autoAddMonthlyRecurring() {
-  const tz = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
-  const month = Utilities.formatDate(new Date(), tz, 'yyyy-MM');
-  return runRecurringTemplates_(month, null);
-}
-
-function setupMonthlyRecurringTrigger() {
-  removeMonthlyRecurringTrigger();
-  ScriptApp.newTrigger('autoAddMonthlyRecurring')
-    .timeBased()
-    .onMonthDay(1)
-    .atHour(1)
-    .create();
-  return '已設定：每月 1 號凌晨會自動把啟用中的固定項目加入記帳。';
-}
-
-function removeMonthlyRecurringTrigger() {
-  ScriptApp.getProjectTriggers().forEach(trigger => {
-    if (trigger.getHandlerFunction() === 'autoAddMonthlyRecurring') {
-      ScriptApp.deleteTrigger(trigger);
-    }
-  });
-}
 
 
 function keepWarm_() {
@@ -1089,13 +994,6 @@ function doGet(e) {
       }
       const txResult = readTransactionsSince_(since);
       const truncated = txResult.rows.length < txResult.fullCount;
-      const tzNow = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
-      const currentMonth = Utilities.formatDate(new Date(), tzNow, 'yyyy-MM');
-
-      const doneIdsSet_ = {};
-      txResult.rows.forEach(function (t) {
-        if ((t.date || '').slice(0, 7) === currentMonth && t.recurringId) doneIdsSet_[String(t.recurringId)] = true;
-      });
       return jsonOut_({
         ok: true,
         data: {
@@ -1105,9 +1003,7 @@ function doGet(e) {
           recurring: readAll_('recurring'),
           categories: getCategoryTreeData_(),
           transactionsTruncated: truncated,
-          transactionsSince: since,
-          recurringDoneIds: Object.keys(doneIdsSet_),
-          recurringDoneMonth: currentMonth
+          transactionsSince: since
         }
       });
     }
@@ -1142,7 +1038,6 @@ function doPost(e) {
       if (action === 'batchDeleteTransactionsTx') return jsonOut_({ ok: true, data: batchDeleteTransactionsTx_((body.data && body.data.ids) || []) });
       if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
       if (action === 'settleLedger') return jsonOut_({ ok: true, data: settleLedger_((body.data && body.data.ids) || [], body.data && body.data.settlement) });
-      if (action === 'runRecurringTemplates') return jsonOut_({ ok: true, data: runRecurringTemplates_(body.data && body.data.month, (body.data && body.data.ids) || null) });
 
       if (action === 'addMainCategory') return jsonOut_({ ok: true, data: addMainCategory_(body.data.type, body.data.name) });
       if (action === 'addSubCategory') return jsonOut_({ ok: true, data: addSubCategory_(body.data.type, body.data.mainName, body.data.subName) });
