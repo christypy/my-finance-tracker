@@ -836,13 +836,11 @@
 
       <!-- 記帳：紀錄（含新增/編輯記帳與轉帳） -->
       <div id="trSub-records">
-        <!-- 可用金額：總資產扣掉股票（投資帳戶）跟固定預留金額後，真正可以動用的錢 -->
+        <!-- 月預算：本月（跟著日曆瀏覽的月份走）預算剩餘或超支金額 -->
         <div class="net-hero" id="trAvailHero">
-          <div class="label">可用金額</div>
+          <div class="label" id="trAvailLabel">月預算</div>
           <div class="value" id="trAvailValue">$0</div>
         </div>
-        <!-- 本月支出／當日支出／月預算剩餘（超支） -->
-        <div class="summary-grid" id="trStatsGrid"></div>
         <!-- <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。有存好的模板時，表單最上面會出現一排模板按鈕，點一下就能帶入內容，只要調整日期或金額就能存檔；模板的新增／編輯／每月自動加入／刪除，請到「模板管理」分頁統一設定。</p> -->
         <!-- 利息／股息快速入帳：本質上就是一筆「收入」記帳，類別自動固定為
              「利息／股息收入」，不用使用者自己選主／子類別，表單上的主／子
@@ -948,6 +946,8 @@
           <div class="cal-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
           <div class="cal-grid" id="calGrid"></div>
         </div>
+        <!-- 本月支出（跟著日曆瀏覽的月份切換）／當日支出（跟著日曆點選的日期切換） -->
+        <div class="summary-grid" id="trStatsGrid"></div>
         <div class="tr-batch-bar" id="trBatchBar">
           <button type="button" class="small" id="trBatchToggleBtn">批次刪除</button>
           <div id="trBatchControls" style="display:none;">
@@ -2154,11 +2154,10 @@ function transactionMatchesSearch_(t, term, byId){
     .toLowerCase();
   return haystack.includes(term);
 }
-// ---------- 記帳頁面：可用金額／本月支出／當日支出／月預算 ----------
-// 每月預算跟需要「先預留不動用」的金額先寫死在這兩個常數，之後要調整金額
-// 直接改這裡的數字即可，不用去資料庫或設定頁另外維護。
+// ---------- 記帳頁面：月預算／本月支出／當日支出 ----------
+// 每月預算先寫死在這個常數，之後要調整金額直接改這裡的數字即可，
+// 不用去資料庫或設定頁另外維護。
 const MONTHLY_BUDGET = 10000;    // 每月預算
-const RESERVE_AMOUNT = 400000;   // 可用金額要先扣掉的預留金（例如緊急預備金）
 function trExpenseOfDate_(dateStr){
   // 跟月/年統計一致：不含轉帳、結算，也不含「代墊」（代墊是幫對方先出的錢，
   // 不算自己真正的花費）；共同分攤的支出只算我自己該負擔的份額，不是全額。
@@ -2170,23 +2169,18 @@ function renderTrAvailAndBudget_(){
   const heroEl = $('#trAvailHero');
   if(!heroEl) return;
 
-  // 可用金額＝所有帳戶總資產，扣掉「投資」類型帳戶（股票）餘額，
-  // 再扣掉固定要先預留、不列入可動用範圍的金額
-  const totalAssets = state.accounts.reduce((s,a) => s + (Number(a.balance)||0), 0);
-  const stockTotal = state.accounts.filter(a => a.type === '投資').reduce((s,a) => s + (Number(a.balance)||0), 0);
-  const available = totalAssets - stockTotal - RESERVE_AMOUNT;
-  $('#trAvailValue').textContent = '$' + fmt(available);
-  $('#trAvailValue').style.color = available < 0 ? '#e3ad93' : '';
-
-  // 本月支出：固定看「今天」所在的真實月份（不受日曆瀏覽到別的月份影響），
-  // 才能跟「每月預算」對得上
-  const now = new Date();
-  const monthStr = `${now.getFullYear()}-${pad2(now.getMonth()+1)}`;
+  // 月預算：跟著日曆目前瀏覽的月份走（calYear / calMonth），
+  // 不是固定看今天所在的月份，切換月份時這裡的剩餘／超支金額也會跟著換算那個月。
+  const monthStr = `${calYear}-${pad2(calMonth + 1)}`;
   const monthExpense = expenseTotalOf(monthStr);
   const budgetLeft = MONTHLY_BUDGET - monthExpense;
   const overBudget = budgetLeft < 0;
+  $('#trAvailLabel').textContent = `月預算 $${fmt(MONTHLY_BUDGET)}・${overBudget ? '已超支' : '剩餘'}`;
+  $('#trAvailValue').textContent = '$' + fmt(Math.abs(budgetLeft));
+  $('#trAvailValue').style.color = overBudget ? '#e3ad93' : '';
 
   // 當日支出：有在日曆上點日期就看那天，沒點就預設看「今天」
+  const now = new Date();
   const todayStr = now.toISOString().slice(0,10);
   const dayStr = calSelectedDate || todayStr;
   const dayExpense = trExpenseOfDate_(dayStr);
@@ -2194,16 +2188,12 @@ function renderTrAvailAndBudget_(){
 
   $('#trStatsGrid').innerHTML = `
     <div class="summary-card">
-      <div class="label">本月支出（${now.getMonth()+1} 月）</div>
+      <div class="label">本月支出（${calYear} 年 ${calMonth+1} 月）</div>
       <div class="value" style="color:var(--red)">$${fmt(monthExpense)}</div>
     </div>
     <div class="summary-card">
       <div class="label">${dayLabel}</div>
       <div class="value" style="color:var(--red)">$${fmt(dayExpense)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="label">月預算 $${fmt(MONTHLY_BUDGET)}・${overBudget ? '已超支' : '剩餘'}</div>
-      <div class="value" style="color:${overBudget ? 'var(--red)' : 'var(--green)'}">$${fmt(Math.abs(budgetLeft))}</div>
     </div>
   `;
 }
