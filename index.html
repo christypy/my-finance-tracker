@@ -685,6 +685,11 @@
   .cat-chart-month-labels > div.current{ color:var(--gold); font-weight:700; }
   .cat-chart-current-dot{ display:inline-block; width:4px; height:4px; border-radius:50%; background:var(--gold); margin-left:2px; vertical-align:middle; }
   .cat-chart-subs-head{ font-size:11px; font-weight:600; color:var(--ink); margin-bottom:4px; }
+  .cat-chart-toggle{ cursor:pointer; border-radius:8px; margin:-3px -4px; padding:3px 4px; transition:background .15s; }
+  .cat-chart-toggle:hover{ background:rgba(58,43,18,.05); }
+  .cat-chart-month-block{ padding:6px 0; }
+  .cat-chart-month-block:not(:last-child){ border-bottom:1px dashed var(--paper-line); }
+  .cat-chart-month-block-head{ display:flex; justify-content:space-between; font-size:11.5px; font-weight:600; color:var(--ink); margin-bottom:4px; }
 
   .stat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
 
@@ -3033,7 +3038,9 @@ function renderStats(){
 
 // ---------- 各類別每月花費（依類別頁面）：視覺樣式改成跟「月/年」統計的支出排行榜一致
 // （排名數字、色點、長條比例），並保留月度長條圖；點擊某個月份可以看那個月的子類別明細 ----------
-let expandedCatMonth_ = null; // { cat, month(0-11) }，目前展開哪個類別、哪個月份的子類別，null 代表全部收合
+// { cat, mode:'month', month(0-11) } → 只展開某個類別的某一個月；
+// { cat, mode:'all' } → 展開某個類別「整年」有交易的每個月份；null 代表全部收合。
+let expandedCatMonth_ = null;
 function fmtShort(n){
   const num = Number(n) || 0;
   if(!num) return '';
@@ -3087,7 +3094,9 @@ function renderCategoryMonthCharts(year){
   container.innerHTML = cats.map(({cat, arr, monthSubs, count, total, max}, i) => {
     const pct = yearTotal ? Math.round(total / yearTotal * 100) : 0;
     const avgMonth = total / 12;
-    const selectedMonth = (expandedCatMonth_ && expandedCatMonth_.cat === cat) ? expandedCatMonth_.month : null;
+    const expandedForCat = (expandedCatMonth_ && expandedCatMonth_.cat === cat) ? expandedCatMonth_ : null;
+    const selectedMonth = (expandedForCat && expandedForCat.mode === 'month') ? expandedForCat.month : null;
+    const isAllOpen = !!(expandedForCat && expandedForCat.mode === 'all');
     const { r, g, b } = hexToRgb_(RANK_COLORS[i % RANK_COLORS.length]);
     const lineColor = `rgb(${r},${g},${b})`;
     const gradId = `catSparkGrad-${i}-${String(year).replace(/[^0-9a-z]/gi,'')}`;
@@ -3103,7 +3112,7 @@ function renderCategoryMonthCharts(year){
     const areaPath = `${linePath} L${points[11].x.toFixed(1)},${baseY} L${points[0].x.toFixed(1)},${baseY} Z`;
 
     const circles = points.map(p => {
-      const isSel = selectedMonth === p.m;
+      const isSel = selectedMonth === p.m || (isAllOpen && p.v > 0);
       const isPeak = max > 0 && p.v === max;
       const isCurrent = isThisYear && p.m === curMonthIdx;
       const rad = isSel ? 5.5 : isPeak ? 4.5 : 3;
@@ -3127,7 +3136,7 @@ function renderCategoryMonthCharts(year){
       ${circles}
     </svg>`;
 
-    const hitCols = arr.map((v, m) => `<div class="cat-chart-hit${selectedMonth === m ? ' selected' : ''}" data-month="${m}"></div>`).join('');
+    const hitCols = arr.map((v, m) => `<div class="cat-chart-hit${(selectedMonth === m || (isAllOpen && v > 0)) ? ' selected' : ''}" data-month="${m}"></div>`).join('');
 
     const monthLabels = arr.map((v, m) => {
       const isCurrent = isThisYear && m === curMonthIdx;
@@ -3149,12 +3158,36 @@ function renderCategoryMonthCharts(year){
           : `<div class="rank-sub-row empty">這個月沒有花費</div>`
         }
       </div>`;
+    } else if(isAllOpen){
+      // 點主類別名稱：不挑單一月份，而是把這個類別全年「有交易」的每個月份都列出來，
+      // 每個月份底下再各自列子類別明細（例如「醫療」只有 2、3、4 月有記帳，
+      // 就依序列出這三個月，月份之間沒有交易的月份不會出現）。
+      const activeMonths = arr.map((v, m) => ({ v, m })).filter(x => x.v > 0);
+      subHtml = `<div class="rank-sub-list">
+        <div class="cat-chart-subs-head">${escapeHtml(cat)} · 全年各月明細</div>
+        ${activeMonths.length
+          ? activeMonths.map(({ v, m }) => {
+              const subEntries = Object.entries(monthSubs[m] || {}).sort((a,b) => b[1] - a[1]);
+              return `<div class="cat-chart-month-block">
+                <div class="cat-chart-month-block-head"><span>${m+1} 月</span><span>$${fmt(v)}</span></div>
+                ${subEntries.length
+                  ? subEntries.map(([sub, amt]) => {
+                      const subPct = v ? Math.round(amt / v * 100) : 0;
+                      return `<div class="rank-sub-row"><span>${escapeHtml(sub)}</span><span>$${fmt(amt)}（${subPct}%）</span></div>`;
+                    }).join('')
+                  : `<div class="rank-sub-row empty">沒有子類別明細</div>`
+                }
+              </div>`;
+            }).join('')
+          : `<div class="rank-sub-row empty">這個年度沒有花費</div>`
+        }
+      </div>`;
     }
-    return `<div class="cat-chart-card rank-row" data-cat="${escapeHtml(cat)}">
+    return `<div class="cat-chart-card rank-row${isAllOpen ? ' open' : ''}" data-cat="${escapeHtml(cat)}">
       <div class="rank-num">${i+1}</div>
       <div class="rank-bar-wrap">
-        <div class="rank-top">
-          <span class="rank-label"><span class="rank-dot" style="background:${RANK_COLORS[i % RANK_COLORS.length]}"></span>${escapeHtml(cat)}</span>
+        <div class="rank-top cat-chart-toggle">
+          <span class="rank-label"><span class="rank-dot" style="background:${RANK_COLORS[i % RANK_COLORS.length]}"></span>${escapeHtml(cat)}<span class="rank-caret">▶</span></span>
           <span class="rank-value">$${fmt(total)}（${pct}%）</span>
         </div>
         <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
@@ -3169,19 +3202,30 @@ function renderCategoryMonthCharts(year){
 }
 // 點某個月份的長條才會展開/收合那個月的子類別明細（同一類別再點一次同月份會收合，
 // 點別的月份會直接切換），跟「月/年」統計排行榜點整列展開的邏輯區分開來。
+// 點月份的點／欄位：只看那一個月的子類別明細（跟原本行為一樣）。
+// 點主類別名稱：改成列出這個類別「全年」有交易的每個月份，各自展開子類別
+// （例如「醫療」只有 2、3、4 月有記帳，點下去就會依序列出這三個月）。
+// 兩種展開互斥、且一次只會展開一個類別，避免畫面同時塞太多明細。
 $('#statsCategoryCharts').addEventListener('click', e => {
-  const col = e.target.closest('.cat-chart-hit');
-  if(!col) return;
-  const card = col.closest('[data-cat]');
+  const card = e.target.closest('[data-cat]');
   if(!card) return;
   const cat = card.dataset.cat;
-  const month = Number(col.dataset.month);
-  if(expandedCatMonth_ && expandedCatMonth_.cat === cat && expandedCatMonth_.month === month){
-    expandedCatMonth_ = null;
-  } else {
-    expandedCatMonth_ = { cat, month };
+
+  const hit = e.target.closest('.cat-chart-hit');
+  if(hit){
+    const month = Number(hit.dataset.month);
+    const isSameMonth = expandedCatMonth_ && expandedCatMonth_.cat === cat && expandedCatMonth_.mode === 'month' && expandedCatMonth_.month === month;
+    expandedCatMonth_ = isSameMonth ? null : { cat, mode: 'month', month };
+    renderCategoryMonthCharts(currentStatsPeriod());
+    return;
   }
-  renderCategoryMonthCharts(currentStatsPeriod());
+
+  const toggle = e.target.closest('.cat-chart-toggle');
+  if(toggle){
+    const isSameCatAllOpen = expandedCatMonth_ && expandedCatMonth_.cat === cat && expandedCatMonth_.mode === 'all';
+    expandedCatMonth_ = isSameCatAllOpen ? null : { cat, mode: 'all' };
+    renderCategoryMonthCharts(currentStatsPeriod());
+  }
 });
 
 // 浮動「＋記帳」按鈕：只有在「記帳」分頁且停留在「記帳」子分頁時才顯示，
