@@ -1,0 +1,4188 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f6f0e2">
+<title>我的存摺 · 個人存款管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#3b2a1a;
+    --ink-soft:#8a7658;
+    --paper:#f6f0e2;
+    --paper-line:#e3d5b8;
+    --card:#fffdf6;
+    --cover:#fffdf6;
+    --cover-soft:#efe1c4;
+    --gold:#c98a00;
+    --gold-soft:#fff3c4;
+    --red:#93503a;
+    --red-bg:#f2e5db;
+    --green:#4b6b43;
+    --green-bg:#e6ecdf;
+    --blue:#8a6a3f;
+    --blue-bg:#ece0c9;
+    --radius:16px;
+    --radius-sm:12px;
+    --nav-h:64px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    background-image:
+      radial-gradient(circle at 10% 0%, rgba(230,181,33,.10), transparent 40%),
+      radial-gradient(circle at 92% 8%, rgba(75,107,67,.10), transparent 40%);
+    background-attachment:fixed;
+    font-family:'Noto Sans TC', sans-serif;
+    color:var(--ink);
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:760px;
+    margin:0 auto;
+    padding:20px 14px calc(var(--nav-h) + 28px);
+  }
+  .book-title{
+    text-align:center;
+    color:var(--ink-soft);
+    font-family:'Roboto Slab', serif;
+    letter-spacing:.06em;
+    font-size:12.5px;
+    margin:2px 0 18px;
+    font-weight:400;
+  }
+
+  /* ---- Desktop top tabs ---- */
+  .tabs{
+    display:flex;
+    gap:6px;
+    margin-bottom:16px;
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family:'Roboto Slab', serif;
+    font-size:13.5px;
+    padding:10px 16px;
+    background:var(--cover-soft);
+    color:var(--ink-soft);
+    border:1px solid var(--paper-line);
+    border-radius:999px;
+    cursor:pointer;
+    white-space:nowrap;
+    opacity:1;
+    box-shadow:0 1px 2px rgba(58,43,18,.04);
+    transition:opacity .15s, background .15s, color .15s, transform .1s, box-shadow .15s;
+  }
+  .tab:active{ transform:scale(.96); }
+  .tab svg{width:16px;height:16px;flex:none;}
+  .tab.active{
+    background:var(--ink);
+    border-color:var(--ink);
+    color:#fff;
+    opacity:1;
+    box-shadow:0 6px 14px rgba(58,43,18,.25);
+  }
+
+  .page{
+    background:var(--card);
+    padding:22px 20px 28px;
+    border-radius:var(--radius);
+    min-height:360px;
+    border:1px solid var(--paper-line);
+    box-shadow: 0 12px 32px rgba(58,43,18,.07);
+  }
+  .view{display:none;}
+  .view.active{display:block; animation:fadein .22s ease;}
+  @keyframes fadein{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  h2{
+    font-family:'Roboto Slab', serif;
+    font-size:19px;
+    margin:0 0 14px;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+
+  /* ---- Dashboard summary ---- */
+  .net-hero{
+    background:linear-gradient(135deg, #3b2a1a, var(--gold));
+    color:#fff;
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:16px;
+    box-shadow:0 14px 30px rgba(90,63,10,.30);
+  }
+  .net-hero .label{font-size:12px; color:#ffe9b3; letter-spacing:.03em;}
+  .net-hero .value{font-family:'Roboto Slab', serif; font-size:32px; margin-top:4px;}
+  .net-hero .sub{display:flex; gap:18px; margin-top:14px; font-size:12px; color:#ffe9b3;}
+  .net-hero .sub b{color:#fff; font-family:'Roboto Slab', serif; font-size:14px; display:block; margin-top:2px;}
+
+  .summary-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(120px,1fr));
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .summary-card{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    padding:12px 13px;
+    border-radius:var(--radius-sm);
+    box-shadow:0 2px 8px rgba(58,43,18,.05);
+  }
+  .summary-card .label{font-size:11.5px;color:var(--ink-soft);}
+  .summary-card .value{
+    font-family:'Roboto Slab', serif;
+    font-size:18px;
+    margin-top:3px;
+  }
+  .summary-card.clickable{ cursor:pointer; transition:box-shadow .15s, border-color .15s; }
+  .summary-card.clickable.active{ border-color:var(--blue); box-shadow:0 0 0 2px rgba(61,107,240,.18); }
+  .dash-list-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .dash-list-head h2{ margin:0; }
+  .dash-list-reset{ background:none; border:none; color:var(--blue); font-size:12.5px; padding:4px 2px; min-height:auto; text-decoration:underline; }
+
+  /* ---- Cards list (accounts/liabilities/interest) ---- */
+  .item-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:20px; }
+  .item-card{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-sm);
+    padding:13px 14px;
+    box-shadow:0 2px 8px rgba(58,43,18,.05);
+    transition:box-shadow .15s, transform .15s, border-color .15s;
+  }
+  #transactionsList .item-card:active{ transform:scale(.985); box-shadow:0 1px 4px rgba(58,43,18,.07); }
+  #transactionsList .item-card{ position:relative; transition:padding-left .15s; }
+  #transactionsList.batch-mode .item-card{ padding-left:38px; }
+  .tr-batch-check-wrap{ display:none; position:absolute; left:12px; top:14px; }
+  #transactionsList.batch-mode .tr-batch-check-wrap{ display:block; }
+  .tr-batch-check-wrap input{ width:19px; height:19px; }
+  .tr-batch-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .tr-batch-bar #trBatchControls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .item-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .item-name{ font-weight:600; font-size:15px; }
+  .item-note{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .item-value{ font-family:'Roboto Slab', serif; font-size:17px; white-space:nowrap; }
+  .item-meta{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px; font-size:12px; color:var(--ink-soft); }
+  .item-meta span b{ color:var(--ink); font-family:'Roboto Slab', serif; }
+  .item-actions{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  #transactionsList .item-card{ cursor:pointer; }
+
+  /* ---- 帳戶一覽：拆成左右兩欄，右邊顯示本月使用這個帳戶的記帳 ---- */
+  #dashboardAccountsList .item-card{ padding:0; overflow:hidden; }
+  .acc-card-cols{ display:flex; align-items:stretch; }
+  .acc-col-left{ flex:1 1 0; min-width:0; padding:13px 14px; }
+  .acc-col-right{ flex:1 1 0; min-width:0; padding:13px 14px; border-left:1px dashed var(--paper-line); background:rgba(58,43,18,.02); display:flex; flex-direction:column; }
+  .acc-col-right-title{ font-size:11.5px; color:var(--ink-soft); margin-bottom:8px; }
+  .acc-month-tx-list{ display:flex; flex-direction:column; gap:7px; max-height:220px; overflow-y:auto; }
+  .acc-month-tx{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; font-size:12.5px; }
+  .acc-month-tx .acc-month-tx-main{ min-width:0; }
+  .acc-month-tx .acc-month-tx-cat{ color:var(--ink); }
+  .acc-month-tx .acc-month-tx-date{ color:var(--ink-soft); font-size:11px; margin-top:1px; }
+  .acc-month-tx .acc-month-tx-amt{ font-family:'Roboto Slab', serif; white-space:nowrap; flex:none; }
+  .acc-month-tx-empty{ font-size:12px; color:var(--ink-soft); }
+  @media (max-width: 560px){
+    .acc-card-cols{ flex-direction:column; }
+    .acc-col-right{ border-left:none; border-top:1px dashed var(--paper-line); }
+  }
+
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    padding:3px 9px;
+    border-radius:999px;
+    background:var(--gold-soft);
+    color:#8a5a12;
+    font-weight:500;
+  }
+  .badge.paid{background:var(--green-bg); color:var(--green);}
+  .badge.unpaid{background:var(--red-bg); color:var(--red);}
+
+  button, .btn{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:14px;
+    padding:10px 16px;
+    border:1px solid var(--paper-line);
+    background:var(--card);
+    color:var(--ink);
+    border-radius:999px;
+    cursor:pointer;
+    min-height:40px;
+    -webkit-appearance:none;
+    transition:background .15s, border-color .15s, box-shadow .15s, transform .1s;
+  }
+  button.primary{background:var(--ink); color:#fff; border-color:var(--ink); font-weight:600;}
+  button.primary-outline{border-color:var(--gold); color:var(--gold); font-weight:600; background:var(--gold-soft);}
+  button.danger{border-color:var(--red); color:var(--red);}
+  button.small{padding:6px 13px; font-size:12.5px; min-height:32px;}
+  button:active{transform:scale(.97);}
+
+  details.entry-wrap{ margin-bottom:18px; }
+  details.entry-wrap > summary{
+    list-style:none;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:'Roboto Slab', serif;
+    font-size:14px;
+    padding:11px 16px;
+    background:var(--ink);
+    color:#fff;
+    border-radius:999px;
+    font-weight:600;
+    min-height:44px;
+    box-shadow:0 6px 16px rgba(58,43,18,.20);
+  }
+  details.entry-wrap > summary::-webkit-details-marker{display:none;}
+  details.entry-wrap > summary .plus{font-size:17px; line-height:1; transition:transform .15s;}
+  details.entry-wrap[open] > summary .plus{transform:rotate(45deg); display:inline-block;}
+  details.entry-wrap > summary:active{opacity:.85;}
+  form.entry{animation:fadein .18s ease;}
+
+  /* ---- 記帳彈出視窗背後的半透明遮罩：點擊記帳才會出現，其餘時間只單純顯示紀錄清單 ---- */
+  .entry-backdrop{
+    position:fixed; inset:0;
+    background:rgba(20,26,42,.42);
+    backdrop-filter:blur(2px);
+    opacity:0; pointer-events:none;
+    transition:opacity .18s ease;
+    z-index:58;
+  }
+  body.tr-form-open .entry-backdrop{ opacity:1; pointer-events:auto; }
+  body.tr-form-open{ overflow:hidden; }
+
+  /* ---- 浮動「＋記帳」按鈕：手機/桌機都固定在畫面右下角，隨時可以點擊跳出記帳表單 ---- */
+  .fab{
+    position:fixed;
+    right:16px;
+    bottom:calc(var(--nav-h) + 16px);
+    width:56px; height:56px;
+    min-height:auto;
+    padding:0;
+    border:none;
+    border-radius:50%;
+    background:linear-gradient(135deg, #d59a2f, var(--gold));
+    color:#3a2506;
+    font-size:28px;
+    font-weight:700;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 12px 26px rgba(193,127,20,.4);
+    z-index:56;
+    transition:transform .15s, opacity .15s;
+  }
+  .fab:active{ transform:scale(.92); }
+  body.tr-form-open .fab{ opacity:0; pointer-events:none; transform:scale(.8); }
+  @media (min-width:681px){ .fab{ right:26px; bottom:26px; } }
+
+  /* ---- 記帳表單以彈出視窗方式顯示：不管是新增還是編輯，點擊才會跳出，其餘時候只看到紀錄清單 ---- */
+  details.entry-wrap.editing{
+    position:fixed;
+    left:10px;
+    right:10px;
+    bottom:calc(var(--nav-h) + 10px);
+    margin:0 auto;
+    max-width:520px;
+    z-index:60;
+    max-height:72vh;
+    display:flex;
+    flex-direction:column;
+    border-radius:var(--radius);
+    box-shadow:0 -14px 40px rgba(58,43,18,.28);
+    overflow:hidden;
+    animation:popupIn .2s ease;
+  }
+  @keyframes popupIn{ from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:none;} }
+  /* Chrome 131+ 會自動把 <details> 裡除了 <summary> 以外的內容包進一個內部
+     ::details-content 容器，且預設是 display:block，導致我們原本設計的
+     「彈出視窗 flex 直向排版＋按鈕列固定在最下面」完全失效：form 跟
+     .entry-footer 不再是真正的 flex 子項目，會直接照自然高度往下疊，
+     超出彈窗 max-height 的部分被裁掉、也捲不到——這正是「連線後按鈕不見」
+     的原因。強制這個內部容器 display:contents，讓 form / .entry-footer
+     還原成 details 底下真正的 flex 子項目。 */
+  details.entry-wrap.editing::details-content{
+    display:contents;
+  }
+  details.entry-wrap.editing > summary{
+    border-radius:var(--radius) var(--radius) 0 0;
+    flex:none;
+  }
+  details.entry-wrap.editing > form.entry{
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    border-radius:0;
+    margin-top:0;
+    border-top:none;
+  }
+  /* 按鈕固定在彈出視窗最下方，不會被表單內容捲動帶走，永遠看得到、點得到 */
+  details.entry-wrap.editing > .entry-footer{
+    flex:none;
+    background:var(--card);
+    border-top:1px solid var(--paper-line);
+    border-radius:0 0 var(--radius) var(--radius);
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .entry-footer .form-actions{ margin:0; }
+
+  form.entry{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    padding:16px;
+    border-radius:var(--radius-sm);
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:12px;
+    margin-top:10px;
+  }
+  form.entry label{
+    display:flex;
+    flex-direction:column;
+    font-size:12px;
+    color:var(--ink-soft);
+    gap:5px;
+    font-weight:500;
+  }
+  input, select, textarea{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:16px; /* avoid iOS auto-zoom */
+    padding:10px 11px;
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-sm);
+    background:#fdfaf3;
+    color:var(--ink);
+    min-height:42px;
+  }
+  input:focus, select:focus, textarea:focus{
+    outline:none;
+    border-color:var(--blue);
+    background:#fff;
+    box-shadow:0 0 0 3px rgba(61,107,240,.15);
+  }
+  form.entry .full{grid-column:1/-1;}
+  .form-actions{grid-column:1/-1; display:flex; gap:8px; flex-wrap:wrap;}
+  .hint{font-size:12.5px; color:var(--ink-soft); margin:0 0 16px; line-height:1.6;}
+  .empty{color:var(--ink-soft); font-size:13px; padding:18px 0; text-align:center;}
+  .settings-block{
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    padding:16px;
+    border-radius:var(--radius-sm);
+    display:grid;
+    gap:14px;
+  }
+  .status{font-size:13px; margin-top:4px; padding:8px 10px; border-radius:var(--radius-sm);}
+  .status.ok{color:var(--green); background:var(--green-bg);}
+  .status.err{color:var(--red); background:var(--red-bg);}
+  .version-row{ display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--ink-soft); }
+  .version-row b{ color:var(--ink); font-family:'Roboto Slab', serif; font-size:13px; }
+
+  /* ---- Bottom nav (mobile) ---- */
+  .bottom-nav{
+    display:none;
+    position:fixed;
+    left:0; right:0; bottom:0;
+    background:var(--cover);
+    border-top:1px solid var(--paper-line);
+    box-shadow:0 -4px 18px rgba(58,43,18,.07);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    z-index:50;
+  }
+  .bottom-nav .tabs{
+    margin:0;
+    overflow:visible;
+    justify-content:space-around;
+  }
+  .bottom-nav .tab{
+    flex-direction:column;
+    background:transparent;
+    border:none;
+    box-shadow:none;
+    border-radius:10px;
+    padding:6px 8px;
+    gap:2px;
+    font-size:10.5px;
+    opacity:.6;
+    min-width:56px;
+  }
+  .bottom-nav .tab svg{width:20px;height:20px;}
+  .bottom-nav .tab.active{ background:var(--gold-soft); color:var(--gold); opacity:1; }
+
+  /* ---- Segmented sub-nav (記帳: 紀錄/統計、統計: 月/年) ---- */
+  .segmented{ display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .segmented button{ flex:1; min-height:38px; padding:8px 10px; font-size:13px; border-radius:999px; }
+  .segmented button.active{ background:var(--ink); color:#fff; border-color:var(--ink); font-weight:600; }
+
+  /* ---- 帳戶一覽：每個帳戶旁邊顯示近期增減金額 ---- */
+
+  .period-row{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .period-row input, .period-row select{ min-height:38px; padding:7px 10px; width:auto; }
+  .filter-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; font-size:13px; color:var(--ink-soft); }
+  .tr-search-row{ display:flex; gap:8px; margin-bottom:14px; }
+  .tr-search-row input[type="search"]{ flex:1; min-width:0; }
+  .tr-search-row button{ flex:none; }
+  .filter-row label{ display:flex; align-items:center; gap:6px; }
+  .filter-row input[type="checkbox"]{ min-height:auto; width:16px; height:16px; padding:0; }
+
+  /* ---- 記帳：日曆篩選 ---- */
+  .calendar-wrap{ background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm); padding:12px 10px; margin-bottom:16px; box-shadow:0 2px 8px rgba(58,43,18,.05); }
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .cal-nav-btn{ border:none; background:var(--ink); color:#fff; width:30px; height:30px; min-height:auto; border-radius:50%; font-size:15px; padding:0; line-height:1; }
+  .cal-month-label{ font-family:'Roboto Slab', serif; font-size:14px; color:var(--ink); }
+  .cal-weekdays{ display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:11px; color:var(--ink-soft); margin-bottom:4px; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-day{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+    min-height:38px; padding:4px 0;
+    background:var(--paper); border:1px solid var(--paper-line); border-radius:8px;
+    font-family:'Noto Sans TC', sans-serif; font-size:12.5px; color:var(--ink);
+    cursor:pointer; min-width:0;
+  }
+  .cal-day-empty{ visibility:hidden; border:none; background:none; }
+  .cal-day.today{ border-color:var(--gold); border-width:1.5px; }
+  .cal-day.selected{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .cal-day .cal-dot{ width:5px; height:5px; border-radius:50%; background:var(--red); }
+  .cal-day.selected .cal-dot{ background:var(--gold-soft); }
+
+  .type-toggle{ display:flex; gap:8px; }
+  .type-toggle button{ flex:1; }
+  .type-toggle button.active.income{ background:var(--green); color:#fff; border-color:var(--green); }
+  .type-toggle button.active.expense{ background:var(--red); color:#fff; border-color:var(--red); }
+  .type-toggle button.active.transfer{ background:var(--gold); color:#fff; border-color:var(--gold); }
+
+  .item-value.income{ color:var(--green); }
+  .item-value.expense{ color:var(--red); }
+
+  /* ---- 共同帳本：純代墊（不是自己的花費）整筆灰階顯示；平分項目額外顯示自己的份額 ---- */
+  .item-card.advance-item{ opacity:.6; }
+  .item-card.advance-item .item-value{ color:var(--ink-soft); }
+  .item-share-note{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+  .item-share-note b{ color:var(--ink); font-family:'Roboto Slab', serif; }
+
+  .stat-section{
+    margin-bottom:14px;
+    background:var(--card);
+    border:1px solid var(--paper-line);
+    border-radius:var(--radius-sm);
+    padding:16px 20px 18px;
+  }
+  .stat-section h3{ font-family:'Roboto Slab', serif; font-size:14.5px; margin:0 0 12px; color:var(--ink); padding-bottom:8px; border-bottom:1px solid var(--paper-line); }
+  .stat-bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px; }
+  .stat-bar-label{ width:64px; flex:none; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stat-bar-track{ flex:1; height:14px; background:var(--paper); border:1px solid var(--paper-line); border-radius:999px; overflow:hidden; }
+  .stat-bar-fill{ height:100%; border-radius:999px; background:var(--gold); }
+  .stat-bar-fill.income{ background:var(--green); }
+  .stat-bar-fill.expense{ background:var(--red); }
+  .stat-bar-fill.flexible{ background:var(--ink-soft); }
+  .stat-bar-value{ width:104px; flex:none; text-align:right; font-family:'Roboto Slab', serif; font-size:12px; white-space:nowrap; color:var(--ink); }
+
+  /* ---- Busy / processing state (避免連續點擊造成重複紀錄) ---- */
+  body.busy button, body.busy .tab{ pointer-events:none; opacity:.55; }
+  #busyToast{
+    position:fixed; left:50%; bottom:calc(var(--nav-h) + 14px); transform:translateX(-50%) translateY(8px);
+    background:var(--ink); color:#fff; font-size:13px; padding:9px 18px; border-radius:999px;
+    box-shadow:0 8px 24px rgba(58,43,18,.30); z-index:100; opacity:0; pointer-events:none; transition:opacity .15s, transform .15s;
+    display:flex; align-items:center; gap:8px;
+  }
+  #busyToast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  #busyToast .spinner{
+    width:13px; height:13px; border-radius:50%; border:2px solid rgba(255,255,255,.3); border-top-color:#fff;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  @media (min-width:681px){ #busyToast{ bottom:24px; } }
+
+  .checkbox-row{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .checkbox-row input[type="checkbox"]{ min-height:auto; width:17px; height:17px; padding:0; }
+
+  .ledger-hero{
+    background:linear-gradient(135deg, #3b2a1a, var(--gold));
+    color:#fff; border-radius:var(--radius); padding:20px; margin-bottom:16px;
+    box-shadow:0 14px 30px rgba(90,63,10,.30);
+  }
+  .ledger-hero .label{font-size:12px; color:#ffe9b3; letter-spacing:.03em;}
+  .ledger-hero .value{font-family:'Roboto Slab', serif; font-size:26px; margin-top:4px;}
+  .ledger-hero .hint2{font-size:12px; color:#ffe9b3; margin-top:8px; line-height:1.6;}
+  #ledgerSettleAccountWrap{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+    font-size:12px;
+    color:var(--ink-soft);
+    font-weight:500;
+    margin-bottom:14px;
+  }
+
+  .import-steps{ display:flex; flex-direction:column; gap:14px; }
+
+  /* ---- 模板提醒 banner ---- */
+  .recurring-banner{
+    background:var(--gold-soft); border:1px solid #ecd8a8; color:#7a4d0e;
+    border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:16px;
+    font-size:13px; line-height:1.6; display:flex; flex-direction:column; gap:8px;
+  }
+  .recurring-banner b{ font-family:'Roboto Slab', serif; }
+  .recurring-pending-item{ display:flex; align-items:center; gap:8px; font-size:13px; }
+  .recurring-pending-item label{ display:flex; align-items:center; gap:6px; flex:1; }
+  .recurring-pending-item input[type="checkbox"]{ min-height:auto; width:16px; height:16px; padding:0; }
+
+  /* ---- 類別管理 ---- */
+  .category-manage{ display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--paper-line);
+    border-radius:999px; padding:6px 8px 6px 13px; font-size:12.5px; color:var(--ink);
+  }
+  .chip button{
+    min-height:auto; width:20px; height:20px; padding:0; border:none; border-radius:50%;
+    background:var(--red-bg); color:var(--red); font-size:13px; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .cat-add-row{ display:flex; gap:8px; }
+  .cat-add-row input{ flex:1; }
+  .cat-add-row button{ flex:none; }
+  .map-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .map-grid label{ display:flex; flex-direction:column; font-size:12px; color:var(--ink-soft); gap:5px; font-weight:500; }
+  .csv-preview-wrap{ overflow-x:auto; border:1px solid var(--paper-line); border-radius:var(--radius-sm); }
+  table.csv-preview{ border-collapse:collapse; width:100%; font-size:12px; white-space:nowrap; }
+  table.csv-preview th, table.csv-preview td{ padding:7px 10px; border-bottom:1px solid var(--paper-line); text-align:left; }
+  table.csv-preview th{ background:var(--paper); color:var(--ink-soft); font-weight:600; }
+
+  /* ---- 記帳表單：金額優先的大輸入區 ---- */
+  .amount-hero{
+    grid-column:1/-1;
+    background:linear-gradient(135deg, #3b2a1a, var(--gold));
+    border-radius:var(--radius-sm);
+    padding:16px 16px 14px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .amount-hero .amount-label{ font-size:12px; color:#ffe9b3; letter-spacing:.03em; }
+  .amount-hero .amount-input-row{ display:flex; align-items:baseline; gap:6px; }
+  .amount-hero .amount-input-row span{ font-family:'Roboto Slab', serif; font-size:26px; color:#fff; }
+  .amount-hero input#trAmount{
+    background:transparent; border:none; box-shadow:none; color:#fff;
+    font-family:'Roboto Slab', serif; font-size:36px; padding:2px 0; min-height:auto; flex:1; width:100%;
+    -moz-appearance:textfield; /* Firefox：拿掉數字輸入框內建的上下增減箭頭 */
+  }
+  .amount-hero input#trAmount:focus{ box-shadow:none; }
+  /* Chrome / Safari / Edge：拿掉數字輸入框內建的上下增減箭頭，
+     避免點到箭頭就把金額加減 1，只能用手動輸入的方式改金額 */
+  .amount-hero input#trAmount::-webkit-outer-spin-button,
+  .amount-hero input#trAmount::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+  .amount-hero input#tplAmount{
+    background:transparent; border:none; box-shadow:none; color:#fff;
+    font-family:'Roboto Slab', serif; font-size:36px; padding:2px 0; min-height:auto; flex:1; width:100%;
+    -moz-appearance:textfield;
+  }
+  .amount-hero input#tplAmount:focus{ box-shadow:none; }
+  .amount-hero input#tplAmount::-webkit-outer-spin-button,
+  .amount-hero input#tplAmount::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+
+  /* ---- 記帳表單：模板快速選擇 ---- */
+  .tpl-quick-row{ display:flex; flex-direction:column; gap:8px; }
+  .tpl-quick-label{ font-size:12.5px; color:var(--ink); font-weight:600; display:flex; flex-direction:column; gap:2px; }
+  .tpl-quick-hint{ font-size:11.5px; color:var(--ink-soft); font-weight:400; }
+  .tpl-chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .tpl-chip{
+    background:var(--paper); border:1px solid var(--paper-line); border-radius:999px;
+    padding:7px 14px; font-size:12.5px; color:var(--ink); min-height:auto;
+  }
+  .tpl-chip-empty{ font-size:12.5px; color:var(--ink-soft); }
+
+  /* ---- 主類別 / 子類別 選單 ---- */
+  .cat-select-row{ grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .cat-add-option{ color:var(--gold); font-style:italic; }
+
+  /* ---- 統計：期間左右切換 ---- */
+  .period-nav{ display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .period-nav-btn{
+    min-height:38px; width:38px; padding:0; flex:none; font-size:16px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .period-nav select, .period-nav input{ min-height:38px; padding:7px 10px; width:auto; }
+
+  /* ---- 統計：比較卡片 ---- */
+  .compare-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:18px; }
+  .compare-card{
+    background:var(--paper); border:1px solid var(--paper-line); border-radius:var(--radius-sm);
+    padding:11px 13px;
+  }
+  .compare-card .label{ font-size:11.5px; color:var(--ink-soft); }
+  .compare-card .value{ font-family:'Roboto Slab', serif; font-size:16px; margin-top:3px; color:var(--ink); }
+  .compare-card .value.up{ color:var(--red); }
+  .compare-card .value.down{ color:var(--green); }
+  .compare-card .value.flat{ color:var(--ink-soft); }
+
+  /* ---- 類別管理（主類別 + 子類別） ---- */
+  .main-cat-block{
+    background:var(--card); border:1px solid var(--paper-line); border-radius:var(--radius-sm);
+    padding:12px 13px; display:flex; flex-direction:column; gap:9px;
+  }
+  .main-cat-head{ display:flex; align-items:center; gap:8px; }
+  .main-cat-head .main-cat-name{ font-weight:600; font-size:14.5px; flex:1; }
+  .main-cat-head button{ min-height:28px; padding:4px 11px; font-size:12px; }
+  .main-cat-head button:disabled{ opacity:.35; cursor:default; }
+  .main-cat-head .catMoveUpBtn, .main-cat-head .catMoveDownBtn{ padding:4px 9px; }
+  .sub-cat-row{ display:flex; flex-wrap:wrap; gap:6px; padding-left:2px; }
+  .sub-chip{
+    display:flex; align-items:center; gap:5px; background:var(--paper); border:1px solid var(--paper-line);
+    border-radius:999px; padding:4px 6px 4px 10px; font-size:11.5px; color:var(--ink-soft);
+  }
+  .sub-chip button{
+    min-height:auto; width:16px; height:16px; padding:0; border:none; border-radius:50%;
+    background:var(--red-bg); color:var(--red); font-size:11px; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .sub-add-row{ display:flex; gap:6px; padding-left:2px; }
+  .sub-add-row input{ flex:1; min-height:34px; padding:6px 10px; font-size:13px; }
+  .sub-add-row button{ flex:none; min-height:34px; padding:5px 12px; font-size:12.5px; }
+
+  /* ---- 各類別每月花費：長條圖（依類別頁面） ---- */
+  .cat-chart-card{ margin-bottom:22px; cursor:pointer; }
+  .cat-chart-card:last-child{ margin-bottom:0; }
+  .cat-chart-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+  .cat-chart-name{ font-weight:600; font-size:14px; color:var(--ink); }
+  .cat-chart-caret{ display:inline-block; margin-left:4px; font-size:10px; color:var(--ink-soft); transition:transform .15s; }
+  .cat-chart-card.open .cat-chart-caret{ transform:rotate(90deg); }
+  .cat-chart-total{ font-family:'Roboto Slab', serif; font-size:13.5px; color:var(--ink-soft); }
+  .cat-chart-bars{ display:flex; align-items:flex-end; gap:3px; background:var(--paper); border:1px solid var(--paper-line); border-radius:8px; padding:6px 4px 4px; }
+  .cat-chart-col{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; }
+  .cat-chart-val{ font-size:8px; color:var(--ink-soft); line-height:1.3; height:11px; white-space:nowrap; }
+  .cat-chart-bar-track{ width:100%; height:56px; display:flex; align-items:flex-end; }
+  .cat-chart-bar{ width:100%; background:var(--red); border-radius:3px 3px 0 0; min-height:2px; transition:height .2s; }
+  .cat-chart-months{ display:flex; gap:3px; margin-top:4px; }
+  .cat-chart-month-label{ flex:1; text-align:center; font-size:9.5px; color:var(--ink-soft); }
+
+  .stat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+
+  /* ---- 統計分析：支出排行榜 ---- */
+  .category-rank-wrap{ display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+  .rank-list{ flex:1 1 220px; min-width:200px; }
+  .rank-row{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; cursor:pointer; }
+  .rank-row:last-child{ margin-bottom:0; }
+  .rank-row .rank-caret{ display:inline-block; margin-left:4px; font-size:10px; color:var(--ink-soft); transition:transform .15s; }
+  .rank-row.open .rank-caret{ transform:rotate(90deg); }
+  .rank-sub-list{ margin-top:8px; padding:8px 10px; background:var(--paper); border:1px solid var(--paper-line); border-radius:var(--radius-sm); cursor:default; }
+  .rank-sub-row{ display:flex; justify-content:space-between; gap:8px; font-size:11.5px; color:var(--ink-soft); padding:3px 0; }
+  .rank-sub-row:not(:last-child){ border-bottom:1px dashed var(--paper-line); }
+  .rank-sub-row span:first-child{ color:var(--ink); }
+  .rank-sub-row.empty{ justify-content:center; padding:6px 0; }
+  .rank-num{ width:18px; flex:none; font-family:'Roboto Slab', serif; font-size:13px; color:var(--gold); font-weight:700; padding-top:1px; }
+  .rank-bar-wrap{ flex:1; min-width:0; }
+  .rank-top{ display:flex; justify-content:space-between; gap:8px; font-size:12.5px; margin-bottom:4px; }
+  .rank-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
+  .rank-label{ color:var(--ink); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rank-value{ font-family:'Roboto Slab', serif; font-size:11.5px; color:var(--ink-soft); white-space:nowrap; flex:none; }
+  .rank-meta{ display:flex; justify-content:space-between; gap:8px; font-size:11px; color:var(--ink-soft); margin-top:4px; }
+  .rank-mover{ font-family:'Roboto Slab', serif; white-space:nowrap; }
+  .rank-mover.up{ color:var(--red); }
+  .rank-mover.down{ color:var(--green); }
+  .rank-mover.flat{ color:var(--ink-soft); }
+
+  @media (max-width:680px){
+    .wrap{ padding:14px 10px calc(var(--nav-h) + 22px); }
+    .tabs.top-tabs{ display:none; }
+    .bottom-nav{ display:block; }
+    .page{ padding:16px 13px 22px; }
+    .net-hero .value{ font-size:27px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="book-title">我 的 存 摺 · 個 人 存 款 管 理</p>
+
+  <div class="tabs top-tabs" id="tabsTop"></div>
+
+  <div class="page">
+
+    <!-- 總覽（含帳戶管理） -->
+    <div class="view" id="view-dashboard">
+      <h2>總覽</h2>
+      <div class="net-hero">
+        <div class="label">淨資產</div>
+        <div class="value" id="netHeroValue">$0</div>
+        <div class="sub">
+          <div>資產<b id="netHeroAssets">$0</b></div>
+          <div>未繳負債<b id="netHeroDebt">$0</b></div>
+          <div>預估下期利息<b id="netHeroInterest">$0</b></div>
+        </div>
+      </div>
+      <div class="summary-grid" id="summaryGrid"></div>
+
+      <h2 style="font-size:15px;">帳戶管理</h2>
+      <p class="hint">包含現金、銀行、行動支付、悠遊卡、投資。只有「銀行」類型的帳戶需要填年利率等利息相關欄位，用來估算利息；撥息週期可選每月／每季／每半年／每年（不是所有帳戶都是每月撥息）。如果帳戶是「優惠利率有上限金額，超過部分改用一般利率」的類型，可以填「優惠利率上限金額」與「超過上限部分年利率」，估算時會自動分兩段計算（實際入帳請到「記帳」頁點選「記一筆利息／股息」）。</p>
+      <details class="entry-wrap" id="accountDetails">
+        <summary><span class="plus">＋</span>新增 / 編輯帳戶</summary>
+        <form class="entry" id="accountForm">
+          <input type="hidden" id="accId">
+          <label>名稱
+            <input type="text" id="accName" placeholder="例如：中信活儲" required>
+          </label>
+          <label>類型
+            <select id="accType">
+              <option value="現金">現金</option>
+              <option value="銀行">銀行</option>
+              <option value="行動支付">行動支付</option>
+              <option value="悠遊卡">悠遊卡</option>
+              <option value="投資">投資</option>
+            </select>
+          </label>
+          <label>目前餘額
+            <input type="number" id="accBalance" step="0.01" required>
+          </label>
+          <div class="full" id="accBankFieldsWrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+            <label>年利率 %（選填）
+              <input type="number" id="accRate" step="0.001" placeholder="例如 1.8">
+            </label>
+            <label>撥息週期（選填，未填視為每月撥息）
+              <select id="accInterestFreq">
+                <option value="1">每月</option>
+                <option value="3">每季（3 個月）</option>
+                <option value="6">每半年（6 個月）</option>
+                <option value="12">每年</option>
+              </select>
+            </label>
+            <label>優惠利率上限金額（選填）
+              <input type="number" id="accCap" step="0.01" placeholder="例如 100000，超過此金額的部分改用下方利率計算">
+            </label>
+            <label>超過上限部分年利率 %（選填，未填視為 0%）
+              <input type="number" id="accNormalRate" step="0.001" placeholder="例如 0.2">
+            </label>
+          </div>
+          <label class="full">備註
+            <input type="text" id="accNote" placeholder="選填">
+          </label>
+          <div class="full checkbox-row">
+            <input type="checkbox" id="accFavorite" checked>
+            <label for="accFavorite" style="margin:0;">常用支付工具（記帳/模板/共同帳本結算的帳戶選單預設只會顯示打勾的帳戶，沒打勾的就不用每次都滑過去）</label>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="primary">儲存帳戶</button>
+            <button type="button" id="accCancel">清空表單</button>
+          </div>
+        </form>
+      </details>
+
+      <div class="dash-list-head">
+        <h2 id="dashboardAccountsTitle">帳戶一覽</h2>
+        <button type="button" class="dash-list-reset" id="dashboardFilterReset" style="display:none;">顯示全部</button>
+      </div>
+      <div class="acc-fav-filter" id="accFavFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+        <button type="button" class="small" data-fav="all">全部帳戶</button>
+        <button type="button" class="small" data-fav="favorite">常用帳戶</button>
+        <button type="button" class="small" data-fav="unfavorite">不常用帳戶</button>
+      </div>
+      <div class="acc-bulk-bar" id="accBulkBar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--ink-soft);cursor:pointer;">
+          <input type="checkbox" id="accSelectAll"> 全選
+        </label>
+        <button type="button" class="small" id="accBulkFavorite">移入常用</button>
+        <button type="button" class="small" id="accBulkUnfavorite">移出常用</button>
+        <span id="accBulkCount" style="font-size:12px;color:var(--ink-soft);"></span>
+      </div>
+      <div class="item-list" id="dashboardAccountsList"></div>
+    </div>
+
+    <!-- 負債 -->
+    <div class="view" id="view-liabilities">
+      <h2>負債（含國民年金未繳款）</h2>
+      <details class="entry-wrap" id="liabilityDetails">
+        <summary><span class="plus">＋</span>新增 / 編輯負債項目</summary>
+        <form class="entry" id="liabilityForm">
+          <input type="hidden" id="liaId">
+          <label>項目名稱
+            <input type="text" id="liaName" placeholder="例如：國民年金 3月" required>
+          </label>
+          <label>金額
+            <input type="number" id="liaAmount" step="0.01" required>
+          </label>
+          <label>繳費期限
+            <input type="date" id="liaDue">
+          </label>
+          <label>狀態
+            <select id="liaPaid">
+              <option value="false">未繳</option>
+              <option value="true">已繳</option>
+            </select>
+          </label>
+          <label class="full">備註
+            <input type="text" id="liaNote" placeholder="選填">
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">儲存項目</button>
+            <button type="button" id="liaCancel">清空表單</button>
+          </div>
+        </form>
+      </details>
+      <div class="item-list" id="liabilitiesList"></div>
+    </div>
+
+    <!-- 記帳 -->
+    <div class="view active" id="view-transactions">
+      <h2>記帳</h2>
+      <div class="segmented" id="trSubNav">
+        <button type="button" class="active" data-sub="records">記帳</button>
+        <button type="button" data-sub="ledger">共同帳本</button>
+        <button type="button" data-sub="templates">模板管理</button>
+        <button type="button" data-sub="stats">統計分析</button>
+        <button type="button" data-sub="import">匯入CSV</button>
+        <button type="button" data-sub="categories">類別設定</button>
+      </div>
+
+      <!-- 記帳：紀錄（含新增/編輯記帳與轉帳） -->
+      <div id="trSub-records">
+        <!-- 月預算：本月（跟著日曆瀏覽的月份走）預算剩餘或超支金額 -->
+        <div class="net-hero" id="trAvailHero">
+          <div class="label" id="trAvailLabel">月預算</div>
+          <div class="value" id="trAvailValue">$0</div>
+        </div>
+        <!-- <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。有存好的模板時，表單最上面會出現一排模板按鈕，點一下就能帶入內容，只要調整日期或金額就能存檔；模板的新增／編輯／每月自動加入／刪除，請到「模板管理」分頁統一設定。</p> -->
+        <!-- 利息／股息快速入帳：本質上就是一筆「收入」記帳，類別自動固定為
+             「利息／股息收入」，不用使用者自己選主／子類別，表單上的主／子
+             類別欄位也會直接隱藏。點一下會開啟下方記帳表單並自動切成收入、
+             選好帳戶後金額欄位會自動帶入系統估算的下期利息／股息，跟銀行
+             實際撥的金額不同的話，直接改成實際數字再存檔即可；存檔後就跟
+             其他記帳一樣，會自動增加帳戶餘額、可在下方清單雙擊編輯或刪除，
+             也會計入收入統計，不用另外管理。 -->
+        <div class="quick-actions-row" style="margin-bottom:10px;">
+          <button type="button" class="small" id="trQuickInterestBtn">💰 記一筆利息／股息</button>
+        </div>
+        <details class="entry-wrap" id="trDetails">
+          <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
+          <form class="entry" id="trForm">
+            <input type="hidden" id="trId">
+            <div class="full type-toggle">
+              <button type="button" class="expense active" data-type="expense">支出</button>
+              <button type="button" class="income" data-type="income">收入</button>
+              <button type="button" class="transfer" data-type="transfer">轉帳</button>
+            </div>
+            <input type="hidden" id="trType" value="expense">
+            <div class="full tpl-quick-row" id="trTemplateRow" style="display:none;">
+              <div class="tpl-quick-label">從模板快速記帳
+                <span class="tpl-quick-hint">點一下帶入內容，調整日期或金額後儲存即可（模板本身的設定請到「模板管理」分頁）</span>
+              </div>
+              <div class="tpl-chip-row" id="trTemplateChips"></div>
+            </div>
+            <div class="amount-hero">
+              <div class="amount-label">金額</div>
+              <div class="amount-input-row">
+                <span>$</span>
+                <input type="number" id="trAmount" step="0.01" min="0" placeholder="0" required>
+              </div>
+            </div>
+            <div class="cat-select-row" id="trCatRow">
+              <label>主類別
+                <select id="trCategory"></select>
+              </label>
+              <label>子類別（選填）
+                <select id="trSubcategory"><option value="">不指定</option></select>
+              </label>
+            </div>
+            <p class="hint full" id="trQuickIncomeHint" style="display:none; margin-top:-4px;">類別：<b id="trQuickIncomeHintName"></b>（利息／股息快速入帳，不用選主／子類別）</p>
+            <label>日期
+              <input type="date" id="trDate" required>
+            </label>
+            <label id="trAccountWrap"><span id="trAccountLabel">帳戶（選填，會自動增減餘額）</span>
+              <select id="trAccount">
+                <option value="">不指定</option>
+              </select>
+            </label>
+            <label class="full" id="trTransferToWrap" style="display:none;">到（轉入帳戶）
+              <select id="trToAccount">
+                <option value="">請選擇</option>
+              </select>
+            </label>
+            <label class="full">名稱
+              <input type="text" id="trNote" placeholder="例如：午餐、超商、加油">
+            </label>
+            <div class="full checkbox-row" id="trSharedRow">
+              <input type="checkbox" id="trShared">
+              <label for="trShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
+            </div>
+            <div class="full" id="trLedgerFields" style="display:none;">
+              <div class="map-grid">
+                <label>誰先付款
+                  <select id="trPayer">
+                    <option value="me">我先付</option>
+                    <option value="partner">對方先付</option>
+                  </select>
+                </label>
+                <label>分攤方式
+                  <select id="trSplitMode">
+                    <option value="split">平分（各一半）</option>
+                    <option value="advance">全額代墊</option>
+                  </select>
+                </label>
+              </div>
+              <p class="hint" id="trAdvanceHint" style="display:none; margin-top:6px;">「我先付、全額代墊」代表整筆其實是對方的花費，不用選主/子類別，會直接統一存成「代墊」方便之後辨識。若是「對方先付、全額代墊」，代表整筆其實是你自己的花費，請照常選類別。</p>
+            </div>
+          </form>
+          <!-- 儲存/清空按鈕獨立放在表單外面、固定貼在彈出視窗最下方（不會隨內容捲動而被捲出畫面），
+               不管上面欄位再長，這幾顆按鈕永遠看得到、點得到。用 form="trForm" 讓 submit 按鈕
+               仍然會正常送出 #trForm 表單。 -->
+          <div class="entry-footer">
+            <div class="form-actions">
+              <button type="button" id="trCancel">清空表單</button>
+              <button type="submit" form="trForm" id="trSaveContinue">儲存並記下一筆</button>
+              <button type="submit" form="trForm" class="primary">儲存記帳</button>
+            </div>
+          </div>
+        </details>
+        <div class="tr-search-row" id="trSearchRow">
+          <input type="search" id="trSearchInput" placeholder="搜尋記帳（名稱、類別、備註、金額、帳戶…）">
+          <button type="button" id="trSearchClear" class="small" style="display:none;">清除</button>
+        </div>
+        <div class="calendar-wrap" id="trCalendarWrap">
+          <div class="cal-nav">
+            <button type="button" class="cal-nav-btn" id="calPrevBtn" aria-label="上個月">‹</button>
+            <div class="cal-month-label" id="calMonthLabel"></div>
+            <button type="button" class="cal-nav-btn" id="calNextBtn" aria-label="下個月">›</button>
+          </div>
+          <div class="cal-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+          <div class="cal-grid" id="calGrid"></div>
+        </div>
+        <!-- 本月支出（跟著日曆瀏覽的月份切換）／當日支出（跟著日曆點選的日期切換） -->
+        <div class="summary-grid" id="trStatsGrid"></div>
+        <div class="tr-batch-bar" id="trBatchBar">
+          <button type="button" class="small" id="trBatchToggleBtn">批次刪除</button>
+          <div id="trBatchControls" style="display:none;">
+            <button type="button" class="small" id="trBatchSelectAllBtn">全選本頁</button>
+            <button type="button" class="small" id="trBatchClearBtn">取消全選</button>
+            <span class="hint" id="trBatchCount" style="margin:0 4px;">已選 0 筆</span>
+            <button type="button" class="small danger" id="trBatchDeleteBtn">刪除已選</button>
+            <button type="button" class="small" id="trBatchCancelBtn">取消</button>
+          </div>
+        </div>
+        <div class="item-list" id="transactionsList"></div>
+      </div>
+
+      <!-- 記帳：共同帳本 -->
+      <div id="trSub-ledger" style="display:none;">
+        <p class="hint">記帳時勾選「共同帳本項目」並選擇誰先付款、怎麼分攤，這裡會自動幫你算出目前誰欠誰多少，等金額大到可以一次轉帳時再按「結算」。結算時選擇這筆轉帳實際入帳/出帳的帳戶，系統會把餘額一次更新好，不用自己手動再去調整帳戶。</p>
+        <div class="ledger-hero">
+          <div class="label">目前帳本餘額</div>
+          <div class="value" id="ledgerBalanceValue">打平了</div>
+          <div class="hint2" id="ledgerBalanceHint">尚無未結算的共同帳本紀錄。</div>
+        </div>
+        <label id="ledgerSettleAccountWrap">轉帳帳戶（結算時會自動增減這個帳戶的餘額）
+          <select id="ledgerSettleAccount">
+            <option value="">不指定（只標記已結算，不更新帳戶餘額）</option>
+          </select>
+        </label>
+        <div class="form-actions" style="margin-bottom:16px;">
+          <button type="button" class="primary" id="ledgerSettleBtn">結算 / 標記已轉帳完成</button>
+        </div>
+        <h2 style="font-size:15px;">未結算明細</h2>
+        <div class="item-list" id="ledgerList"></div>
+      </div>
+
+      <!-- 記帳：模板管理（獨立介面，可新增/編輯/刪除模板；記帳表單裡的模板按鈕仍可直接點擊套用） -->
+      <div id="trSub-templates" style="display:none;">
+        <p class="hint">在這裡統一管理所有「模板」（房租、訂閱費、常買的東西…）。存好的模板會自動出現在「記帳」分頁表單最上方，點一下按鈕就能直接帶入內容快速記帳。</p>        <details class="entry-wrap" id="tplDetails">
+          <summary><span class="plus">＋</span><span id="tplFormTitle">新增模板</span></summary>
+          <form class="entry" id="tplForm">
+            <input type="hidden" id="tplId">
+            <div class="full type-toggle">
+              <button type="button" class="expense active" data-type="expense">支出</button>
+              <button type="button" class="income" data-type="income">收入</button>
+              <button type="button" class="transfer" data-type="transfer">轉帳</button>
+            </div>
+            <input type="hidden" id="tplType" value="expense">
+            <label class="full">模板名稱
+              <input type="text" id="tplName" placeholder="例如：房租、Netflix 訂閱" required>
+            </label>
+            <div class="amount-hero full">
+              <div class="amount-label">金額</div>
+              <div class="amount-input-row">
+                <span>$</span>
+                <input type="number" id="tplAmount" step="0.01" min="0" placeholder="0" required>
+              </div>
+            </div>
+            <div class="cat-select-row" id="tplCatRow">
+              <label>主類別
+                <select id="tplCategory"></select>
+              </label>
+              <label>子類別（選填）
+                <select id="tplSubcategory"><option value="">不指定</option></select>
+              </label>
+            </div>
+            <label id="tplAccountWrap"><span id="tplAccountLabel">帳戶（選填，加入記帳時會自動增減餘額）</span>
+              <select id="tplAccount">
+                <option value="">不指定</option>
+              </select>
+            </label>
+            <label class="full" id="tplTransferToWrap" style="display:none;">到（轉入帳戶）
+              <select id="tplToAccount">
+                <option value="">請選擇</option>
+              </select>
+            </label>
+            <label>每月幾號繳（選填，僅供提醒）
+              <input type="number" id="tplDayOfMonth" min="1" max="28" placeholder="例如：5">
+            </label>
+            <label class="full">備註（加入記帳時的名稱，留空則用模板名稱）
+              <input type="text" id="tplNote" placeholder="留空則沿用模板名稱">
+            </label>
+            <div class="full checkbox-row" id="tplSharedRow">
+            
+              <input type="checkbox" id="tplShared">
+              <label for="tplShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
+            </div>
+            <div class="full" id="tplLedgerFields" style="display:none;">
+              <div class="map-grid">
+                <label>誰先付款
+                  <select id="tplPayer">
+                    <option value="me">我先付</option>
+                    <option value="partner">對方先付</option>
+                  </select>
+                </label>
+                <label>分攤方式
+                  <select id="tplSplitMode">
+                    <option value="split">平分（各一半）</option>
+                    <option value="advance">全額代墊</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </form>
+          <div class="entry-footer">
+            <div class="form-actions">
+              <button type="button" id="tplCancel">清空表單</button>
+              <button type="submit" form="tplForm" class="primary" id="tplSaveBtn">新增模板</button>
+            </div>
+          </div>
+        </details>
+        <div class="item-list" id="templatesManageList"></div>
+      </div>
+
+      <!-- 記帳：統計分析 -->
+      <div id="trSub-stats" style="display:none;">
+        <div class="segmented" id="statsModeNav">
+          <button type="button" class="active" data-mode="month">依月份</button>
+          <button type="button" data-mode="year">依年度</button>
+          <button type="button" data-mode="category">依類別</button>
+        </div>
+        <div class="period-nav">
+          <button type="button" class="period-nav-btn" id="statsPrevBtn" title="上一期">‹</button>
+          <input type="month" id="statsMonthInput">
+          <select id="statsYearInput" style="display:none;"></select>
+          <button type="button" class="period-nav-btn" id="statsNextBtn" title="下一期">›</button>
+        </div>
+
+        <div id="statsGeneralSections">
+        <!-- ① 本期關鍵指標 -->
+        <div class="summary-grid" id="statsSummaryGrid"></div>
+        <div class="compare-grid" id="statsCompareGrid"></div>
+
+        <!-- ② 支出去了哪裡：排行 + 跟上期比（點一列可展開該類別的子類別明細） -->
+        <div class="stat-section">
+          <h3>支出去了哪裡</h3>
+          <p class="hint" style="margin-bottom:10px;">點一列可以展開看該主類別底下的子類別花了多少。全額代墊給對方的款項不算在支出裡。</p>
+          <div class="category-rank-wrap">
+            <div class="rank-list" id="statsCategoryRank"></div>
+          </div>
+        </div>
+
+        <!-- ③ 固定 vs 彈性支出 -->
+        <div class="stat-section">
+          <h3>固定支出 vs 彈性支出</h3>
+          <p class="hint" style="margin-bottom:10px;">固定支出＝由「模板」自動加入的紀錄（房租、訂閱費等）；其餘算彈性花費，是比較能省的部分。</p>
+          <div id="statsFixedVsFlex"></div>
+        </div>
+
+        <!-- ④ 消費節奏：年模式看每月趨勢 -->
+        <div class="stat-section" id="statsYearlyTrendSection" style="display:none;">
+          <h3>年度每月支出趨勢</h3>
+          <div id="statsYearlyTrend"></div>
+        </div>
+
+        <!-- ⑤ 收入來源 -->
+        <div class="stat-section">
+          <h3>收入品項分佈</h3>
+          <div id="statsIncomeBreakdown"></div>
+        </div>
+        </div>
+
+        <!-- 依類別：獨立頁面，用長條圖看每個類別的月度變化 -->
+        <div id="statsCategoryMonthSection" style="display:none;">
+          <div class="stat-section">
+            <h3>各類別每月花費</h3>
+            <p class="hint" style="margin-bottom:14px;">這個年度裡，每個主類別在各月份花了多少；長條愈高代表那個月花得愈多（以該類別自己全年最高的月份為基準）。</p>
+            <div id="statsCategoryCharts"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 記帳：匯入 CSV -->
+      <div id="trSub-import" style="display:none;">
+        <p class="hint">把其他記帳 App 匯出的 CSV 檔案匯入，就能跟這裡的紀錄一起做統計分析。匯入前可以先對應欄位、預覽內容再確定送出。</p>
+        <div class="import-steps">
+          <label>選擇 CSV 檔案
+            <input type="file" id="csvFile" accept=".csv,text/csv">
+          </label>
+          <div id="csvMapSection" style="display:none;">
+            <div class="map-grid">
+              <label>日期欄位
+                <select id="csvColDate"></select>
+              </label>
+              <label>金額欄位
+                <select id="csvColAmount"></select>
+              </label>
+              <label>主類別欄位
+                <select id="csvColCategory"><option value="">（不對應）</option></select>
+              </label>
+              <label>子類別欄位（選填）
+                <select id="csvColSubcategory"><option value="">（不對應）</option></select>
+              </label>
+              <label>備註欄位
+                <select id="csvColNote"><option value="">（不對應）</option></select>
+              </label>
+              <label>收支欄位（選填）
+                <select id="csvColType"><option value="">（不對應，用下面規則判斷）</option></select>
+              </label>
+              <label>沒有收支欄位時，怎麼判斷收入/支出
+                <select id="csvTypeRule">
+                  <option value="sign">依金額正負判斷（正=收入，負=支出）</option>
+                  <option value="all_expense">全部視為支出</option>
+                  <option value="all_income">全部視為收入</option>
+                </select>
+              </label>
+            </div>
+            <p class="hint" style="margin:10px 0 0;">預覽（前 5 筆）：</p>
+            <div class="csv-preview-wrap"><table class="csv-preview" id="csvPreviewTable"></table></div>
+            <div class="form-actions" style="margin-top:12px;">
+              <button type="button" class="primary" id="csvImportBtn">確認匯入</button>
+              <button type="button" id="csvCancelBtn">取消</button>
+            </div>
+            <div class="status" id="csvStatus" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 記帳：類別設定 -->
+      <div id="trSub-categories" style="display:none;">
+        <p class="hint">管理記帳的「主類別」與「子類別」，支出跟收入分開管理。點主類別旁邊的「↑」「↓」可以調整主類別的顯示先後順序，記帳表單、統計分析的選單都會照這個順序顯示。刪除類別不會影響已經記過的舊資料，只是選單裡不會再出現。</p>
+        <div class="category-manage">
+          <h2 style="font-size:15px;">支出類別</h2>
+          <div id="catBlocksExpense" style="display:flex; flex-direction:column; gap:10px;"></div>
+          <div class="cat-add-row">
+            <input type="text" id="catAddExpense" placeholder="新增支出主類別，例如：寵物">
+            <button type="button" class="primary" id="catAddExpenseBtn">新增主類別</button>
+          </div>
+        </div>
+        <div class="category-manage">
+          <h2 style="font-size:15px;">收入類別</h2>
+          <div id="catBlocksIncome" style="display:flex; flex-direction:column; gap:10px;"></div>
+          <div class="cat-add-row">
+            <input type="text" id="catAddIncome" placeholder="新增收入主類別，例如：租金收入">
+            <button type="button" class="primary" id="catAddIncomeBtn">新增主類別</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 設定 -->
+    <div class="view" id="view-settings">
+      <h2>設定</h2>
+      <p class="hint">填入你部署 Google Apps Script 後取得的網址與密鑰，只存在你這台裝置的瀏覽器裡，不會上傳到 GitHub。</p>
+      <div class="settings-block">
+        <label>Apps Script 網址
+          <input type="text" id="cfgUrl" placeholder="https://script.google.com/macros/s/xxx/exec">
+        </label>
+        <label>密鑰 (SECRET_TOKEN)
+          <input type="text" id="cfgToken" placeholder="你在 Apps Script 指令碼屬性設定的值">
+        </label>
+        <button id="cfgSave" class="primary">儲存設定並重新連線</button>
+        <div class="status" id="cfgStatus"></div>
+      </div>
+
+      <h2 style="font-size:15px; margin-top:22px;">版本資訊</h2>
+      <p class="hint">改完 Apps Script 程式碼後，記得到「部署」→「管理部署作業」建立「新版本」，網址才會套用最新程式碼；這裡可以用來確認前端（這個網頁）跟後端（Apps Script）是不是同一個版本，避免改了程式碼卻忘記部署新版本，導致功能對不起來。</p>
+      <div class="settings-block">
+        <div class="version-row"><span>前端版本</span><b id="verFrontend">-</b></div>
+        <div class="version-row"><span>後端版本</span><b id="verBackend">尚未連線</b></div>
+        <div class="status" id="verStatus" style="display:none;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<nav class="bottom-nav">
+  <div class="tabs" id="tabsBottom"></div>
+</nav>
+<div class="entry-backdrop" id="trFormBackdrop"></div>
+<button type="button" class="fab" id="trFab" aria-label="新增記帳" style="display:none;">＋</button>
+<div id="busyToast"><span class="spinner"></span><span id="busyToastText">處理中…</span></div>
+
+<script>
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+// ---------- 忙碌保護：避免等待時多點幾下造成重複紀錄 ----------
+let busyCount = 0;
+function setBusy(on, text){
+  busyCount = Math.max(0, busyCount + (on ? 1 : -1));
+  document.body.classList.toggle('busy', busyCount > 0);
+  const toast = $('#busyToast');
+  if(text) $('#busyToastText').textContent = text;
+  toast.classList.toggle('show', busyCount > 0);
+}
+// 包住一個 async 操作：執行期間整個畫面會被鎖住（按鈕點不動），
+// 避免因為網路慢、Apps Script 回應久而被連點好幾次造成重複紀錄
+async function runBusy(fn, text){
+  setBusy(true, text || '處理中…');
+  try{
+    return await fn();
+  } finally {
+    setBusy(false);
+  }
+}
+
+// ---------- Icons ----------
+const ICONS = {
+  dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>',
+  accounts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M16 14h2"/></svg>',
+  liabilities: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
+  transactions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h4"/><path d="M8 4v3M16 4v3"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>'
+};
+const TAB_DEFS = [
+  { view:'transactions', label:'記帳' },
+  { view:'dashboard', label:'總覽' },
+  { view:'liabilities', label:'負債' },
+  { view:'settings', label:'設定' }
+];
+
+function buildTabs(container){
+  container.innerHTML = TAB_DEFS.map((t,i) =>
+    `<div class="tab${i===0?' active':''}" data-view="${t.view}">${ICONS[t.view]}<span>${t.label}</span></div>`
+  ).join('');
+}
+buildTabs($('#tabsTop'));
+buildTabs($('#tabsBottom'));
+updateTrFabVisibility();
+
+function switchTab(view){
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  currentView = view;
+  renderVisibleSection();
+  // 切換分頁只單純顯示紀錄清單，記帳表單保持收合，要點擊「記帳」（或右下角浮動按鈕）才會跳出
+  updateTrFabVisibility();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+$$('.tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.view)));
+
+// 存 Apps Script 網址／權杖用的 localStorage key。
+// 原本用的是很通用的 'fin_url' / 'fin_token'，如果這個網頁跟其他網頁剛好
+// 部署在同一個網域（或用同一台瀏覽器開啟本機檔案），瀏覽器的 localStorage
+// 是整個來源共用的，通用的 key 名稱就很容易被別的網頁誤讀/誤蓋。
+// 這裡換成專屬於這個記帳工具的 key，避免互相污染設定。
+const CFG_URL_KEY = 'mybook_ledger_apps_script_url';
+const CFG_TOKEN_KEY = 'mybook_ledger_apps_script_token';
+// 一次性搬移：如果偵測到舊 key 有值、新 key 還沒有值，就搬過去一次，
+// 這樣舊使用者不會因為改 key 名稱就要重新貼一次網址跟權杖。
+(function migrateLegacyCfgKeys_(){
+  const legacyUrl = localStorage.getItem('fin_url');
+  const legacyToken = localStorage.getItem('fin_token');
+  if(legacyUrl && !localStorage.getItem(CFG_URL_KEY)) localStorage.setItem(CFG_URL_KEY, legacyUrl);
+  if(legacyToken && !localStorage.getItem(CFG_TOKEN_KEY)) localStorage.setItem(CFG_TOKEN_KEY, legacyToken);
+  // 搬完就把舊的通用 key 刪掉，避免繼續佔用共用命名空間、跟其他網頁互相干擾
+  if(legacyUrl) localStorage.removeItem('fin_url');
+  if(legacyToken) localStorage.removeItem('fin_token');
+})();
+const cfg = {
+  url: localStorage.getItem(CFG_URL_KEY) || '',
+  token: localStorage.getItem(CFG_TOKEN_KEY) || ''
+};
+
+// 前端版本號：每次你改完這個檔案、要重新上傳到 GitHub Pages 時，
+// 記得順手更新這個字串（例如改成今天的日期），才能在「設定」頁看出
+// 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
+// 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
+// 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
+const FRONTEND_VERSION = '2026-09-15-3';
+$('#verFrontend').textContent = FRONTEND_VERSION;
+// 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
+// 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
+function reportBackendVersion_(version){
+  if(!version) return;
+  $('#verBackend').textContent = version;
+  const statusEl = $('#verStatus');
+  if(version === FRONTEND_VERSION){
+    statusEl.style.display = 'none';
+  } else {
+    statusEl.textContent = `前端（${FRONTEND_VERSION}）與後端（${version}）版本不一致：請確認 Apps Script 是否已經部署「新版本」，或這個網頁是否為最新上傳的版本。`;
+    statusEl.className = 'status err';
+    statusEl.style.display = '';
+  }
+}
+
+let state = { accounts: [], liabilities: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null };
+// 記帳品項（主類別 + 子類別，依收入/支出分開）。
+// 這份清單現在存在後端試算表的「Categories」表（跟 Accounts/Transactions 一樣），
+// 換裝置、清瀏覽器快取都不會不見，也可以直接在試算表上看到。前端只在「一開始
+// 載入資料」（loadAll）時跟後端拿一次、存進 state.categories，之後新增/改名/刪除
+// 都是「呼叫後端 API 更新 → 順便同步更新 state.categories」，不會每次打開「類別
+// 設定」頁面就重新掃一次資料、也不需要等完整記帳歷史載入完才能用。
+//
+// DEFAULT_CATEGORY_TREE 只留著給「舊版用 localStorage 存過類別」的使用者做一次性
+// 搬移比對用（見 migrateLocalCategoriesIfNeeded_），新資料一律以後端 Categories
+// 表為準。
+const DEFAULT_CATEGORY_TREE = {
+  expense: [
+    { name:'餐飲', subs:['早餐','午餐','晚餐','飲料','消夜'] },
+    { name:'交通', subs:['大眾運輸','加油','停車','計程車','保養'] },
+    { name:'購物', subs:['日用品','服飾','電器','其他'] },
+    { name:'娛樂', subs:['電影','遊戲','訂閱','旅遊'] },
+    { name:'醫療', subs:['看診','藥品','保健品'] },
+    { name:'教育', subs:['書籍','課程','學費'] },
+    { name:'居家', subs:['房租','水電','瓦斯','網路','家具'] },
+    { name:'保險', subs:['保費'] },
+    { name:'旅遊', subs:['機票','住宿','餐飲','交通'] },
+    { name:'其他', subs:[] }
+  ],
+  income: [
+    { name:'薪資', subs:['本薪','加班費'] },
+    { name:'獎金', subs:['年終獎金','績效獎金'] },
+    { name:'投資收益', subs:['股息','利息','資本利得'] },
+    { name:'兼職', subs:[] },
+    { name:'其他', subs:[] }
+  ]
+};
+// 舊版 key（唯讀，只用來搬移一次，不會再寫入）
+const CAT_TREE_KEY = type => 'mybook_ledger_category_tree_' + type;
+const CAT_TREE_KEY_LEGACY_V2 = type => 'fin_category_tree_' + type;
+const CAT_LEGACY_KEY = type => 'fin_categories_' + type;
+const CATEGORY_MIGRATED_FLAG = 'mybook_ledger_category_migrated_to_sheet_v1';
+
+
+// 讀舊版存在 localStorage 的類別樹（不會寫回任何 key，純粹讀取用來比對／搬移）。
+// 回傳 null 代表這個瀏覽器完全沒有舊版類別資料可以搬。
+function readLegacyLocalCategoryTree_(type){
+  try{
+    const raw = localStorage.getItem(CAT_TREE_KEY(type));
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(Array.isArray(parsed)) return parsed;
+    }
+  }catch(e){}
+  try{
+    const legacyTreeRaw = localStorage.getItem(CAT_TREE_KEY_LEGACY_V2(type));
+    if(legacyTreeRaw){
+      const parsed = JSON.parse(legacyTreeRaw);
+      if(Array.isArray(parsed)) return parsed;
+    }
+  }catch(e){}
+  try{
+    const legacyRaw = localStorage.getItem(CAT_LEGACY_KEY(type));
+    if(legacyRaw){
+      const legacyNames = JSON.parse(legacyRaw) || [];
+      if(legacyNames.length) return legacyNames.map(name => ({ name, subs: [] }));
+    }
+  }catch(e){}
+  return null;
+}
+
+// 第一次接上這個試算表時，如果偵測到這個瀏覽器有舊版（localStorage）自訂過的
+// 類別樹、而且內容跟預設清單不一樣，就整批搬到後端 Categories 表一次
+// （用 replaceCategoryTree 動作，一次 exec 內寫完該類型的所有列）。
+// 只會跑一次：搬完會記一個 flag，之後即使使用者又改了 localStorage 也不會再搬。
+async function migrateLocalCategoriesIfNeeded_(){
+  if(localStorage.getItem(CATEGORY_MIGRATED_FLAG)) return;
+  try{
+    for(const type of ['expense','income']){
+      const legacy = readLegacyLocalCategoryTree_(type);
+      if(!legacy || !legacy.length) continue;
+      const isSameAsDefault = JSON.stringify(legacy) === JSON.stringify(DEFAULT_CATEGORY_TREE[type]);
+      if(isSameAsDefault) continue; // 沒有自訂過，後端已經有一樣的預設清單，不用搬
+      await apiPost('replaceCategoryTree', null, { type, tree: legacy });
+    }
+  }catch(err){
+    console.warn('搬移舊版類別設定到試算表失敗，可以之後在「類別設定」頁手動調整：', err);
+  } finally {
+    localStorage.setItem(CATEGORY_MIGRATED_FLAG, '1');
+  }
+}
+
+function getCategoryTree(type){ return (state.categories && state.categories[type]) || []; }
+function getCategoryNames(type){ return getCategoryTree(type).map(m => m.name); }
+function getSubcategories(type, mainName){
+  const m = getCategoryTree(type).find(x => x.name === mainName);
+  return m ? (m.subs || []) : [];
+}
+
+// 以下新增/改名/刪除都是「先呼叫後端、成功後才更新 state.categories」：
+// 失敗時（例如連線問題）不會誤動本機畫面，呼叫端記得要 try/catch 並提示使用者。
+async function addMainCategory(type, name){
+  name = String(name || '').trim();
+  if(!name) return false;
+  const tree = getCategoryTree(type);
+  if(tree.some(m => m.name === name)) return false;
+  await apiPost('addMainCategory', null, { type, name });
+  tree.push({ name, subs: [] });
+  return true;
+}
+async function addSubCategory(type, mainName, subName){
+  subName = String(subName || '').trim();
+  if(!subName) return false;
+  const tree = getCategoryTree(type);
+  const m = tree.find(x => x.name === mainName);
+  if(!m) return false;
+  if(!m.subs) m.subs = [];
+  if(m.subs.includes(subName)) return false;
+  await apiPost('addSubCategory', null, { type, mainName, subName });
+  m.subs.push(subName);
+  return true;
+}
+// 重新命名主類別：後端會同時把 Categories 表跟過去已經記過的 Transactions／
+// RecurringTemplates 資料一起改成新名稱（見 Code.gs 的 renameMainCategory_ /
+// renameCategoryEverywhere_），這裡呼叫成功後，把記憶體裡目前已經載入的
+// 記帳/固定項目資料也同步改掉，畫面才會馬上反映新名稱（不用整批重新下載）。
+async function renameMainCategory(type, oldName, newName){
+  newName = String(newName || '').trim();
+  if(!newName || newName === oldName) return false;
+  const tree = getCategoryTree(type);
+  if(tree.some(m => m.name === newName)) return false;
+  const m = tree.find(x => x.name === oldName);
+  if(!m) return false;
+  await apiPost('renameMainCategory', null, { type, oldName, newName });
+  m.name = newName;
+  state.transactions.forEach(t => { if(t.type === type && t.category === oldName) t.category = newName; });
+  state.recurring.forEach(t => { if(t.type === type && t.category === oldName) t.category = newName; });
+  markAllDirty();
+  return true;
+}
+async function removeMainCategory(type, name){
+  await apiPost('removeMainCategory', null, { type, name });
+  state.categories[type] = getCategoryTree(type).filter(m => m.name !== name);
+}
+async function renameSubCategory(type, mainName, oldSub, newSub){
+  newSub = String(newSub || '').trim();
+  if(!newSub || newSub === oldSub) return false;
+  const tree = getCategoryTree(type);
+  const m = tree.find(x => x.name === mainName);
+  if(!m || !m.subs) return false;
+  if(m.subs.includes(newSub)) return false;
+  const idx = m.subs.indexOf(oldSub);
+  if(idx === -1) return false;
+  await apiPost('renameSubCategory', null, { type, mainName, oldSub, newSub });
+  m.subs[idx] = newSub;
+  state.transactions.forEach(t => { if(t.type === type && t.category === mainName && t.subcategory === oldSub) t.subcategory = newSub; });
+  state.recurring.forEach(t => { if(t.type === type && t.category === mainName && t.subcategory === oldSub) t.subcategory = newSub; });
+  markAllDirty();
+  return true;
+}
+async function removeSubCategory(type, mainName, subName){
+  await apiPost('removeSubCategory', null, { type, mainName, subName });
+  const m = getCategoryTree(type).find(x => x.name === mainName);
+  if(!m) return;
+  m.subs = (m.subs || []).filter(s => s !== subName);
+}
+// 為了相容既有程式碼，保留 CATEGORIES 這個名字（取主類別名稱陣列，動態取值）
+const CATEGORIES = {
+  get expense(){ return getCategoryNames('expense'); },
+  get income(){ return getCategoryNames('income'); }
+};
+
+// ---------- API ----------
+// 效能重點：fetch 預設沒有逾時機制，Apps Script 沒回應時畫面會無限期卡在
+// 「儲存中…／刪除中…」。這裡統一加上逾時保護，超過時間就中止並丟出明確的
+// 逾時訊息，至少讓使用者知道發生什麼事、可以重試，而不是永遠卡著等。
+const API_TIMEOUT_MS = 45000;
+async function fetchWithTimeout_(url, options){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try{
+    return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+  }catch(err){
+    if(err.name === 'AbortError'){
+      throw new Error('連線逾時（超過 ' + Math.round(API_TIMEOUT_MS/1000) + ' 秒沒有回應），請檢查網路後再試一次；如果剛剛的操作其實已經送出，重新整理頁面確認一下再決定要不要重做。');
+    }
+    throw err;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+async function apiGet(sheet, params){
+  let url = `${cfg.url}?token=${encodeURIComponent(cfg.token)}&sheet=${sheet}`;
+  if(params){
+    Object.keys(params).forEach(k => { url += `&${k}=${encodeURIComponent(params[k])}`; });
+  }
+  const res = await fetchWithTimeout_(url);
+  const json = await res.json();
+  reportBackendVersion_(json.version);
+  if(!json.ok) throw new Error(json.error || '讀取失敗');
+  return json.data;
+}
+async function apiPost(action, sheet, data){
+  const res = await fetchWithTimeout_(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ token: cfg.token, action, sheet, data })
+  });
+  const json = await res.json();
+  reportBackendVersion_(json.version);
+  if(!json.ok) throw new Error(json.error || '操作失敗');
+  return json.data;
+}
+
+// 記帳紀錄累積久了會很大量，一次全部載入常常是「載入資料中」卡很久的主因。
+// 這裡先只跟後端要最近 3 個月的記帳（帳戶/負債/利息/模板資料量小，一樣一次全拿），
+// 讓畫面能很快顯示出來、可以馬上開始記帳；完整歷史紀錄（統計分析、共同帳本、
+// 日曆翻到比較舊的月份）改成「真的要用到才載入」，不會一進畫面就自動在背景
+// 多打一次很花時間的完整資料請求，讓一開始進來、單純想記一筆帳的情境變快。
+const INITIAL_LOAD_RECENT_MONTHS = 3;
+async function loadAll(){
+  if(!cfg.url || !cfg.token){
+    $('#cfgStatus').textContent = '尚未設定，請先到「設定」填入網址與密鑰。';
+    $('#cfgStatus').className = 'status err';
+    return;
+  }
+  try{
+    await runBusy(async () => {
+      const all = await apiGet('all', { recentMonths: INITIAL_LOAD_RECENT_MONTHS });
+      state.accounts = all.accounts;
+      state.liabilities = all.liabilities;
+      state.transactions = all.transactions;
+      state.recurring = all.recurring || [];
+      state.categories = all.categories || { expense: [], income: [] };
+      state.transactionsFullyLoaded = !all.transactionsTruncated;
+      state.transactionsSince = all.transactionsSince || null;
+      renderAll();
+      // 記帳／模板表單的主類別、子類別選單在頁面一開始（IIFE）就先畫過一次，
+      // 但那時候 state.categories 都還是空的（要等這裡 apiGet('all') 回來才有資料），
+      // 所以畫出來的選項是空的；這裡資料到手後要重新畫一次選單，不然要等使用者
+      // 自己把表單關掉重開（resetTransactionForm 會重畫）才會看到正確選項。
+      // 只有目前沒有正在編輯既有紀錄時才重畫，避免蓋掉使用者正在編輯的內容。
+      if(!$('#trId').value) populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
+      if(!$('#tplId').value) populateTplCategories($('#tplType').value, $('#tplCategory').value, $('#tplSubcategory').value);
+    }, '載入資料中…');
+    $('#cfgStatus').textContent = '已連線成功。';
+    $('#cfgStatus').className = 'status ok';
+    // 第一次接上這個試算表時，把舊版存在瀏覽器 localStorage 的自訂類別（如果有）
+    // 搬到後端 Categories 表一次；只會跑一次，不會拖慢之後每次的載入。
+    migrateLocalCategoriesIfNeeded_().then(() => {
+      if(dirty) dirty.categories = true;
+      renderVisibleSection();
+    });
+    // 讓「記帳」清單先完整顯示、使用者可以馬上開始操作之後，才趁機在背景
+    // 偷偷補齊完整記帳歷史，避免一進畫面就同時打兩個請求互相搶時間，
+    // 拖慢最重要的「第一次看到畫面」這件事。
+    setTimeout(prefetchFullHistoryInBackground_, 800);
+  }catch(err){
+    $('#cfgStatus').textContent = '連線失敗：' + err.message;
+    $('#cfgStatus').className = 'status err';
+  }
+}
+
+// 補齊完整記帳歷史：只有真的需要完整資料的地方（統計分析、共同帳本、
+// 日曆翻到比 transactionsSince 更舊的月份）才會用到。
+// loadFullTransactions_ 是實際去後端拿資料的共用邏輯（不管背景偷偷拿、
+// 還是使用者主動切頁等著拿，都走同一個 promise，不會重複打兩次請求）。
+let fullTransactionsLoadPromise = null;
+async function loadFullTransactions_(){
+  if(state.transactionsFullyLoaded) return;
+  if(fullTransactionsLoadPromise) return fullTransactionsLoadPromise;
+  fullTransactionsLoadPromise = (async () => {
+    try{
+      const full = await apiGet('transactions');
+      state.transactions = full;
+      state.transactionsFullyLoaded = true;
+      // 完整資料到手後，共同帳本／統計分析／記帳清單都要用新資料重算一次，
+      // 但不馬上重畫——沒人在看的分頁沒必要現在就花時間算，等切過去再算就好。
+      dirty.ledger = true; dirty.stats = true; dirty.transactions = true;
+    } finally {
+      fullTransactionsLoadPromise = null;
+    }
+  })();
+  return fullTransactionsLoadPromise;
+}
+// 使用者主動切到「共同帳本」「統計分析」等分頁、或搜尋記帳時：要讓使用者
+// 看到「補齊中」的提示並鎖住畫面，等資料回來才繼續。
+async function ensureFullTransactionsLoaded(){
+  if(state.transactionsFullyLoaded) return;
+  try{
+    await runBusy(() => loadFullTransactions_(), '補齊完整記帳歷史中…');
+    renderVisibleSection();
+  }catch(err){
+    console.warn('補齊完整記帳紀錄失敗：', err);
+  }
+}
+// 初次載入完成、使用者已經可以開始操作「記帳」分頁之後，趁使用者還在看畫面、
+// 還沒點進「共同帳本」／「統計分析」之前，偷偷在背景把完整記帳歷史補齊好
+// （不鎖畫面、不顯示任何提示）。這樣真的點過去的時候，資料常常已經在
+// 背景載完了，不用再等一次「補齊完整記帳歷史中…」。就算背景載入還沒完成、
+// 使用者已經手動點過去，也只會共用同一個 loadFullTransactions_ promise，
+// 不會重複打兩次請求，只是那時候才會看到「補齊中」的提示、繼續等剩下的時間。
+function prefetchFullHistoryInBackground_(){
+  loadFullTransactions_()
+    .then(() => renderVisibleSection())
+    .catch(err => console.warn('背景補齊記帳歷史失敗（不影響目前畫面）：', err));
+}
+
+function fmt(n){
+  const num = Number(n) || 0;
+  return num.toLocaleString('zh-Hant-TW', { minimumFractionDigits:0, maximumFractionDigits:2 });
+}
+
+// 後端偵測到「日期＋類型＋主/子類別＋金額」都跟既有紀錄一樣時，會回傳那筆
+// 既有紀錄（而不是直接新增），這裡把它的內容組成一句話問使用者「真的要存
+// 這筆重複的紀錄嗎？」，答應了前端才會帶著 force:true 再送一次。
+function confirmDuplicateTransaction_(dup){
+  const catLabel = dup.category + (dup.subcategory ? ' / ' + dup.subcategory : '');
+  const noteLabel = dup.note ? `，備註：${dup.note}` : '';
+  return confirm(
+    `這天已經有一筆很像的紀錄了：\n` +
+    `${dup.date}．${dup.type === 'income' ? '收入' : '支出'}．${catLabel}．$${fmt(dup.amount)}${noteLabel}\n\n` +
+    `確定還是要存這一筆嗎？`
+  );
+}
+
+// ---------- 帳戶類型排序：記帳時預設用現金，選單依「現金 → 行動支付 → 銀行 → 悠遊卡 → 投資」排序 ----------
+const ACCOUNT_TYPE_ORDER = ['現金','行動支付','銀行','悠遊卡','投資'];
+function accountTypeRank(type){
+  const idx = ACCOUNT_TYPE_ORDER.indexOf(type);
+  return idx === -1 ? ACCOUNT_TYPE_ORDER.length : idx;
+}
+function sortAccountsForSelect(accounts){
+  return [...accounts].sort((a,b) => {
+    const r = accountTypeRank(a.type) - accountTypeRank(b.type);
+    if(r !== 0) return r;
+    return String(a.name).localeCompare(String(b.name), 'zh-Hant');
+  });
+}
+function sortAccountTypeEntries(types){
+  return [...types].sort((a,b) => accountTypeRank(a) - accountTypeRank(b));
+}
+function defaultCashAccountId(){
+  const sorted = sortAccountsForSelect(state.accounts);
+  const favorites = sorted.filter(isAccountFavorite);
+  const cash = favorites.find(a => a.type === '現金') || sorted.find(a => a.type === '現金');
+  return cash ? cash.id : '';
+}
+
+// ---------- 本地狀態更新（避免每次操作都重新整批下載，減少等待） ----------
+function upsertLocal(key, obj){
+  if(!obj) return;
+  const list = state[key];
+  const idx = list.findIndex(x => x.id === obj.id);
+  if(idx === -1) list.push(obj); else list[idx] = obj;
+}
+function removeLocal(key, id){
+  state[key] = state[key].filter(x => x.id !== id);
+}
+
+// ---------- Render ----------
+// 效能重點：以前每次存檔/刪除都會呼叫 renderAll()，把 10 個區塊全部重新
+// 計算+重畫一次（包含看不到的分頁，例如正在看「記帳」清單時，統計分析、
+// 共同帳本、類別設定也會一起被算一次），資料一多（尤其統計分析要掃全部
+// 歷史記帳）就會讓「儲存中」多卡好幾百毫秒到快一秒。
+// 改成「記髒＋只畫看得到的分頁」：資料異動時只標記哪些區塊「資料舊了」
+// （dirty），實際重畫延後到「使用者真的切過去那個分頁」的當下才做；
+// 分頁本身也記住「目前顯示哪個」，切分頁時只補畫剛好變成需要的那一塊。
+// 這樣「存一筆記帳」只要重畫記帳清單本身，不用連統計圖表、共同帳本都算一次。
+const dirty = { dashboard:true, liabilities:true, transactions:true, ledger:true, templates:true, stats:true, categories:true };
+function markAllDirty(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
+let currentView = 'transactions';
+let currentTrSub = 'records';
+const SECTION_RENDERERS = {
+  dashboard: renderDashboardSection_,
+  liabilities: renderLiabilitiesSection_,
+  transactions: renderTransactionsSection_,
+  ledger: renderLedgerSection_,
+  templates: renderTemplatesManageSection_,
+  stats: renderStatsSection_,
+  categories: renderCategoriesSection_
+};
+function renderDashboardSection_(){ renderDashboard(); }
+function renderLiabilitiesSection_(){ renderLiabilities(); }
+function renderTransactionsSection_(){ renderTransactions(); renderTrTemplateChips(); }
+function renderLedgerSection_(){ renderLedger(); }
+function renderTemplatesManageSection_(){ renderTemplatesManage(); }
+function renderStatsSection_(){ renderStats(); }
+function renderCategoriesSection_(){ renderCategories(); }
+
+// 依目前「主分頁 + (若在記帳分頁) 子分頁」算出實際看得到、需要重畫的區塊 key
+function visibleSectionKey_(){
+  if(currentView === 'transactions'){
+    if(['ledger','templates','stats','categories'].includes(currentTrSub)) return currentTrSub;
+    return 'transactions'; // records / import 子分頁都只需要記帳清單那份資料
+  }
+  return currentView; // dashboard / liabilities / settings
+}
+// 補畫「目前看得到」的那個區塊（如果它被標記為 dirty），不管別的分頁乾不乾淨
+function renderVisibleSection(){
+  const key = visibleSectionKey_();
+  const fn = SECTION_RENDERERS[key];
+  if(fn && dirty[key]){ fn(); dirty[key] = false; }
+}
+// 帳戶下拉選單很多分頁的表單都會用到、計算又很便宜，維持每次資料異動都直接更新，
+// 不用等使用者切過去才补畫，避免「表單選單」顯示舊帳戶名稱/餘額。
+function renderAll(){
+  renderAccountSelects();
+  markAllDirty();
+  renderVisibleSection();
+}
+
+// 帳戶撥息週期（月數）：沒有填的舊帳戶預設當作「每月」，相容既有資料
+function accountInterestFreqMonths_(a){
+  const months = a.interestFreqMonths ? parseInt(a.interestFreqMonths, 10) : 1;
+  return months > 0 ? months : 1;
+}
+function accountInterestFreqLabel_(a){
+  const months = accountInterestFreqMonths_(a);
+  if(months === 1) return '每月';
+  if(months === 3) return '每季';
+  if(months === 6) return '每半年';
+  if(months === 12) return '每年';
+  return `每 ${months} 個月`;
+}
+// 估算帳戶「下一期」會撥的利息（單利）：不是每個帳戶都是每月撥息，所以是用
+// 「年利率 × (撥息週期月數 / 12)」而不是固定除以 12，撥季息、半年息、年息都算得出來。
+// 沒有設「優惠利率上限金額」時，直接用這個週期利率乘以全部餘額；
+// 有設上限金額、且餘額超過上限時，改成分兩段計算——上限內的金額用年利率，
+// 超過上限的部分改用「超過上限部分年利率」（未填視為 0%），
+// 這樣才符合大部分銀行「優惠利率只算到某個金額，超過的部分回歸一般利率」的規則。
+function estimateAccountNextInterest_(a){
+  const balance = Number(a.balance) || 0;
+  const rate = a.interestRate ? Number(a.interestRate) : 0;
+  if(!rate || !balance) return 0;
+  const periodFraction = accountInterestFreqMonths_(a) / 12;
+  const cap = a.interestCap ? Number(a.interestCap) : 0;
+  if(cap > 0 && balance > cap){
+    const normalRate = a.normalRate ? Number(a.normalRate) : 0;
+    const preferredPart = cap * rate / 100 * periodFraction;
+    const excessPart = (balance - cap) * normalRate / 100 * periodFraction;
+    return preferredPart + excessPart;
+  }
+  return balance * rate / 100 * periodFraction;
+}
+
+// 點擊「帳戶一覽」上方的類型卡片（銀行／現金／行動支付…）可以篩選下方清單只顯示該類型的帳戶，
+// 再點一次或按「顯示全部」可以取消篩選。
+let dashboardFilterType = null;
+// 「常用帳戶」顯示頁面：全部帳戶／只看常用／只看不常用，三選一，可以跟上面的類型篩選疊加使用
+// （例如「銀行」+「常用」＝只看常用的銀行帳戶）。
+let dashboardFavFilter = 'all';
+function visibleDashboardAccounts_(){
+  let list = dashboardFilterType ? state.accounts.filter(a => a.type === dashboardFilterType) : state.accounts;
+  if(dashboardFavFilter === 'favorite') list = list.filter(isAccountFavorite);
+  else if(dashboardFavFilter === 'unfavorite') list = list.filter(a => !isAccountFavorite(a));
+  return list;
+}
+function updateFavFilterButtons_(){
+  $$('#accFavFilterBar button').forEach(b => {
+    b.classList.toggle('primary', b.dataset.fav === dashboardFavFilter);
+  });
+}
+$$('#accFavFilterBar button').forEach(b => {
+  b.addEventListener('click', () => {
+    dashboardFavFilter = b.dataset.fav;
+    renderAccountsList();
+  });
+});
+
+function renderDashboard(){
+  const byType = {};
+  let totalAssets = 0;
+  state.accounts.forEach(a => {
+    const bal = Number(a.balance) || 0;
+    byType[a.type] = (byType[a.type] || 0) + bal;
+    totalAssets += bal;
+  });
+  const totalDebt = state.liabilities
+    .filter(l => String(l.paid) !== 'true')
+    .reduce((s,l) => s + (Number(l.amount)||0), 0);
+  const net = totalAssets - totalDebt;
+  // 加總所有有填年利率的帳戶，估算「下一期」全部帳戶合計會拿到的利息（單利、按月估算）
+  const totalEstInterest = state.accounts.reduce((s,a) => s + estimateAccountNextInterest_(a), 0);
+
+  $('#netHeroValue').textContent = '$' + fmt(net);
+  $('#netHeroAssets').textContent = '$' + fmt(totalAssets);
+  $('#netHeroDebt').textContent = '$' + fmt(totalDebt);
+  $('#netHeroInterest').textContent = '$' + fmt(totalEstInterest);
+
+  // 如果目前篩選的類型已經沒有任何帳戶了（例如帳戶被刪除或改了類型），自動取消篩選
+  if(dashboardFilterType && !byType.hasOwnProperty(dashboardFilterType)) dashboardFilterType = null;
+
+  const grid = $('#summaryGrid');
+  const orderedTypes = sortAccountTypeEntries(Object.keys(byType));
+  grid.innerHTML = orderedTypes.map(type => {
+    const val = byType[type];
+    const active = dashboardFilterType === type;
+    return `<div class="summary-card clickable${active ? ' active' : ''}" data-type="${escapeHtml(type)}">
+      <div class="label">${type}</div><div class="value">$${fmt(val)}</div>
+    </div>`;
+  }).join('');
+  $$('#summaryGrid .summary-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const t = card.dataset.type;
+      dashboardFilterType = (dashboardFilterType === t) ? null : t;
+      renderDashboard();
+    });
+  });
+
+  renderAccountsList();
+}
+$('#dashboardFilterReset').addEventListener('click', () => {
+  dashboardFilterType = null;
+  renderDashboard();
+});
+
+// 帳戶一覽右欄：這個帳戶「本月」有用到的記帳（含轉帳的轉出／轉入、結算），
+// 讓人不用切到「記帳」分頁篩選就能看到這個帳戶最近花在哪裡。
+function currentMonthStr_(){
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+}
+function accountMonthTransactions_(accountId){
+  const monthStr = currentMonthStr_();
+  return state.transactions
+    .filter(t => t.date && t.date.slice(0,7) === monthStr && (t.accountId === accountId || t.toAccountId === accountId))
+    .sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+}
+function renderAccMonthTxHtml_(a){
+  const txs = accountMonthTransactions_(a.id);
+  if(!txs.length) return `<div class="acc-month-tx-empty">本月還沒有用這個帳戶記帳。</div>`;
+  return `<div class="acc-month-tx-list">${txs.map(t => {
+    // 一般收支：accountId 就是這個帳戶。轉帳／結算會同時牽涉轉出（accountId）
+    // 跟轉入（toAccountId）兩個帳戶，用哪個欄位等於這張卡片的帳戶來判斷方向。
+    const isOut = t.type === 'expense' || ((t.type === 'transfer' || t.type === 'settlement') && t.accountId === a.id);
+    const sign = isOut ? '-' : '+';
+    const typeLabel = t.type === 'transfer' ? '轉帳' : t.type === 'settlement' ? '結算' : '';
+    const label = t.note || t.category || typeLabel || '記帳';
+    return `<div class="acc-month-tx">
+      <div class="acc-month-tx-main">
+        <div class="acc-month-tx-cat">${label}${typeLabel && label !== typeLabel ? `（${typeLabel}）` : ''}</div>
+        <div class="acc-month-tx-date">${t.date}</div>
+      </div>
+      <div class="acc-month-tx-amt" style="color:${isOut ? 'var(--red)' : 'var(--green)'}">${sign}$${fmt(t.amount)}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+// 總覽頁的「帳戶一覽」：含新增/編輯/刪除操作，並支援依類型／常用狀態篩選
+function renderAccountsList(){
+  const list = $('#dashboardAccountsList');
+  const titleEl = $('#dashboardAccountsTitle');
+  const resetBtn = $('#dashboardFilterReset');
+  const accountsToShow = visibleDashboardAccounts_();
+  updateFavFilterButtons_();
+
+  const titleParts = [];
+  if(dashboardFilterType) titleParts.push(dashboardFilterType);
+  if(dashboardFavFilter === 'favorite') titleParts.push('常用');
+  else if(dashboardFavFilter === 'unfavorite') titleParts.push('不常用');
+  titleEl.textContent = titleParts.length ? `帳戶一覽 · ${titleParts.join(' · ')}` : '帳戶一覽';
+  resetBtn.style.display = dashboardFilterType ? '' : 'none';
+
+  if(!state.accounts.length){
+    list.innerHTML = `<div class="empty">尚無帳戶，請在上方「新增 / 編輯帳戶」新增。</div>`;
+  } else if(!accountsToShow.length){
+    list.innerHTML = `<div class="empty">${dashboardFavFilter === 'favorite' ? '目前沒有常用帳戶。' : dashboardFavFilter === 'unfavorite' ? '目前沒有不常用的帳戶。' : '這個類型尚無帳戶。'}</div>`;
+  } else {
+    const sortedAccounts = [...accountsToShow].sort((a,b) => (Number(b.balance)||0) - (Number(a.balance)||0));
+    list.innerHTML = sortedAccounts.map(a => {
+      const rate = a.interestRate ? Number(a.interestRate) : 0;
+      const cap = a.interestCap ? Number(a.interestCap) : 0;
+      const normalRate = a.normalRate ? Number(a.normalRate) : 0;
+      const overCap = cap > 0 && (Number(a.balance)||0) > cap;
+      const est = rate ? estimateAccountNextInterest_(a) : null;
+      const freqLabel = accountInterestFreqLabel_(a);
+      const favorite = isAccountFavorite(a);
+      const checked = selectedAccountIds.has(a.id);
+      return `<div class="item-card">
+        <div class="acc-card-cols">
+          <div class="acc-col-left">
+            <div class="item-top">
+              <div style="display:flex; gap:8px; align-items:flex-start;">
+                <input type="checkbox" class="acc-select-cb" data-id="${a.id}" ${checked ? 'checked' : ''} style="margin-top:4px;">
+                <div>
+                  <div class="item-name">${a.name}</div>
+                  <span class="badge">${a.type}</span>
+                  ${favorite ? '' : '<span class="badge">不常用</span>'}
+                  ${a.note ? `<div class="item-note">${a.note}</div>` : ''}
+                </div>
+              </div>
+              <div>
+                <div class="item-value">$${fmt(a.balance)}</div>
+              </div>
+            </div>
+            ${rate ? `<div class="item-meta">
+              <span>年利率 <b>${rate}%</b>${cap ? `（上限 $${fmt(cap)}）` : ''}</span>
+              <span>撥息週期 <b>${freqLabel}</b></span>
+              ${overCap ? `<span>超額部分利率 <b>${normalRate}%</b></span>` : ''}
+              <span>估算下期利息 <b>$${fmt(est)}</b></span>
+            </div>` : ''}
+            <div class="item-actions">
+              <button class="small" onclick="toggleAccountFavorite('${a.id}')">${favorite ? '移出常用' : '加入常用'}</button>
+              <button class="small" onclick="editAccount('${a.id}')">編輯</button>
+              <button class="small danger" onclick="deleteAccount('${a.id}')">刪除</button>
+            </div>
+          </div>
+          <div class="acc-col-right">
+            <div class="acc-col-right-title">本月使用這個帳戶的記帳</div>
+            ${renderAccMonthTxHtml_(a)}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    $$('#dashboardAccountsList .acc-select-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.id;
+        if(cb.checked) selectedAccountIds.add(id); else selectedAccountIds.delete(id);
+        updateAccBulkBar(accountsToShow);
+      });
+    });
+  }
+  updateAccBulkBar(accountsToShow);
+}
+
+// ---------- 帳戶一覽：勾選多筆後一次「移入常用／移出常用」 ----------
+// 用 Set 記住目前勾選了哪些帳戶 id，切換篩選類型或重新整理清單後仍保留勾選狀態，
+// 直到使用者執行完批次動作或手動取消勾選。
+let selectedAccountIds = new Set();
+function updateAccBulkBar(accountsToShow){
+  const countEl = $('#accBulkCount');
+  if(countEl) countEl.textContent = selectedAccountIds.size ? `已勾選 ${selectedAccountIds.size} 個帳戶` : '尚未勾選帳戶';
+  const selectAllCb = $('#accSelectAll');
+  if(selectAllCb){
+    const shownIds = accountsToShow.map(a => a.id);
+    selectAllCb.checked = shownIds.length > 0 && shownIds.every(id => selectedAccountIds.has(id));
+  }
+}
+$('#accSelectAll').addEventListener('change', () => {
+  const accountsToShow = visibleDashboardAccounts_();
+  if($('#accSelectAll').checked) accountsToShow.forEach(a => selectedAccountIds.add(a.id));
+  else accountsToShow.forEach(a => selectedAccountIds.delete(a.id));
+  renderAccountsList();
+});
+// 批次把勾選的帳戶都設成「常用」或「不常用」，只有真的需要改變狀態的帳戶才會呼叫 API，
+// 已經是目標狀態的帳戶會直接略過，減少不必要的請求。
+async function bulkSetAccountFavorite_(favorite){
+  const ids = [...selectedAccountIds].filter(id => state.accounts.some(a => a.id === id));
+  if(!ids.length){ alert('請先在下方帳戶清單勾選要調整的帳戶。'); return; }
+  const targets = ids.map(id => state.accounts.find(a => a.id === id)).filter(a => isAccountFavorite(a) !== favorite);
+  if(!targets.length){ alert(`勾選的帳戶已經都是「${favorite ? '常用' : '不常用'}」了。`); return; }
+  if(!confirm(`確定將勾選的 ${targets.length} 個帳戶${favorite ? '移入常用' : '移出常用'}嗎？`)) return;
+  try{
+    await runBusy(async () => {
+      for(const a of targets){
+        const saved = await apiPost('update','accounts',{ ...a, favorite });
+        upsertLocal('accounts', saved);
+      }
+      renderAll();
+    }, '更新中…');
+    selectedAccountIds.clear();
+    renderAccountsList();
+  }catch(err){ alert('更新失敗：' + err.message); }
+}
+$('#accBulkFavorite').addEventListener('click', () => bulkSetAccountFavorite_(true));
+$('#accBulkUnfavorite').addEventListener('click', () => bulkSetAccountFavorite_(false));
+
+// 各表單的帳戶下拉選單（記帳、轉帳、利息、模板共用）
+// 記帳/模板/共同帳本結算的帳戶選單，預設只列出打勾「常用」的帳戶（favoriteAccounts）；
+// 如果全部帳戶都沒打勾常用（或還沒升級過這個功能），就退回顯示全部帳戶，
+// 避免選單突然變空、沒帳戶可選。另外如果「目前這個選單本來選著的值」剛好是
+// 一個不常用的帳戶（例如在編輯一筆用了舊帳戶的紀錄），會把它額外補進選項，
+// 讓那筆紀錄看到的還是原本的帳戶，不會被選單悄悄換掉。
+function pickerAccountList_(favoriteAccounts, orderedAccounts, currentValue){
+  const base = favoriteAccounts.length ? favoriteAccounts : orderedAccounts;
+  if(currentValue && !base.some(a => a.id === currentValue)){
+    const extra = orderedAccounts.find(a => a.id === currentValue);
+    if(extra) return [...base, extra];
+  }
+  return base;
+}
+// 記帳表單「轉帳」的帳戶選單（從／到）：轉帳通常會轉到不常用的帳戶（例如把錢存進
+// 平常不太記帳的銀行帳戶），如果沿用「常用支付工具」篩選，會導致那個銀行帳戶根本
+// 選不到。所以轉帳的兩個選單一律列出「全部帳戶」，不受常用篩選影響；
+// 非轉帳（一般記帳的帳戶欄）則維持原本只顯示常用帳戶的邏輯。
+// 「記一筆利息／股息」快速入口用的旗標：點下那顆按鈕後設為 true，讓記帳表單
+// 的帳戶選單暫時改列出「利息／股息適用帳戶」（銀行、投資），而不是平常的常用
+// 支付工具；一旦使用者手動切換回支出／收入／轉帳的一般記帳流程，或表單被清空、
+// 送出，就會重設回 false，恢復成平常的帳戶選單邏輯。
+let trQuickInterestMode = false;
+// 利息／股息只會發生在「銀行」「投資」類型帳戶；餘額太小（<=100）的帳戶通常
+// 不會真的有利息/配息，先篩掉避免選單徒增選擇困難。如果目前選單本來選著的值
+// 剛好不符合條件（例如編輯當下餘額已降到 100 以下），呼叫端會用 pickerAccountList_
+// 額外把它補進選項，不會悄悄把原本選的帳戶換掉。
+function interestEligibleAccounts_(orderedAccounts){
+  return orderedAccounts.filter(a => (a.type === '銀行' || a.type === '投資') && (Number(a.balance)||0) > 100);
+}
+function renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor){
+  const isTransfer = $('#trType').value === 'transfer';
+  const trBase = isTransfer ? orderedAccounts : (trQuickInterestMode ? interestEligibleAccounts_(orderedAccounts) : favoriteAccounts);
+
+  const trSel = $('#trAccount');
+  const keepVal = trSel.value;
+  trSel.innerHTML = `<option value="">不指定</option>` + optionsHtmlFor(pickerAccountList_(trBase, orderedAccounts, keepVal));
+  trSel.value = keepVal; // 新增記帳的帳戶預設維持「不指定」，不自動帶入現金帳戶
+
+  // 記帳表單「轉帳」類型的「到（轉入帳戶）」選單：一樣列出全部帳戶（全部銀行），不只常用銀行
+  const trToSel = $('#trToAccount');
+  if(trToSel){
+    const keepTo = trToSel.value;
+    trToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtmlFor(pickerAccountList_(trBase, orderedAccounts, keepTo));
+    trToSel.value = keepTo;
+  }
+
+  // 模板管理表單同理：模板類型是「轉帳」時，帳戶選單（從／到）也要列出全部帳戶，
+  // 不受常用篩選影響，邏輯跟上面記帳表單的轉帳完全一樣。
+  const tplSel = $('#tplAccount');
+  if(tplSel){
+    const tplIsTransfer = $('#tplType') && $('#tplType').value === 'transfer';
+    const tplBase = tplIsTransfer ? orderedAccounts : favoriteAccounts;
+    const keepTplVal = tplSel.value;
+    tplSel.innerHTML = `<option value="">${tplIsTransfer ? '請選擇' : '不指定'}</option>` + optionsHtmlFor(pickerAccountList_(tplBase, orderedAccounts, keepTplVal));
+    tplSel.value = keepTplVal;
+
+    const tplToSel = $('#tplToAccount');
+    if(tplToSel){
+      const keepTplTo = tplToSel.value;
+      tplToSel.innerHTML = `<option value="">請選擇</option>` + optionsHtmlFor(pickerAccountList_(tplBase, orderedAccounts, keepTplTo));
+      tplToSel.value = keepTplTo;
+    }
+  }
+}
+function renderAccountSelects(){
+  const orderedAccounts = sortAccountsForSelect(state.accounts);
+  const favoriteAccounts = orderedAccounts.filter(isAccountFavorite);
+  const optionsHtmlFor = list => list.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+
+  // 模板管理表單的帳戶選單（從／到）：跟記帳表單共用同一套邏輯（見
+  // renderTransferAccountOptions_），一般模板只顯示常用支付工具，轉帳模板則列出全部帳戶。
+  renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
+
+  // 共同帳本「結算」用的轉帳帳戶選單：預設帶入現金帳戶，選了之後結算時
+  // 會自動把這筆結算金額計入該帳戶餘額，不用自己手動再調整
+  const ledgerSel = $('#ledgerSettleAccount');
+  if(ledgerSel){
+    const keepLedger = ledgerSel.value;
+    ledgerSel.innerHTML = `<option value="">不指定（只標記已結算，不更新帳戶餘額）</option>` + optionsHtmlFor(pickerAccountList_(favoriteAccounts, orderedAccounts, keepLedger));
+    ledgerSel.value = keepLedger;
+    if(!ledgerSel.value){
+      const cashId = defaultCashAccountId();
+      if(cashId) ledgerSel.value = cashId;
+    }
+  }
+}
+
+function renderLiabilities(){
+  const list = $('#liabilitiesList');
+  if(!state.liabilities.length){
+    list.innerHTML = `<div class="empty">尚無負債項目。</div>`;
+  } else {
+    list.innerHTML = state.liabilities.map(l => {
+      const paid = String(l.paid) === 'true';
+      return `<div class="item-card">
+        <div class="item-top">
+          <div>
+            <div class="item-name">${l.name}</div>
+            <span class="badge ${paid?'paid':'unpaid'}">${paid ? '已繳' : '未繳'}</span>
+            ${l.note ? `<div class="item-note">${l.note}</div>` : ''}
+          </div>
+          <div class="item-value">$${fmt(l.amount)}</div>
+        </div>
+        ${l.dueDate ? `<div class="item-meta"><span>期限 <b>${l.dueDate}</b></span></div>` : ''}
+        <div class="item-actions">
+          <button class="small" onclick="editLiability('${l.id}')">編輯</button>
+          <button class="small danger" onclick="deleteLiability('${l.id}')">刪除</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+// ---------- 記帳：日曆篩選 ----------
+// 有紀錄的日期下方會顯示一個點；預設顯示整個月，點某一天可以只看當天的記帳，
+// 再點一次同一天或勾選「顯示全部」可以取消篩選。手機上用點日期比切換月份輸入框好操作。
+let calYear, calMonth, calSelectedDate;
+(function initCalendarDefaults(){
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth(); // 0-11
+  calSelectedDate = null;
+})();
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+function renderCalendar(){
+  const wrap = $('#trCalendarWrap');
+  if(!wrap) return;
+
+  $('#calMonthLabel').textContent = `${calYear} 年 ${calMonth + 1} 月`;
+
+  const recordDates = new Set(state.transactions.map(t => t.date));
+  const first = new Date(calYear, calMonth, 1);
+  const startOffset = first.getDay(); // 0=週日
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  let cellsHtml = '';
+  for(let i = 0; i < startOffset; i++){
+    cellsHtml += `<div class="cal-day cal-day-empty"></div>`;
+  }
+  for(let d = 1; d <= daysInMonth; d++){
+    const dateStr = `${calYear}-${pad2(calMonth + 1)}-${pad2(d)}`;
+    const hasRecord = recordDates.has(dateStr);
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === calSelectedDate;
+    cellsHtml += `<button type="button" class="cal-day${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}" data-date="${dateStr}">
+      <span>${d}</span>
+      <span class="cal-dot" style="opacity:${hasRecord ? 1 : 0}"></span>
+    </button>`;
+  }
+  $('#calGrid').innerHTML = cellsHtml;
+}
+// 日曆翻頁如果翻到比目前已載入資料還早的月份（transactionsSince 之前），
+// 代表那個月份的記帳可能還沒載入，先補齊完整歷史再重新渲染，
+// 避免翻到舊月份卻誤以為「這個月都沒記帳」
+function needsFullHistoryFor(year, month){
+  if(state.transactionsFullyLoaded || !state.transactionsSince) return false;
+  const monthStr = `${year}-${pad2(month + 1)}`;
+  return monthStr < state.transactionsSince.slice(0, 7);
+}
+$('#trSearchInput').addEventListener('input', () => {
+  renderTransactions();
+});
+$('#trSearchClear').addEventListener('click', () => {
+  $('#trSearchInput').value = '';
+  renderTransactions();
+  $('#trSearchInput').focus();
+});
+$('#calGrid').addEventListener('click', e => {
+  const btn = e.target.closest('.cal-day[data-date]');
+  if(!btn) return;
+  const date = btn.dataset.date;
+  calSelectedDate = (calSelectedDate === date) ? null : date;
+  renderCalendar();
+  renderTransactions();
+});
+$('#calPrevBtn').addEventListener('click', () => {
+  calMonth--;
+  if(calMonth < 0){ calMonth = 11; calYear--; }
+  calSelectedDate = null;
+  renderCalendar();
+  renderTransactions();
+  if(needsFullHistoryFor(calYear, calMonth)) ensureFullTransactionsLoaded();
+});
+$('#calNextBtn').addEventListener('click', () => {
+  calMonth++;
+  if(calMonth > 11){ calMonth = 0; calYear++; }
+  calSelectedDate = null;
+  renderCalendar();
+  renderTransactions();
+  if(needsFullHistoryFor(calYear, calMonth)) ensureFullTransactionsLoaded();
+});
+
+// 記帳搜尋：比對名稱/類別/子類別/備註/日期/帳戶名稱/金額，不分大小寫。
+// 有輸入搜尋字串時會忽略日曆篩選（改成搜尋全部已載入的記帳），並且順便
+// 確保完整歷史都已經載入，這樣才搜得到 3 個月以前的舊紀錄。
+function transactionMatchesSearch_(t, term, byId){
+  const typeLabel = t.type === 'expense' ? '支出' : t.type === 'income' ? '收入' : t.type === 'transfer' ? '轉帳' : t.type === 'settlement' ? '結算' : '';
+  const accName = t.accountId ? (byId[t.accountId] || '') : '';
+  const toAccName = t.toAccountId ? (byId[t.toAccountId] || '') : '';
+  const haystack = [t.note, t.category, t.subcategory, t.date, accName, toAccName, typeLabel, t.amount]
+    .filter(v => v !== undefined && v !== null && v !== '')
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(term);
+}
+// ---------- 記帳頁面：月預算／本月支出／當日支出 ----------
+// 每月預算先寫死在這個常數，之後要調整金額直接改這裡的數字即可，
+// 不用去資料庫或設定頁另外維護。
+const MONTHLY_BUDGET = 10000;    // 每月預算
+function trExpenseOfDate_(dateStr){
+  // 跟月/年統計一致：不含轉帳、結算，也不含「代墊」（代墊是幫對方先出的錢，
+  // 不算自己真正的花費）；共同分攤的支出只算我自己該負擔的份額，不是全額。
+  return state.transactions
+    .filter(t => t.date === dateStr && t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME)
+    .reduce((s,t) => s + myExpenseShare_(t), 0);
+}
+function renderTrAvailAndBudget_(){
+  const heroEl = $('#trAvailHero');
+  if(!heroEl) return;
+
+  // 月預算：跟著日曆目前瀏覽的月份走（calYear / calMonth），
+  // 不是固定看今天所在的月份，切換月份時這裡的剩餘／超支金額也會跟著換算那個月。
+  const monthStr = `${calYear}-${pad2(calMonth + 1)}`;
+  const monthExpense = expenseTotalOf(monthStr);
+  const budgetLeft = MONTHLY_BUDGET - monthExpense;
+  const overBudget = budgetLeft < 0;
+  $('#trAvailLabel').textContent = `月預算 $${fmt(MONTHLY_BUDGET)}・${overBudget ? '已超支' : '剩餘'}`;
+  $('#trAvailValue').textContent = '$' + fmt(Math.abs(budgetLeft));
+  $('#trAvailValue').style.color = overBudget ? '#e3ad93' : '';
+
+  // 當日支出：有在日曆上點日期就看那天，沒點就預設看「今天」
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+  const dayStr = calSelectedDate || todayStr;
+  const dayExpense = trExpenseOfDate_(dayStr);
+  const dayLabel = calSelectedDate ? `${calSelectedDate} 支出` : '今天支出';
+
+  $('#trStatsGrid').innerHTML = `
+    <div class="summary-card">
+      <div class="label">本月支出（${calYear} 年 ${calMonth+1} 月）</div>
+      <div class="value" style="color:var(--red)">$${fmt(monthExpense)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">${dayLabel}</div>
+      <div class="value" style="color:var(--red)">$${fmt(dayExpense)}</div>
+    </div>
+  `;
+}
+// ---------- 記帳頁面：批次刪除 ----------
+// 開啟批次模式後，每筆記帳前面會出現勾選框；勾好之後按「刪除已選」一次刪掉，
+// 帳戶餘額會透過後端 batchDeleteTransactionsTx（內部逐筆呼叫跟單筆刪除一樣的
+// 還原邏輯）自動還原，不用自己重新調整帳戶。
+let trBatchMode = false;
+let trBatchSelected = new Set();
+function trBatchCheckboxHtml_(id){
+  const checked = trBatchSelected.has(id) ? 'checked' : '';
+  return `<label class="tr-batch-check-wrap"><input type="checkbox" class="tr-batch-check" data-id="${id}" ${checked}></label>`;
+}
+function updateTrBatchBarUI_(){
+  $('#transactionsList').classList.toggle('batch-mode', trBatchMode);
+  $('#trBatchToggleBtn').style.display = trBatchMode ? 'none' : '';
+  $('#trBatchControls').style.display = trBatchMode ? '' : 'none';
+  $('#trBatchCount').textContent = `已選 ${trBatchSelected.size} 筆`;
+}
+$('#trBatchToggleBtn').addEventListener('click', () => {
+  trBatchMode = true;
+  trBatchSelected.clear();
+  updateTrBatchBarUI_();
+  renderTransactions();
+});
+$('#trBatchCancelBtn').addEventListener('click', () => {
+  trBatchMode = false;
+  trBatchSelected.clear();
+  updateTrBatchBarUI_();
+  renderTransactions();
+});
+$('#trBatchSelectAllBtn').addEventListener('click', () => {
+  $$('#transactionsList .tr-batch-check').forEach(cb => { trBatchSelected.add(cb.dataset.id); cb.checked = true; });
+  updateTrBatchBarUI_();
+});
+$('#trBatchClearBtn').addEventListener('click', () => {
+  trBatchSelected.clear();
+  $$('#transactionsList .tr-batch-check').forEach(cb => { cb.checked = false; });
+  updateTrBatchBarUI_();
+});
+$('#transactionsList').addEventListener('change', e => {
+  const cb = e.target.closest('.tr-batch-check');
+  if(!cb) return;
+  if(cb.checked) trBatchSelected.add(cb.dataset.id); else trBatchSelected.delete(cb.dataset.id);
+  updateTrBatchBarUI_();
+});
+$('#trBatchDeleteBtn').addEventListener('click', async () => {
+  const ids = Array.from(trBatchSelected);
+  if(!ids.length){ alert('請先勾選要刪除的記帳。'); return; }
+  if(!confirm(`確定刪除這 ${ids.length} 筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。`)) return;
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('batchDeleteTransactionsTx','transactions',{ ids });
+      (result.ids || ids).forEach(id => removeLocal('transactions', id));
+      (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      trBatchMode = false;
+      trBatchSelected.clear();
+      updateTrBatchBarUI_();
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('批次刪除失敗：' + err.message); }
+});
+
+function renderTransactions(){
+  renderTrAvailAndBudget_();
+  renderCalendar();
+  const list = $('#transactionsList');
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  const rawSearch = ($('#trSearchInput').value || '').trim();
+  const searchTerm = rawSearch.toLowerCase();
+  const searching = searchTerm.length > 0;
+  $('#trCalendarWrap').style.display = searching ? 'none' : '';
+  $('#trSearchClear').style.display = searching ? '' : 'none';
+
+  let rows;
+  let emptyMsg;
+  if(searching){
+    if(!state.transactionsFullyLoaded) ensureFullTransactionsLoaded();
+    rows = state.transactions.filter(t => transactionMatchesSearch_(t, searchTerm, byId));
+    emptyMsg = state.transactionsFullyLoaded
+      ? `找不到符合「${escapeHtml(rawSearch)}」的記帳紀錄。`
+      : `搜尋中，正在補齊完整記帳歷史…`;
+  } else if(calSelectedDate){
+    rows = state.transactions.filter(t => t.date === calSelectedDate);
+    emptyMsg = '這天尚無記帳紀錄。';
+  } else {
+    const monthStr = `${calYear}-${pad2(calMonth + 1)}`;
+    rows = state.transactions.filter(t => (t.date || '').startsWith(monthStr));
+    emptyMsg = '這個月尚無記帳紀錄。';
+  }
+  rows = [...rows].sort((a,b) => (a.date < b.date ? 1 : -1));
+
+  if(!rows.length){
+    list.innerHTML = `<div class="empty">${emptyMsg}</div>`;
+    return;
+  }
+  list.innerHTML = rows.map(t => {
+    const catLabel = `${t.category || '其他'}${t.subcategory ? ' · ' + t.subcategory : ''}`;
+    if(t.type === 'transfer'){
+      const fromName = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '（未指定）';
+      const toName = t.toAccountId ? (byId[t.toAccountId] || '（帳戶已刪除）') : '（未指定）';
+      const transferLabel = `<span class="badge">轉帳</span> ${fromName} → ${toName}`;
+      const primary = t.note ? t.note : transferLabel;
+      const metaParts = [t.date];
+      if(t.note) metaParts.push(transferLabel);
+      return `<div class="item-card" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
+        ${trBatchCheckboxHtml_(t.id)}
+        <div class="item-top">
+          <div>
+            <div class="item-name">${primary}</div>
+            <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
+          </div>
+          <div class="item-value">$${fmt(t.amount)}</div>
+        </div>
+        <div class="item-actions">
+          <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
+          <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+        </div>
+      </div>`;
+    }
+    if(t.type === 'settlement'){
+      // 共同帳本「結算」自動產生的轉帳紀錄：不算收支，也不能用一般記帳表單編輯
+      // （payer 'partner' = 對方轉給你、帳戶餘額增加；'me' = 你轉給對方、餘額減少）
+      const accName = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '（未指定帳戶）';
+      const isIn = t.payer === 'partner';
+      const directionLabel = isIn ? '對方轉入' : '轉給對方';
+      const primary = t.note || '共同帳本結算';
+      const metaParts = [t.date, `<span class="badge">結算</span> ${directionLabel} · ${accName}`];
+      return `<div class="item-card">
+        ${trBatchCheckboxHtml_(t.id)}
+        <div class="item-top">
+          <div>
+            <div class="item-name">${primary}</div>
+            <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
+          </div>
+          <div class="item-value ${isIn ? 'income' : 'expense'}">${isIn ? '+' : '-'}$${fmt(t.amount)}</div>
+        </div>
+        <div class="item-actions">
+          <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+        </div>
+      </div>`;
+    }
+    const isExpense = t.type === 'expense';
+    const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '';
+    const primary = t.note ? t.note : catLabel;
+    const metaParts = [t.date];
+    if(t.note) metaParts.push(catLabel);
+    if(acc) metaParts.push(acc);
+    // 共同帳本項目：
+    //   全額代墊且是「我先付」→ 整筆其實是對方的花費，不是我自己的支出，
+    //   整張卡片用灰階顯示，數字前也不加 +/- 符號（不計入我的收支）。
+    //   平分（split）→ 這筆錢一半是我的、一半是對方的，除了顯示原始金額，
+    //   另外標出我自己實際要負擔的那一份（myExpenseShare_）。
+    const isPureAdvance = isExpense && t.splitMode === 'advance' && t.payer !== 'partner';
+    const isSplitShare = isExpense && t.splitMode === 'split';
+    const shareNote = isSplitShare
+      ? `<div class="item-share-note">我的部分：<b>$${fmt(myExpenseShare_(t))}</b></div>`
+      : '';
+    const valueClass = isPureAdvance ? '' : (isExpense ? 'expense' : 'income');
+    const sign = isPureAdvance ? '' : (isExpense ? '-' : '+');
+    return `<div class="item-card ${isPureAdvance ? 'advance-item' : ''}" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
+      ${trBatchCheckboxHtml_(t.id)}
+      <div class="item-top">
+        <div>
+          <div class="item-name">${primary}</div>
+          <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
+          ${shareNote}
+        </div>
+        <div class="item-value ${valueClass}">${sign}$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---- 主類別 / 子類別選單共用邏輯：兩個特殊選項讓使用者不用跳去「類別設定」，
+// 記帳（或模板）當下就能直接新增主類別／子類別 ----
+const CAT_ADD_MAIN = '__add_main__';
+const CAT_ADD_SUB = '__add_sub__';
+function populateCategorySelect_(selEl, names, selected){
+  selEl.innerHTML = names.map(c => `<option value="${c}">${c}</option>`).join('') +
+    `<option value="${CAT_ADD_MAIN}" class="cat-add-option">＋ 新增主類別…</option>`;
+  const value = (selected && names.includes(selected)) ? selected : (names[0] || '');
+  selEl.value = value;
+  selEl.dataset.prev = value;
+  return value;
+}
+function populateSubcategorySelect_(selEl, subs, selectedSub){
+  selEl.innerHTML = `<option value="">不指定</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('') +
+    `<option value="${CAT_ADD_SUB}" class="cat-add-option">＋ 新增子類別…</option>`;
+  const value = (selectedSub && subs.includes(selectedSub)) ? selectedSub : '';
+  selEl.value = value;
+  selEl.dataset.prev = value;
+  return value;
+}
+// 把「主類別／子類別新增」的選單邏輯綁到一組選單上（記帳表單、模板表單都會用到）
+// 注意：addMainCategory / addSubCategory 都是 async（要先呼叫後端 API 成功後，
+// 才會把新項目加進 state.categories 裡），所以這裡一定要 await 完再重畫選單
+// (populateMainFn / populateSubFn)，不然選單會在新項目還沒真的存進 state 之前
+// 就重畫，畫出來的清單看不到剛剛新增的那個，要重新整理頁面才會出現。
+function bindInlineCategoryCreation_(mainSel, subSel, typeGetter, populateMainFn, populateSubFn){
+  mainSel.addEventListener('change', async () => {
+    const type = typeGetter();
+    if(mainSel.value === CAT_ADD_MAIN){
+      const name = (prompt('請輸入新的主類別名稱：') || '').trim();
+      if(name){
+        try{
+          if(!getCategoryNames(type).includes(name)) await runBusy(() => addMainCategory(type, name), '新增中…');
+          populateMainFn(type, name);
+        } catch(err){
+          alert('新增主類別失敗：' + (err && err.message ? err.message : err));
+          mainSel.value = mainSel.dataset.prev || '';
+        }
+      } else {
+        mainSel.value = mainSel.dataset.prev || '';
+      }
+      return;
+    }
+    mainSel.dataset.prev = mainSel.value;
+    populateSubFn(type, mainSel.value);
+  });
+  subSel.addEventListener('change', async () => {
+    const type = typeGetter();
+    const mainName = mainSel.value;
+    if(subSel.value === CAT_ADD_SUB){
+      const name = (prompt('請輸入新的子類別名稱：') || '').trim();
+      if(name){
+        try{
+          if(!getSubcategories(type, mainName).includes(name)) await runBusy(() => addSubCategory(type, mainName, name), '新增中…');
+          populateSubFn(type, mainName, name);
+        } catch(err){
+          alert('新增子類別失敗：' + (err && err.message ? err.message : err));
+          subSel.value = subSel.dataset.prev || '';
+        }
+      } else {
+        subSel.value = subSel.dataset.prev || '';
+      }
+      return;
+    }
+    subSel.dataset.prev = subSel.value;
+  });
+}
+
+function populateTrCategories(type, selected, selectedSub){
+  const value = populateCategorySelect_($('#trCategory'), getCategoryNames(type), selected);
+  populateTrSubcategories(type, value, selectedSub);
+}
+function populateTrSubcategories(type, mainName, selectedSub){
+  populateSubcategorySelect_($('#trSubcategory'), getSubcategories(type, mainName), selectedSub);
+}
+bindInlineCategoryCreation_($('#trCategory'), $('#trSubcategory'), () => $('#trType').value, populateTrCategories, populateTrSubcategories);
+// 金額直接輸入，不需要 +50/+100 之類的快速加值按鈕；
+// 另外數字輸入框在滑鼠停留時用滾輪很容易不小心改動金額，這裡讓輸入框
+// 在滾輪事件時直接失焦，避免滾動網頁時誤觸改變數字。
+$('#trAmount').addEventListener('wheel', () => { $('#trAmount').blur(); }, { passive:true });
+$('#tplAmount').addEventListener('wheel', () => { $('#tplAmount').blur(); }, { passive:true });
+
+// 「全額代墊」只有在「我先付」的情況下，才代表整筆其實是對方的花費
+// （我幫對方代墊，不算我自己的支出分類，所以主類別不用選、直接統一存成
+// 「代墊」）。如果是「對方先付」，全額代墊代表整筆其實是「我的」花費，
+// 只是對方先幫我出錢而已——這筆錢本來就要記在我自己的類別下（餐飲/交通...），
+// 所以這種情況不應該強制歸類成「代墊」，要讓使用者自己選類別。
+const ADVANCE_CATEGORY_NAME = '代墊';
+// 共同帳本的支出，不管誰付款，統計「我的花費」時都只該算我實際要負擔的那一份：
+//   personal 個人：全額都是我的
+//   split    平分：不管誰先付，我只要負擔一半
+//   advance  全額代墊：我先付 → 整筆其實是對方的，我的份額是 0（這種情況本來就會被存成
+//                      「代墊」類別，上層通常已經用 category !== ADVANCE_CATEGORY_NAME 濾掉了）
+//                      對方先付 → 整筆其實是我的，我的份額是全額
+function myExpenseShare_(t){
+  const amt = Number(t.amount) || 0;
+  if(!t.splitMode || t.splitMode === 'personal') return amt;
+  if(t.splitMode === 'split') return amt / 2;
+  if(t.splitMode === 'advance') return t.payer === 'partner' ? amt : 0;
+  return amt;
+}
+function isAdvanceMode_(){
+  return $('#trType').value !== 'transfer' && $('#trShared').checked && $('#trSplitMode').value === 'advance' && $('#trPayer').value !== 'partner';
+}
+function syncCatRowVisibility(){
+  const advance = isAdvanceMode_();
+  // 「利息／股息」快速入帳模式下類別已經固定好了（見 trQuickIncomeCategory），
+  // 不用讓使用者自己選主／子類別，所以這裡也一併隱藏。
+  $('#trCatRow').style.display = ($('#trType').value === 'transfer' || advance || trQuickInterestMode) ? 'none' : '';
+  const hint = $('#trAdvanceHint');
+  if(hint) hint.style.display = advance ? '' : 'none';
+  const quickHint = $('#trQuickIncomeHint');
+  if(quickHint){
+    quickHint.style.display = trQuickInterestMode ? '' : 'none';
+    if(trQuickInterestMode) $('#trQuickIncomeHintName').textContent = trQuickIncomeCategory;
+  }
+}
+function setTrType(type, selectedCategory, selectedSub){
+  $('#trType').value = type;
+  $$('#trForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  const isTransfer = type === 'transfer';
+  $('#trCatRow').style.display = isTransfer ? 'none' : '';
+  $('#trSharedRow').style.display = isTransfer ? 'none' : '';
+  $('#trTransferToWrap').style.display = isTransfer ? '' : 'none';
+  $('#trAccountLabel').textContent = isTransfer ? '從（轉出帳戶）' : '帳戶（選填，會自動增減餘額）';
+  $('#trAccount').required = isTransfer;
+  $('#trToAccount').required = isTransfer;
+  // 切換「轉帳」與其他類型時，重新整理帳戶選單：轉帳要看得到全部帳戶（全部銀行），
+  // 其他類型則維持只顯示常用支付工具。
+  const orderedAccounts = sortAccountsForSelect(state.accounts);
+  const favoriteAccounts = orderedAccounts.filter(isAccountFavorite);
+  const optionsHtmlFor = list => list.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+  renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
+  if(isTransfer){
+    $('#trShared').checked = false;
+    $('#trLedgerFields').style.display = 'none';
+  } else {
+    $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
+    populateTrCategories(type, selectedCategory, selectedSub);
+  }
+  syncCatRowVisibility();
+}
+
+// ---------- 記帳統計分析 ----------
+let statsMode = 'month'; // 'month' | 'year' | 'category'
+
+function currentStatsPeriod(){
+  return statsMode === 'month' ? $('#statsMonthInput').value : $('#statsYearInput').value;
+}
+
+function transactionsInPeriod(period){
+  if(!period) return [];
+  return state.transactions.filter(t => (t.date || '').startsWith(period));
+}
+
+function breakdownByCategory(rows, type){
+  const map = {};
+  let total = 0;
+  rows.filter(t => t.type === type).forEach(t => {
+    const amt = Number(t.amount) || 0;
+    const cat = t.category || '其他';
+    map[cat] = (map[cat] || 0) + amt;
+    total += amt;
+  });
+  return { total, items: Object.entries(map).sort((a,b) => b[1]-a[1]) };
+}
+
+function renderBarList(container, items, total, cssClass){
+  if(!items.length){
+    container.innerHTML = `<div class="empty">這段期間沒有資料。</div>`;
+    return;
+  }
+  container.innerHTML = items.map(([label, val]) => {
+    const pct = total ? Math.round(val/total*100) : 0;
+    return `<div class="stat-bar-row">
+      <div class="stat-bar-label">${label}</div>
+      <div class="stat-bar-track"><div class="stat-bar-fill ${cssClass}" style="width:${pct}%"></div></div>
+      <div class="stat-bar-value">$${fmt(val)} (${pct}%)</div>
+    </div>`;
+  }).join('');
+}
+
+function populateStatsYearOptions(){
+  const years = new Set(state.transactions.map(t => (t.date||'').slice(0,4)).filter(Boolean));
+  const thisYear = String(new Date().getFullYear());
+  years.add(thisYear);
+  const sel = $('#statsYearInput');
+  const keep = sel.value || thisYear;
+  years.add(keep); // 保留目前導覽到的年份，就算該年還沒有資料也不會被重置
+  const sorted = Array.from(years).sort((a,b) => b.localeCompare(a));
+  sel.innerHTML = sorted.map(y => `<option value="${y}">${y} 年</option>`).join('');
+  sel.value = keep;
+}
+
+// 上一期／下一期：月模式跨月（含跨年），年模式直接年份 +-1
+function shiftStatsPeriod(delta){
+  if(statsMode === 'month'){
+    const val = $('#statsMonthInput').value;
+    if(!val) return;
+    const [y, m] = val.split('-').map(Number);
+    const d = new Date(y, (m - 1) + delta, 1);
+    $('#statsMonthInput').value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  } else {
+    const sel = $('#statsYearInput');
+    const year = (parseInt(sel.value, 10) || new Date().getFullYear()) + delta;
+    sel.value = String(year);
+  }
+  renderStats();
+}
+$('#statsPrevBtn').addEventListener('click', () => shiftStatsPeriod(-1));
+$('#statsNextBtn').addEventListener('click', () => shiftStatsPeriod(1));
+
+// 上一期的期間字串（月模式回傳上個月 YYYY-MM，年模式回傳去年 YYYY）
+function previousPeriodStr(period, mode){
+  if(mode === 'month'){
+    const [y, m] = period.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+  return String((parseInt(period, 10) || 0) - 1);
+}
+function expenseTotalOf(period){
+  // 共同分攤的支出只算我自己該負擔的份額（平分算一半、全額代墊看誰先付），不是整筆金額。
+  return transactionsInPeriod(period)
+    .filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME)
+    .reduce((s,t) => s + myExpenseShare_(t), 0);
+}
+// 所有「有資料」的期間（依模式為月或年），用來計算平均值
+function periodsWithData(mode){
+  const set = new Set();
+  state.transactions.forEach(t => {
+    const d = t.date || '';
+    if(!d) return;
+    set.add(mode === 'month' ? d.slice(0,7) : d.slice(0,4));
+  });
+  return Array.from(set);
+}
+function averageExpense(mode, excludePeriod){
+  const periods = periodsWithData(mode).filter(p => p !== excludePeriod);
+  if(!periods.length) return null;
+  const total = periods.reduce((s,p) => s + expenseTotalOf(p), 0);
+  return total / periods.length;
+}
+function renderCompareCard(label, current, base){
+  if(base === null || base === undefined){
+    return `<div class="compare-card"><div class="label">${label}</div><div class="value flat">尚無資料可比較</div></div>`;
+  }
+  if(Math.abs(current - base) < 0.005){
+    return `<div class="compare-card"><div class="label">${label}</div><div class="value flat">— 持平</div></div>`;
+  }
+  const diff = current - base;
+  const pct = base ? Math.abs(diff / base * 100) : 100;
+  const cls = diff > 0 ? 'up' : 'down';
+  const arrow = diff > 0 ? '▲' : '▼';
+  return `<div class="compare-card"><div class="label">${label}</div><div class="value ${cls}">${arrow} ${pct.toFixed(1)}%（$${fmt(Math.abs(diff))}）</div></div>`;
+}
+function renderCompare(period, expenseTotal){
+  const prevPeriod = previousPeriodStr(period, statsMode);
+  const prevTotal = expenseTotalOf(prevPeriod);
+  const avgTotal = averageExpense(statsMode, period);
+  const prevLabel = statsMode === 'month' ? '跟上個月比' : '跟去年比';
+  $('#statsCompareGrid').innerHTML =
+    renderCompareCard(prevLabel, expenseTotal, prevTotal) +
+    renderCompareCard('跟平均比', expenseTotal, avgTotal);
+}
+
+// ---------- 排行榜色標：同一色系深淺，取代原本的彩虹配色 ----------
+const RANK_COLORS = ['#c98a00','#4b6b43','#8a6a3f','#5c7a4f','#93503a','#7a5c3a','#3f5c3a','#a8763f'];
+
+// ---------- 支出去了哪裡：排行榜（金額＋佔比＋筆數／平均＋跟上期比，可點開看子類別） ----------
+function categoryStatsFor(rows, type){
+  const map = {};
+  let total = 0;
+  rows
+    // 全額代墊給對方的款項不算「支出」，排行榜／圓餅圖裡不會出現這個類別
+    .filter(t => t.type === type && !(type === 'expense' && t.category === ADVANCE_CATEGORY_NAME))
+    .forEach(t => {
+      const cat = t.category || '其他';
+      // 共同分攤的支出只算我自己該負擔的份額，不是整筆金額
+      const amt = type === 'expense' ? myExpenseShare_(t) : (Number(t.amount) || 0);
+      if(!map[cat]) map[cat] = { total: 0, count: 0, subs: {} };
+      map[cat].total += amt;
+      map[cat].count += 1;
+      const sub = (t.subcategory || '').trim() || '未分類';
+      map[cat].subs[sub] = (map[cat].subs[sub] || 0) + amt;
+      total += amt;
+    });
+  return { total, map };
+}
+// 目前展開顯示子類別明細的主類別（支出排行榜），null 代表全部收合
+let expandedRankCat_ = null;
+function renderCategoryRanking(container, cur, prev){
+  const entries = Object.entries(cur.map).sort((a,b) => b[1].total - a[1].total);
+  if(!entries.length){
+    expandedRankCat_ = null;
+    container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
+    return;
+  }
+  container.innerHTML = entries.map(([cat, info], i) => {
+    const pct = cur.total ? Math.round(info.total / cur.total * 100) : 0;
+    const avg = info.count ? info.total / info.count : 0;
+    const prevTotal = (prev.map[cat] && prev.map[cat].total) || 0;
+    const diff = info.total - prevTotal;
+    let moverHtml = '<span></span>';
+    if(prevTotal > 0.005 || Math.abs(diff) > 0.005){
+      if(Math.abs(diff) < 0.005){
+        moverHtml = `<span class="rank-mover flat">— 跟上期持平</span>`;
+      } else {
+        const cls = diff > 0 ? 'up' : 'down';
+        const arrow = diff > 0 ? '▲' : '▼';
+        moverHtml = `<span class="rank-mover ${cls}">${arrow} $${fmt(Math.abs(diff))} 較上期</span>`;
+      }
+    }
+    const isOpen = expandedRankCat_ === cat;
+    const subEntries = Object.entries(info.subs || {}).sort((a,b) => b[1] - a[1]);
+    const subHtml = isOpen
+      ? `<div class="rank-sub-list">${
+          subEntries.length
+            ? subEntries.map(([sub, amt]) => {
+                const subPct = info.total ? Math.round(amt / info.total * 100) : 0;
+                return `<div class="rank-sub-row"><span>${escapeHtml(sub)}</span><span>$${fmt(amt)}（${subPct}%）</span></div>`;
+              }).join('')
+            : `<div class="rank-sub-row empty">沒有子類別明細</div>`
+        }</div>`
+      : '';
+    return `<div class="rank-row${isOpen ? ' open' : ''}" data-rank-cat="${escapeHtml(cat)}">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-bar-wrap">
+        <div class="rank-top">
+          <span class="rank-label"><span class="rank-dot" style="background:${RANK_COLORS[i % RANK_COLORS.length]}"></span>${escapeHtml(cat)}<span class="rank-caret">▶</span></span>
+          <span class="rank-value">$${fmt(info.total)}（${pct}%）</span>
+        </div>
+        <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
+        <div class="rank-meta">
+          <span>${info.count} 筆 · 平均 $${fmt(avg)}</span>
+          ${moverHtml}
+        </div>
+        ${subHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+// 用來讓「點一列展開子類別」不用重新整個 renderStats() 就能重畫排行榜
+let lastCurExpStats_ = null;
+let lastPrevExpStats_ = null;
+$('#statsCategoryRank').addEventListener('click', e => {
+  const row = e.target.closest('.rank-row');
+  if(!row || !lastCurExpStats_) return;
+  const cat = row.dataset.rankCat;
+  expandedRankCat_ = (expandedRankCat_ === cat) ? null : cat;
+  renderCategoryRanking($('#statsCategoryRank'), lastCurExpStats_, lastPrevExpStats_);
+});
+
+// ---------- 固定支出 vs 彈性支出 ----------
+function renderFixedVsFlexible(container, rows){
+  const expenseRows = rows.filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME);
+  const total = expenseRows.reduce((s,t) => s + myExpenseShare_(t), 0);
+  if(!total){
+    container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
+    return;
+  }
+  const fixed = expenseRows.filter(t => t.recurringId).reduce((s,t) => s + myExpenseShare_(t), 0);
+  const flexible = total - fixed;
+  const parts = [
+    { label: '固定支出', val: fixed, cls: '' },
+    { label: '彈性支出', val: flexible, cls: 'flexible' }
+  ];
+  container.innerHTML = parts.map(p => {
+    const pct = total ? Math.round(p.val / total * 100) : 0;
+    return `<div class="stat-bar-row">
+      <div class="stat-bar-label" style="width:56px;">${p.label}</div>
+      <div class="stat-bar-track"><div class="stat-bar-fill ${p.cls}" style="width:${pct}%;"></div></div>
+      <div class="stat-bar-value">$${fmt(p.val)}（${pct}%）</div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- 每日消費節奏（月模式）----------
+function daysElapsedInPeriod(period, mode){
+  if(!period) return 0;
+  const now = new Date();
+  if(mode === 'month'){
+    const [y, m] = period.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const isCurrent = period === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    if(isCurrent) return now.getDate();
+    const isFuture = new Date(y, m - 1, 1) > now;
+    return isFuture ? 0 : daysInMonth;
+  }
+  const y = parseInt(period, 10);
+  if(!y) return 0;
+  const isCurrent = y === now.getFullYear();
+  if(isCurrent){
+    const start = new Date(y, 0, 1);
+    return Math.floor((now - start) / 86400000) + 1;
+  }
+  if(y > now.getFullYear()) return 0;
+  return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+}
+function totalDaysInPeriod(period, mode){
+  if(!period) return 0;
+  if(mode === 'month'){
+    const [y, m] = period.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  }
+  const y = parseInt(period, 10) || 0;
+  return ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+}
+function renderStats(){
+  populateStatsYearOptions();
+  if(!$('#statsMonthInput').value){
+    const now = new Date();
+    $('#statsMonthInput').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  const period = currentStatsPeriod();
+
+  // 「依類別」是獨立的一頁：只看這個年度每個類別的月度長條圖，不顯示月/年模式的其他統計區塊
+  if(statsMode === 'category'){
+    $('#statsGeneralSections').style.display = 'none';
+    $('#statsCategoryMonthSection').style.display = '';
+    renderCategoryMonthCharts(period);
+    return;
+  }
+  $('#statsGeneralSections').style.display = '';
+  $('#statsCategoryMonthSection').style.display = 'none';
+
+  const rows = transactionsInPeriod(period);
+  // 全額代墊給對方的款項（category === 代墊）雖然錢確實從帳戶流出，但那筆錢本來就不是
+  // 自己的花費，只是先幫對方付、之後會透過共同帳本結算拿回來，所以不算進「支出」統計。
+  // 另外，共同分攤的支出（splitMode === 'split'）不管誰先付，「支出」統計都只算我自己
+  // 該負擔的那一份，不是整筆金額，見 myExpenseShare_。
+  const isRealExpense_ = t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME;
+  const incomeTotal = rows.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+myExpenseShare_(t),0);
+  // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
+  // 沒有填帳戶的紀錄（多半是舊資料匯入，沒有對應到任何帳戶）只計入上面的收入／支出總額，
+  // 單純知道花了多少、賺了多少，但不會影響結餘這個數字。
+  const rowsWithAccount = rows.filter(t => t.accountId);
+  const incomeWithAccount = rowsWithAccount.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  // 結餘算的是帳戶裡實際增減的錢，代墊款項雖然不算「支出」，但錢確實從帳戶流出了，
+  // 所以這裡仍然要把它算進去，結餘才會跟帳戶餘額對得起來。
+  const expenseWithAccount = rowsWithAccount.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const net = incomeWithAccount - expenseWithAccount;
+
+  // ① 本期關鍵指標：收支結餘之外，加上儲蓄率、日均花費、（未過完的期間）預估總支出
+  const daysElapsed = Math.max(daysElapsedInPeriod(period, statsMode), 0);
+  const totalDaysN = totalDaysInPeriod(period, statsMode);
+  const dailyAvg = daysElapsed > 0 ? expenseTotal / daysElapsed : 0;
+  const savingsRate = incomeTotal > 0 ? (net / incomeTotal * 100) : null;
+  const isPartial = daysElapsed > 0 && daysElapsed < totalDaysN;
+  const projected = isPartial ? dailyAvg * totalDaysN : null;
+
+  $('#statsSummaryGrid').innerHTML = `
+    <div class="summary-card"><div class="label">收入</div><div class="value" style="color:var(--green)">$${fmt(incomeTotal)}</div></div>
+    <div class="summary-card"><div class="label">支出</div><div class="value" style="color:var(--red)">$${fmt(expenseTotal)}</div></div>
+    <div class="summary-card"><div class="label">結餘</div><div class="value">$${fmt(net)}</div><div style="font-size:10px;color:var(--ink-soft);margin-top:3px;">僅計入有填帳戶的紀錄</div></div>
+    <div class="summary-card"><div class="label">儲蓄率</div><div class="value">${savingsRate === null ? '—' : fmt(savingsRate) + '%'}</div></div>
+    <div class="summary-card"><div class="label">日均花費</div><div class="value">$${fmt(dailyAvg)}</div></div>
+    ${projected !== null ? `<div class="summary-card"><div class="label">預估${statsMode==='month'?'月底':'年底'}總支出</div><div class="value" style="color:var(--red)">$${fmt(projected)}</div></div>` : ''}
+  `;
+
+  renderCompare(period, expenseTotal);
+
+  // ② 支出去了哪裡：排行榜（跟上一期比較誰漲最多、誰降最多；每列可點開看子類別明細）
+  const prevPeriod = previousPeriodStr(period, statsMode);
+  const curExpStats = categoryStatsFor(rows, 'expense');
+  const prevExpStats = categoryStatsFor(transactionsInPeriod(prevPeriod), 'expense');
+  // 存起來給「點擊展開子類別」用：使用者點一列的時候只需要重畫排行榜本身，
+  // 不需要重新跑一次整個 renderStats（也不會不小心把使用者正在看的其他區塊重畫掉）。
+  lastCurExpStats_ = curExpStats;
+  lastPrevExpStats_ = prevExpStats;
+  renderCategoryRanking($('#statsCategoryRank'), curExpStats, prevExpStats);
+
+  // ③ 固定 vs 彈性支出
+  renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
+
+  // ④ 消費節奏：年模式顯示每月趨勢
+  const trendSection = $('#statsYearlyTrendSection');
+  if(statsMode === 'year' && period){
+    trendSection.style.display = '';
+    const monthlyExpense = Array(12).fill(0);
+    let maxVal = 0;
+    state.transactions.forEach(t => {
+      if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+      const d = t.date || '';
+      if(!d.startsWith(period)) return;
+      const m = parseInt(d.slice(5,7), 10) - 1;
+      if(m >= 0 && m < 12){
+        monthlyExpense[m] += myExpenseShare_(t);
+        maxVal = Math.max(maxVal, monthlyExpense[m]);
+      }
+    });
+    $('#statsYearlyTrend').innerHTML = monthlyExpense.map((val, i) => {
+      const pct = maxVal ? Math.round(val/maxVal*100) : 0;
+      return `<div class="stat-bar-row">
+        <div class="stat-bar-label">${i+1} 月</div>
+        <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
+        <div class="stat-bar-value">$${fmt(val)}</div>
+      </div>`;
+    }).join('');
+  } else {
+    trendSection.style.display = 'none';
+  }
+
+  // ⑤ 收入來源
+  const inc = breakdownByCategory(rows, 'income');
+  renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
+}
+
+// ---------- 各類別每月花費（依類別頁面）：用長條圖看每個主類別的月度變化 ----------
+let expandedCatChart_ = null; // 目前展開子類別明細的類別（依類別頁面），null 代表全部收合
+function fmtShort(n){
+  const num = Number(n) || 0;
+  if(!num) return '';
+  if(num >= 10000) return Math.round(num/1000) + 'k';
+  if(num >= 1000) return (num/1000).toFixed(1) + 'k';
+  return String(Math.round(num));
+}
+function renderCategoryMonthCharts(year){
+  const catMap = {}; // { 主類別: { arr:[12個月金額], subs:{子類別: 金額} } }
+  state.transactions.forEach(t => {
+    if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+    const d = t.date || '';
+    if(!d.startsWith(year)) return;
+    const m = parseInt(d.slice(5,7), 10) - 1;
+    if(m < 0 || m > 11) return;
+    const cat = t.category || '其他';
+    if(!catMap[cat]) catMap[cat] = { arr: Array(12).fill(0), subs: {} };
+    const amt = myExpenseShare_(t);
+    catMap[cat].arr[m] += amt;
+    const sub = (t.subcategory || '').trim() || '未分類';
+    catMap[cat].subs[sub] = (catMap[cat].subs[sub] || 0) + amt;
+  });
+  const container = $('#statsCategoryCharts');
+  const cats = Object.keys(catMap).map(cat => {
+    const { arr, subs } = catMap[cat];
+    const total = arr.reduce((s,v) => s+v, 0);
+    const max = Math.max(...arr);
+    return { cat, arr, subs, total, max };
+  }).sort((a,b) => b.total - a.total);
+  if(!cats.length){
+    expandedCatChart_ = null;
+    container.innerHTML = `<div class="empty">這個年度沒有支出資料。</div>`;
+    return;
+  }
+  const monthLabels = Array.from({length:12}, (_,i) => `<div class="cat-chart-month-label">${i+1}</div>`).join('');
+  container.innerHTML = cats.map(({cat, arr, subs, total, max}) => {
+    const cols = arr.map((v, i) => {
+      const pct = max ? Math.round(v / max * 100) : 0;
+      const height = v > 0 ? Math.max(pct, 4) : 0;
+      return `<div class="cat-chart-col">
+        <div class="cat-chart-val">${fmtShort(v)}</div>
+        <div class="cat-chart-bar-track"><div class="cat-chart-bar" style="height:${height}%" title="${i+1} 月：$${fmt(v)}"></div></div>
+      </div>`;
+    }).join('');
+    const isOpen = expandedCatChart_ === cat;
+    const subEntries = Object.entries(subs || {}).sort((a,b) => b[1] - a[1]);
+    const subHtml = isOpen
+      ? `<div class="rank-sub-list">${
+          subEntries.length
+            ? subEntries.map(([sub, amt]) => {
+                const subPct = total ? Math.round(amt / total * 100) : 0;
+                return `<div class="rank-sub-row"><span>${escapeHtml(sub)}</span><span>$${fmt(amt)}（${subPct}%）</span></div>`;
+              }).join('')
+            : `<div class="rank-sub-row empty">沒有子類別明細</div>`
+        }</div>`
+      : '';
+    return `<div class="cat-chart-card${isOpen ? ' open' : ''}" data-cat="${escapeHtml(cat)}">
+      <div class="cat-chart-head">
+        <span class="cat-chart-name">${escapeHtml(cat)}<span class="cat-chart-caret">▶</span></span>
+        <span class="cat-chart-total">$${fmt(total)}</span>
+      </div>
+      <div class="cat-chart-bars">${cols}</div>
+      <div class="cat-chart-months">${monthLabels}</div>
+      ${subHtml}
+    </div>`;
+  }).join('');
+}
+$('#statsCategoryCharts').addEventListener('click', e => {
+  const card = e.target.closest('.cat-chart-card');
+  if(!card) return;
+  const cat = card.dataset.cat;
+  expandedCatChart_ = (expandedCatChart_ === cat) ? null : cat;
+  renderCategoryMonthCharts(currentStatsPeriod());
+});
+
+// 浮動「＋記帳」按鈕：只有在「記帳」分頁且停留在「記帳」子分頁時才顯示，
+// 其他分頁/子分頁看不到，避免點了按鈕卻不知道跳去哪裡
+function updateTrFabVisibility(){
+  const transactionsActive = $('#view-transactions').classList.contains('active');
+  const recordsSubActive = $('#trSub-records').style.display !== 'none';
+  $('#trFab').style.display = (transactionsActive && recordsSubActive) ? 'flex' : 'none';
+}
+
+// 記帳頁：記帳（含轉帳）/ 共同帳本 / 統計分析 / 匯入 / 類別設定 子分頁切換
+const TR_SUBS = ['records','ledger','templates','stats','import','categories'];
+// 這幾個分頁需要看到完整記帳歷史（不只最近 3 個月）才會算得準：
+// 共同帳本可能有超過 3 個月還沒結算的舊項目、統計分析的「跟平均比」也需要更久以前的資料。
+const TR_SUBS_NEED_FULL_HISTORY = ['ledger', 'stats'];
+$('#trSubNav').addEventListener('click', async e => {
+  const btn = e.target.closest('button[data-sub]');
+  if(!btn) return;
+  $$('#trSubNav button').forEach(b => b.classList.toggle('active', b === btn));
+  TR_SUBS.forEach(sub => { $('#trSub-' + sub).style.display = (sub === btn.dataset.sub) ? '' : 'none'; });
+  currentTrSub = btn.dataset.sub;
+  if(TR_SUBS_NEED_FULL_HISTORY.includes(btn.dataset.sub) && !state.transactionsFullyLoaded){
+    await ensureFullTransactionsLoaded(); // 這裡面補齊資料後，如果目前這個分頁本來就是 dirty 的，會自己補畫一次
+  }
+  renderVisibleSection();
+  updateTrFabVisibility();
+});
+// 統計：月/年 模式切換
+$('#statsModeNav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-mode]');
+  if(!btn) return;
+  statsMode = btn.dataset.mode;
+  $$('#statsModeNav button').forEach(b => b.classList.toggle('active', b === btn));
+  $('#statsMonthInput').style.display = statsMode === 'month' ? '' : 'none';
+  $('#statsYearInput').style.display = statsMode === 'month' ? 'none' : '';
+  renderStats();
+});
+$('#statsMonthInput').addEventListener('change', renderStats);
+$('#statsYearInput').addEventListener('change', renderStats);
+
+// ---------- Accounts CRUD ----------
+// 帳戶是否為「常用支付工具」：沒有 favorite 欄位（舊資料）或值不是明確的
+// false／'false'，一律視為常用，這樣既有帳戶升級後不會突然從選單消失，
+// 使用者要自己取消勾選才會被收起來。
+function isAccountFavorite(a){
+  return a.favorite !== false && String(a.favorite) !== 'false';
+}
+// 只有「銀行」類型的帳戶才需要填利率/上限/撥息週期，其他類型（現金、行動支付、
+// 悠遊卡、投資）不會有利息，所以表單上把這幾個欄位整組藏起來，避免誤填。
+function syncAccBankFieldsVisibility(){
+  const isBank = $('#accType').value === '銀行';
+  $('#accBankFieldsWrap').style.display = isBank ? '' : 'none';
+}
+$('#accType').addEventListener('change', syncAccBankFieldsVisibility);
+syncAccBankFieldsVisibility(); // 頁面剛載入時，依目前類型（預設「現金」）先隱藏銀行專屬欄位
+$('#accountForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const isBank = $('#accType').value === '銀行';
+  const data = {
+    id: $('#accId').value || undefined,
+    name: $('#accName').value,
+    type: $('#accType').value,
+    balance: parseFloat($('#accBalance').value) || 0,
+    // 非銀行帳戶不會用到這些利息相關欄位，直接存空值，避免表單被隱藏後殘留舊資料
+    interestRate: (isBank && $('#accRate').value) ? parseFloat($('#accRate').value) : '',
+    interestCap: (isBank && $('#accCap').value) ? parseFloat($('#accCap').value) : '',
+    normalRate: (isBank && $('#accNormalRate').value) ? parseFloat($('#accNormalRate').value) : '',
+    interestFreqMonths: isBank ? (parseInt($('#accInterestFreq').value, 10) || 1) : '',
+    note: $('#accNote').value,
+    favorite: $('#accFavorite').checked
+  };
+  try{
+    await runBusy(async () => {
+      let saved;
+      if(data.id) saved = await apiPost('update','accounts',data);
+      else { delete data.id; saved = await apiPost('add','accounts',data); }
+      upsertLocal('accounts', saved);
+      resetAccountForm();
+      $('#accountDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#accCancel').addEventListener('click', resetAccountForm);
+function resetAccountForm(){
+  $('#accId').value=''; $('#accName').value=''; $('#accType').value='現金';
+  $('#accBalance').value=''; $('#accRate').value=''; $('#accCap').value=''; $('#accNormalRate').value=''; $('#accInterestFreq').value='1'; $('#accNote').value='';
+  $('#accFavorite').checked = true;
+  syncAccBankFieldsVisibility();
+}
+window.editAccount = id => {
+  const a = state.accounts.find(x => x.id === id);
+  if(!a) return;
+  $('#accId').value=a.id; $('#accName').value=a.name; $('#accType').value=a.type;
+  $('#accBalance').value=a.balance; $('#accRate').value=a.interestRate || '';
+  $('#accCap').value=a.interestCap || ''; $('#accNormalRate').value=a.normalRate || '';
+  $('#accInterestFreq').value = a.interestFreqMonths || '1';
+  $('#accNote').value=a.note || '';
+  $('#accFavorite').checked = isAccountFavorite(a);
+  syncAccBankFieldsVisibility();
+  $('#accountDetails').open = true;
+  $('#accountDetails').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteAccount = async id => {
+  if(!confirm('確定刪除這個帳戶？')) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','accounts',{id});
+      removeLocal('accounts', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+// 帳戶一覽列表上的「加入常用／移出常用」快速切換按鈕，不用整個打開編輯表單。
+window.toggleAccountFavorite = async id => {
+  const a = state.accounts.find(x => x.id === id);
+  if(!a) return;
+  const data = { ...a, favorite: !isAccountFavorite(a) };
+  try{
+    await runBusy(async () => {
+      const saved = await apiPost('update','accounts',data);
+      upsertLocal('accounts', saved);
+      renderAll();
+    }, '更新中…');
+  }catch(err){ alert('更新失敗：' + err.message); }
+};
+
+// ---------- 利息／股息快速入帳（整合進記帳，不再是獨立的一張表／一個分頁） ----------
+// 「利息／股息」本質上就是一筆收入記帳，跟其他收入走同一套 addTransactionTx_
+// 複合流程：新增時自動增加帳戶餘額，之後不管編輯金額還是刪除，餘額都會正確地
+// 一起調整／還原，也會自動計入收入統計、出現在記帳清單／日曆上，之後想改成
+// 銀行實際撥的金額，直接雙擊那筆紀錄修改即可，不需要另一套獨立的 CRUD。
+// 這裡的按鈕只是「幫使用者把記帳表單先設定好」的捷徑：切成收入、類別直接
+// 固定成「利息／股息收入」（不用使用者自己選主／子類別，主／子類別欄位也
+// 會跟著隱藏，見 syncCatRowVisibility），並把帳戶選單暫時換成銀行／投資
+// 帳戶。跟舊版「利息紀錄」頁一樣，一開啟就直接自動選好第一個符合資格的
+// 帳戶、並立刻帶入該帳戶的估算利息，不用使用者自己再點一次帳戶選單才會
+// 有反應。
+const QUICK_INCOME_CATEGORY_NAME = '利息／股息收入';
+// 目前快速入帳鎖定使用的類別名稱，只有在 trQuickInterestMode 為 true 時
+// 才會用到，儲存時會直接取代 #trCategory 的值。
+let trQuickIncomeCategory = '';
+function autoFillQuickInterestAmount_(force){
+  const acc = state.accounts.find(a => a.id === $('#trAccount').value);
+  if(!acc) return;
+  const est = estimateAccountNextInterest_(acc);
+  if(force || !$('#trAmount').value) $('#trAmount').value = est ? est.toFixed(2) : '';
+}
+function openQuickIncomeEntry_(categoryName){
+  resetTransactionForm();
+  trQuickInterestMode = true;
+  trQuickIncomeCategory = categoryName;
+  $('#trDetails').open = true;
+  setTrType('income'); // 主／子類別欄位在快速入帳模式下會隱藏，這裡不用真的選類別
+  syncCatRowVisibility(); // 立刻隱藏主／子類別欄位，因為類別已經固定好了
+  renderAccountSelects(); // 立刻把帳戶選單換成銀行／投資帳戶（見 trQuickInterestMode）
+  // 還原舊版「利息紀錄」頁的行為：自動選好第一個符合資格（銀行／投資、餘額>100）的
+  // 帳戶，不強迫使用者一定要自己手動點開下拉選單才看得到估算金額。
+  const firstEligible = interestEligibleAccounts_(sortAccountsForSelect(state.accounts))[0];
+  if(firstEligible){
+    $('#trAccount').value = firstEligible.id;
+    autoFillQuickInterestAmount_(true);
+  }
+  setTimeout(() => $('#trAmount').focus(), 150);
+}
+$('#trQuickInterestBtn').addEventListener('click', () => openQuickIncomeEntry_(QUICK_INCOME_CATEGORY_NAME));
+// 使用者手動換帳戶時，一律用新帳戶的估算值覆蓋金額（換帳戶代表要看新帳戶的估算，
+// 跟舊版 #intAccount 的 change 事件一樣一律強制覆蓋，不管金額欄位原本是不是空的），
+// 這樣「利息／股息」快速入帳的預估金額才會跟著下拉選單選的帳戶同步更新。
+$('#trAccount').addEventListener('change', () => {
+  if(!trQuickInterestMode) return;
+  autoFillQuickInterestAmount_(true);
+});
+
+// ---------- Liabilities CRUD ----------
+$('#liabilityForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = {
+    id: $('#liaId').value || undefined,
+    name: $('#liaName').value,
+    amount: parseFloat($('#liaAmount').value) || 0,
+    dueDate: $('#liaDue').value,
+    paid: $('#liaPaid').value,
+    note: $('#liaNote').value
+  };
+  try{
+    await runBusy(async () => {
+      let saved;
+      if(data.id) saved = await apiPost('update','liabilities',data);
+      else { delete data.id; saved = await apiPost('add','liabilities',data); }
+      upsertLocal('liabilities', saved);
+      resetLiabilityForm();
+      $('#liabilityDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#liaCancel').addEventListener('click', resetLiabilityForm);
+function resetLiabilityForm(){
+  $('#liaId').value=''; $('#liaName').value=''; $('#liaAmount').value='';
+  $('#liaDue').value=''; $('#liaPaid').value='false'; $('#liaNote').value='';
+}
+window.editLiability = id => {
+  const l = state.liabilities.find(x => x.id === id);
+  if(!l) return;
+  $('#liaId').value=l.id; $('#liaName').value=l.name; $('#liaAmount').value=l.amount;
+  $('#liaDue').value=l.dueDate || ''; $('#liaPaid').value=String(l.paid);
+  $('#liaNote').value=l.note || '';
+  $('#liabilityDetails').open = true;
+  $('#liabilityDetails').scrollIntoView({behavior:'smooth', block:'start'});
+};
+window.deleteLiability = async id => {
+  if(!confirm('確定刪除這個負債項目？')) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','liabilities',{id});
+      removeLocal('liabilities', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- Transactions (記帳) CRUD ----------
+(function initTrDefaults(){
+  const now = new Date();
+  $('#trDate').value = now.toISOString().slice(0,10);
+  populateTrCategories('expense');
+})();
+
+$$('#trForm .type-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => { trQuickInterestMode = false; trQuickIncomeCategory = ''; setTrType(btn.dataset.type); });
+});
+
+$('#trShared').addEventListener('change', () => {
+  $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
+  syncCatRowVisibility();
+});
+$('#trSplitMode').addEventListener('change', syncCatRowVisibility);
+$('#trPayer').addEventListener('change', syncCatRowVisibility);
+
+// 記帳新增/編輯/刪除都是「一次 exec 內同時處理記帳列 + 帳戶餘額」的複合動作（見 Code.gs 的
+// addTransactionTx / updateTransactionTx / deleteTransactionTx），比以前「新增記帳→更新帳戶
+// →重新整批下載」快非常多，也不用整批重抓資料。
+$('#trForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  // 「儲存並記下一筆」：由 submitter 判斷是哪個按鈕觸發送出，只有「新增」
+  // （trId 是空的）才適用批量記帳模式；編輯既有記帳時這顆按鈕會被隱藏。
+  const continueBatch = e.submitter && e.submitter.id === 'trSaveContinue';
+  const id = $('#trId').value || undefined;
+  const type = $('#trType').value;
+  const amount = parseFloat($('#trAmount').value) || 0;
+  const accountId = $('#trAccount').value;
+  let data;
+  if(type === 'transfer'){
+    const toAccountId = $('#trToAccount').value;
+    if(!accountId || !toAccountId){ alert('請選擇轉出與轉入帳戶。'); return; }
+    if(accountId === toAccountId){ alert('轉出與轉入帳戶不能是同一個。'); return; }
+    if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
+    data = {
+      id,
+      date: $('#trDate').value,
+      type: 'transfer',
+      category: '轉帳',
+      subcategory: '',
+      amount,
+      accountId,
+      toAccountId,
+      note: $('#trNote').value,
+      payer: 'me',
+      splitMode: 'personal',
+      settled: false
+    };
+  } else {
+    const shared = $('#trShared').checked;
+    const splitMode = shared ? $('#trSplitMode').value : 'personal';
+    const payer = shared ? $('#trPayer').value : 'me';
+    // 全額代墊只有在「我先付」時才代表整筆是對方的花費，才統一存成「代墊」；
+    // 「對方先付」代表整筆其實是我的花費，要保留使用者自己選的類別。
+    const isAdvance = splitMode === 'advance' && payer !== 'partner';
+    // 「利息／股息」快速入帳模式下，類別一律固定用 trQuickIncomeCategory
+    // （'利息收入' 或 '股息收入'），不採用（已隱藏的）主／子類別欄位的值。
+    const category = isAdvance ? ADVANCE_CATEGORY_NAME
+      : trQuickInterestMode ? trQuickIncomeCategory
+      : $('#trCategory').value;
+    const subcategory = (isAdvance || trQuickInterestMode) ? '' : $('#trSubcategory').value;
+    data = {
+      id,
+      date: $('#trDate').value,
+      type,
+      category,
+      subcategory,
+      amount,
+      accountId,
+      note: $('#trNote').value,
+      payer,
+      splitMode,
+      settled: false
+    };
+  }
+  try{
+    let duplicateCancelled = false;
+    await runBusy(async () => {
+      let result;
+      if(id){
+        result = await apiPost('updateTransactionTx','transactions',data);
+        if(result.duplicate){
+          if(!confirmDuplicateTransaction_(result.duplicate)){ duplicateCancelled = true; return; }
+          data.force = true;
+          result = await apiPost('updateTransactionTx','transactions',data);
+        }
+        upsertLocal('transactions', result.transaction);
+        (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      } else {
+        delete data.id;
+        result = await apiPost('addTransactionTx','transactions',data);
+        if(result.duplicate){
+          if(!confirmDuplicateTransaction_(result.duplicate)){ duplicateCancelled = true; return; }
+          data.force = true;
+          result = await apiPost('addTransactionTx','transactions',data);
+        }
+        upsertLocal('transactions', result.transaction);
+        // 轉帳一次會影響「轉出＋轉入」兩個帳戶，之前這裡只用 result.account（單一帳戶），
+        // 導致新增轉帳後畫面上只有其中一個帳戶的餘額會更新，另一個要重新整理才會同步。
+        // 改用 result.accounts（後端回傳的完整清單）逐一寫回本地狀態，兩個帳戶都會即時更新。
+        (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      }
+      if(duplicateCancelled) return;
+      if(continueBatch && !id){
+        // 批量記帳模式：保留日期／主類別／子類別／帳戶／共同帳本設定，
+        // 只清空名稱跟金額，表單留在打開狀態，馬上可以繼續打下一筆。
+        $('#trAmount').value = '';
+        $('#trNote').value = '';
+        $('#trFormTitle').textContent = '新增記帳（已儲存，繼續記下一筆）';
+        renderAll();
+        setTimeout(() => $('#trAmount').focus(), 50);
+      } else {
+        resetTransactionForm();
+        $('#trDetails').open = false;
+        renderAll();
+      }
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message); }
+});
+$('#trCancel').addEventListener('click', resetTransactionForm);
+
+// ---- 讓「記帳」編輯表單可以浮在其他子分頁上方使用 ----
+// trDetails 原本只存在於「記帳」子分頁（trSub-records）裡面，其他子分頁
+// （例如共同帳本）display:none 時會把它一起藏起來，所以之前只能先切分頁
+// 才看得到編輯表單。這裡記住它原本在 DOM 裡的位置，需要跨分頁編輯時暫時
+// 把它搬到 body 最後面（不受任何子分頁 display:none 影響），編輯完再搬回去。
+const trDetailsHome_ = { parent: null, nextSibling: null };
+(function rememberTrDetailsHome_(){
+  const el = $('#trDetails');
+  trDetailsHome_.parent = el.parentNode;
+  trDetailsHome_.nextSibling = el.nextSibling;
+})();
+function moveTrDetailsToOverlay_(){
+  const el = $('#trDetails');
+  if(el.parentNode !== document.body) document.body.appendChild(el);
+}
+function restoreTrDetailsHome_(){
+  const el = $('#trDetails');
+  if(trDetailsHome_.parent && el.parentNode !== trDetailsHome_.parent){
+    trDetailsHome_.parent.insertBefore(el, trDetailsHome_.nextSibling);
+  }
+}
+
+// ---- 記帳表單「點擊才跳出」：預設收合、只顯示紀錄清單，點「記帳」摘要列或
+// 右下角浮動按鈕才會以彈出視窗顯示表單；收合時自動清空、恢復成「新增」狀態 ----
+$('#trDetails').addEventListener('toggle', () => {
+  const open = $('#trDetails').open;
+  document.body.classList.toggle('tr-form-open', open);
+  $('#trDetails').classList.toggle('editing', open);
+  if(open){
+    // 新增記帳（非編輯既有紀錄）時，如果日曆上有點選日期，表單日期預設帶入
+    // 那一天；沒有點選日期（單純點「新增記帳」）才預設今天。
+    // 編輯既有紀錄時 trId 已先被填入，不會走到這裡覆蓋掉 editTransaction 設定的日期。
+    if(!$('#trId').value){
+      $('#trDate').value = calSelectedDate || new Date().toISOString().slice(0,10);
+    }
+    moveTrDetailsToOverlay_();
+    setTimeout(() => $('#trAmount').focus(), 150);
+  } else {
+    resetTransactionForm();
+  }
+});
+$('#trFab').addEventListener('click', () => {
+  if($('#trDetails').open){ $('#trAmount').focus(); return; }
+  $('#trDetails').open = true;
+});
+$('#trFormBackdrop').addEventListener('click', () => { $('#trDetails').open = false; });
+
+function resetTransactionForm(){
+  trQuickInterestMode = false; // 表單重置／關閉時一併取消利息快速入帳模式，帳戶選單才會恢復正常
+  trQuickIncomeCategory = '';
+  $('#trId').value = '';
+  $('#trDate').value = new Date().toISOString().slice(0,10);
+  $('#trAmount').value = '';
+  $('#trAccount').value = ''; // 新增記帳的帳戶預設為「不指定」，不自動帶入常用現金帳戶
+  $('#trToAccount').value = '';
+  $('#trNote').value = '';
+  $('#trShared').checked = false;
+  $('#trLedgerFields').style.display = 'none';
+  $('#trPayer').value = 'me';
+  $('#trSplitMode').value = 'split';
+  setTrType('expense');
+  $('#trFormTitle').textContent = '新增記帳';
+  $('#trSaveContinue').style.display = ''; // 新增模式才需要「儲存並記下一筆」
+  renderTrTemplateChips(); // 新增模式才顯示模板快速選擇（會依有沒有模板自動顯示/隱藏）
+  // 編輯表單存檔/取消後，一律搬回「記帳」分頁原本的位置
+  restoreTrDetailsHome_();
+}
+window.editTransaction = id => {
+  const t = state.transactions.find(x => x.id === id);
+  if(!t) return;
+  trQuickInterestMode = false; // 編輯既有記帳一律用一般帳戶選單，不受先前的利息快速入帳模式影響
+  trQuickIncomeCategory = '';
+  $('#trId').value = t.id;
+  $('#trDate').value = t.date;
+  $('#trAmount').value = t.amount;
+  if(t.type === 'transfer'){
+    setTrType('transfer');
+    $('#trAccount').value = t.accountId || '';
+    $('#trToAccount').value = t.toAccountId || '';
+  } else {
+    setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
+    $('#trAccount').value = t.accountId || '';
+    const shared = t.splitMode && t.splitMode !== 'personal';
+    $('#trShared').checked = shared;
+    $('#trLedgerFields').style.display = shared ? '' : 'none';
+    $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+    $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+    syncCatRowVisibility();
+  }
+  $('#trNote').value = t.note || '';
+  // 編輯時一律把表單搬到最上層、固定浮在畫面下方——不管目前在哪個子分頁、
+  // 不管是電腦還是手機，都不用捲動或切分頁
+  $('#trFormTitle').textContent = '編輯記帳';
+  $('#trSaveContinue').style.display = 'none'; // 編輯既有記帳時不適用批量連續新增
+  $('#trTemplateRow').style.display = 'none'; // 編輯既有記帳時不能再套用模板（會被誤認成新增）
+  moveTrDetailsToOverlay_();
+  $('#trDetails').open = true;
+};
+window.deleteTransaction = async id => {
+  if(!confirm('確定刪除這筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。')) return;
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('deleteTransactionTx','transactions',{id});
+      removeLocal('transactions', id);
+      (result.accounts || (result.account ? [result.account] : [])).forEach(acc => upsertLocal('accounts', acc));
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- 新增記帳表單：模板快速選擇 ----------
+// 「模板」清單就是 state.recurring（跟「模板管理」分頁共用同一份資料），這裡
+// 只負責在「新增記帳」表單最上面顯示一排可以點的模板按鈕，點下去直接把
+// 常用內容（類別、金額、帳戶、共同帳本設定…）帶入表單，日期維持原本表單
+// 上的值不動，使用者只要視情況調整日期、微調金額或名稱就能存檔。
+// 模板本身的新增／編輯／每月自動加入設定／刪除，一律在「模板管理」分頁處理，
+// 這裡的表單只做「套用」，不提供模板設定或存成模板的功能。
+function renderTrTemplateChips(){
+  const row = $('#trTemplateRow');
+  const chips = $('#trTemplateChips');
+  if(!row || !chips) return;
+  if(!state.recurring.length){
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+  chips.innerHTML = state.recurring.map(t =>
+    `<button type="button" class="tpl-chip" onclick="applyTemplateToTr('${t.id}')">${escapeHtml(t.name)}</button>`
+  ).join('');
+}
+
+// 點一下模板：一律當成「新增」（trId 清空），把模板存的內容帶入表單；
+// 沿用跟「編輯記帳」/共同帳本相同的一套顯示/隱藏邏輯，套用完直接聚焦金額
+// 欄位方便使用者微調金額後儲存，不會出現任何模板設定或刪除相關的按鈕。
+window.applyTemplateToTr = id => {
+  const t = state.recurring.find(x => x.id === id);
+  if(!t) return;
+  $('#trId').value = '';
+  const trType = t.type === 'income' ? 'income' : t.type === 'transfer' ? 'transfer' : 'expense';
+  setTrType(trType, t.category, t.subcategory);
+  $('#trAmount').value = t.amount || '';
+  $('#trAccount').value = t.accountId || '';
+  // 跟「模板」自動加入記帳時（runRecurringTemplates_）同一套規則：
+  // 優先用模板的備註，沒有的話用模板名稱當作這筆記帳的名稱。
+  $('#trNote').value = t.note || t.name || '';
+  if(trType === 'transfer'){
+    // 轉帳範本不是共同帳本項目，帶入「到（轉入帳戶）」即可
+    $('#trToAccount').value = t.toAccountId || '';
+    $('#trShared').checked = false;
+    $('#trLedgerFields').style.display = 'none';
+  } else {
+    const shared = recIsShared_(t);
+    $('#trShared').checked = shared;
+    $('#trLedgerFields').style.display = shared ? '' : 'none';
+    $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+    $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  }
+  syncCatRowVisibility();
+  $('#trFormTitle').textContent = `新增記帳（已帶入模板：${t.name}）`;
+  $('#trSaveContinue').style.display = ''; // 這一律是新增，可以繼續用批量記帳按鈕
+  setTimeout(() => $('#trAmount').focus(), 50);
+};
+
+// ---------- 模板（房租/健保費/訂閱費用...每月自動填寫） ----------
+function currentMonthStr(){
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+// 模板若是共同帳本項目，在清單上標示誰付、怎麼分攤，
+// 方便一眼看出「這筆模板套用記帳時會自動算進共同帳本」
+function recIsShared_(t){
+  return t.splitMode === 'split' || t.splitMode === 'advance';
+}
+function recSharedLabel_(t){
+  if(!recIsShared_(t)) return '';
+  const payerLabel = t.payer === 'partner' ? '對方付' : '我付';
+  const modeLabel = t.splitMode === 'advance' ? '全額代墊' : '平分';
+  return ` · 共同帳本（${payerLabel}・${modeLabel}）`;
+}
+window.deleteRecurring = async id => {
+  if(!confirm('確定刪除這個模板？（已經加入過的記帳紀錄不會被刪除）')) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','recurring',{id});
+      removeLocal('recurring', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ---------- 模板管理（獨立分頁：新增/編輯/刪除模板；記帳表單裡的模板按鈕仍可直接點擊套用，見上方 renderTrTemplateChips/applyTemplateToTr） ----------
+function populateTplCategories(type, selected, selectedSub){
+  const value = populateCategorySelect_($('#tplCategory'), getCategoryNames(type), selected);
+  populateTplSubcategories(type, value, selectedSub);
+}
+function populateTplSubcategories(type, mainName, selectedSub){
+  populateSubcategorySelect_($('#tplSubcategory'), getSubcategories(type, mainName), selectedSub);
+}
+bindInlineCategoryCreation_($('#tplCategory'), $('#tplSubcategory'), () => $('#tplType').value, populateTplCategories, populateTplSubcategories);
+
+// 跟記帳表單的 setTrType 同一套邏輯：模板類型是「轉帳」時，主/子類別跟共同帳本
+// 欄位都不需要（轉帳不算收支、也不會是共同帳本項目），改成顯示「到（轉入帳戶）」，
+// 帳戶（從）欄位也改成必填，並把帳戶選單換成列出全部帳戶（見 renderTransferAccountOptions_）。
+function setTplType(type, selectedCategory, selectedSub){
+  $('#tplType').value = type;
+  $$('#tplForm .type-toggle button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  const isTransfer = type === 'transfer';
+  $('#tplCatRow').style.display = isTransfer ? 'none' : '';
+  $('#tplSharedRow').style.display = isTransfer ? 'none' : '';
+  $('#tplTransferToWrap').style.display = isTransfer ? '' : 'none';
+  $('#tplAccountLabel').textContent = isTransfer ? '從（轉出帳戶）' : '帳戶（選填，加入記帳時會自動增減餘額）';
+  $('#tplAccount').required = isTransfer;
+  $('#tplToAccount').required = isTransfer;
+  if(isTransfer){
+    $('#tplShared').checked = false;
+    $('#tplLedgerFields').style.display = 'none';
+  } else {
+    populateTplCategories(type, selectedCategory, selectedSub);
+  }
+  // 帳戶選單的基底清單（常用 vs 全部帳戶）取決於是不是轉帳，切換類型時要重新整理選單
+  const orderedAccounts = sortAccountsForSelect(state.accounts);
+  const favoriteAccounts = orderedAccounts.filter(isAccountFavorite);
+  const optionsHtmlFor = list => list.map(a => `<option value="${a.id}">${a.name}（${a.type}）</option>`).join('');
+  renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, optionsHtmlFor);
+}
+$$('#tplForm .type-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => setTplType(btn.dataset.type));
+});
+$('#tplShared').addEventListener('change', () => {
+  $('#tplLedgerFields').style.display = $('#tplShared').checked ? '' : 'none';
+});
+
+(function initTplDefaults(){
+  populateTplCategories('expense');
+})();
+
+// 清空表單、回到「新增模板」狀態
+function resetTplForm_(){
+  $('#tplId').value = '';
+  $('#tplForm').reset();
+  setTplType('expense');
+  $('#tplLedgerFields').style.display = 'none';
+  $('#tplFormTitle').textContent = '新增模板';
+  $('#tplSaveBtn').textContent = '新增模板';
+  $('#tplDetails').open = false;
+}
+$('#tplCancel').addEventListener('click', resetTplForm_);
+
+// 點清單裡的「編輯」：把模板內容帶入表單、展開表單並捲動過去，方便手機上直接改
+window.editTemplateManage = id => {
+  const t = state.recurring.find(x => x.id === id);
+  if(!t) return;
+  $('#tplId').value = t.id;
+  const tplType = t.type === 'income' ? 'income' : t.type === 'transfer' ? 'transfer' : 'expense';
+  setTplType(tplType, t.category, t.subcategory);
+  $('#tplName').value = t.name || '';
+  $('#tplAmount').value = t.amount || '';
+  $('#tplAccount').value = t.accountId || '';
+  $('#tplToAccount').value = t.toAccountId || '';
+  $('#tplDayOfMonth').value = t.dayOfMonth || '';
+  $('#tplNote').value = t.note || '';
+  // 轉帳範本不算共同帳本項目，跟記帳表單同一套規則
+  const shared = tplType !== 'transfer' && recIsShared_(t);
+  $('#tplShared').checked = shared;
+  $('#tplLedgerFields').style.display = shared ? '' : 'none';
+  $('#tplPayer').value = t.payer === 'partner' ? 'partner' : 'me';
+  $('#tplSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
+  $('#tplFormTitle').textContent = `編輯模板：${t.name}`;
+  $('#tplSaveBtn').textContent = '更新模板';
+  $('#tplDetails').open = true;
+  $('#tplDetails').scrollIntoView({ behavior:'smooth', block:'start' });
+};
+
+$('#tplForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = $('#tplId').value;
+  const type = $('#tplType').value;
+  const name = $('#tplName').value.trim();
+  if(!name){ alert('請輸入模板名稱。'); return; }
+  const amount = parseFloat($('#tplAmount').value) || 0;
+  let data;
+  if(type === 'transfer'){
+    const accountId = $('#tplAccount').value;
+    const toAccountId = $('#tplToAccount').value;
+    if(!accountId || !toAccountId){ alert('請選擇轉出與轉入帳戶。'); return; }
+    if(accountId === toAccountId){ alert('轉出與轉入帳戶不能是同一個。'); return; }
+    data = {
+      id: id || undefined,
+      name,
+      type: 'transfer',
+      category: '轉帳',
+      subcategory: '',
+      amount,
+      accountId,
+      toAccountId,
+      dayOfMonth: $('#tplDayOfMonth').value ? parseInt($('#tplDayOfMonth').value, 10) : '',
+      note: $('#tplNote').value.trim(),
+      payer: 'me',
+      splitMode: 'personal'
+    };
+  } else {
+    const shared = $('#tplShared').checked;
+    const splitMode = shared ? $('#tplSplitMode').value : 'personal';
+    const payer = shared ? $('#tplPayer').value : 'me';
+    const isAdvance = splitMode === 'advance' && payer !== 'partner';
+    data = {
+      id: id || undefined,
+      name,
+      type,
+      category: isAdvance ? ADVANCE_CATEGORY_NAME : $('#tplCategory').value,
+      subcategory: isAdvance ? '' : $('#tplSubcategory').value,
+      amount,
+      accountId: $('#tplAccount').value,
+      dayOfMonth: $('#tplDayOfMonth').value ? parseInt($('#tplDayOfMonth').value, 10) : '',
+      note: $('#tplNote').value.trim(),
+      payer,
+      splitMode
+    };
+  }
+  try{
+    await runBusy(async () => {
+      const saved = id
+        ? await apiPost('update','recurring',data)
+        : await apiPost('add','recurring',data);
+      upsertLocal('recurring', saved);
+      renderTrTemplateChips();
+      renderTemplatesManage();
+    }, id ? '更新模板中…' : '新增模板中…');
+  }catch(err){ alert((id ? '更新模板失敗：' : '新增模板失敗：') + err.message); return; }
+  resetTplForm_();
+});
+
+// 模板管理清單：顯示所有模板（不管本月是否已加入），可直接編輯/刪除
+function renderTemplatesManage(){
+  const list = $('#templatesManageList');
+  if(!list) return;
+  if(!state.recurring.length){
+    list.innerHTML = `<div class="empty">目前還沒有任何模板，點上面「＋新增模板」建立第一個吧。</div>`;
+    return;
+  }
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  list.innerHTML = state.recurring.map(t => {
+    const isTransfer = t.type === 'transfer';
+    const typeLabel = isTransfer ? '轉帳' : t.type === 'income' ? '收入' : '支出';
+    // 轉帳範本沒有主/子類別，改顯示「從帳戶 → 到帳戶」
+    const noteText = isTransfer
+      ? `${typeLabel} · ${escapeHtml(byId[t.accountId] || '（帳戶已刪除）')} → ${escapeHtml(byId[t.toAccountId] || '（帳戶已刪除）')}`
+      : `${typeLabel} · ${escapeHtml(t.category || '其他')}${t.subcategory ? ' · ' + escapeHtml(t.subcategory) : ''}${t.accountId && byId[t.accountId] ? ' · ' + escapeHtml(byId[t.accountId]) : ''}${recSharedLabel_(t)}`;
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${escapeHtml(t.name)}</div>
+          <div class="item-note">${noteText}</div>
+        </div>
+        <div class="item-value ${isTransfer ? '' : t.type === 'income' ? 'income' : 'expense'}">$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-meta">
+        ${t.dayOfMonth ? `<span>每月 <b>${t.dayOfMonth}</b> 號</span>` : ''}
+      </div>
+      <div class="item-actions">
+        <button class="small" onclick="editTemplateManage('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteRecurring('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- 類別設定（管理主類別 / 子類別，可新增、編輯、刪除） ----------
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function refreshCategoryDependents(){
+  populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
+}
+function renderCategoryBlocks(type){
+  const wrap = $(type === 'expense' ? '#catBlocksExpense' : '#catBlocksIncome');
+  const tree = getCategoryTree(type);
+  if(!tree.length){
+    wrap.innerHTML = `<div class="empty">尚無主類別，請在下方新增。</div>`;
+    return;
+  }
+  wrap.innerHTML = tree.map((m,i) => `
+    <div class="main-cat-block">
+      <div class="main-cat-head">
+        <span class="main-cat-name">${escapeHtml(m.name)}</span>
+        <button type="button" class="small catMoveUpBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" title="往上移" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="small catMoveDownBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" title="往下移" ${i === tree.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="small catRenameMainBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}">重新命名</button>
+        <button type="button" class="small danger catRemoveMainBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}">刪除</button>
+      </div>
+      <div class="sub-cat-row">
+        ${(m.subs || []).map(s => `
+          <span class="sub-chip">
+            <span class="catRenameSubBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" data-cat-sub="${escapeHtml(s)}" style="cursor:pointer;">${escapeHtml(s)}</span>
+            <button type="button" class="catRemoveSubBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" data-cat-sub="${escapeHtml(s)}" title="刪除">×</button>
+          </span>`).join('') || `<span class="item-note" style="margin:0;">（尚無子類別）</span>`}
+      </div>
+      <div class="sub-add-row">
+        <input type="text" class="catAddSubInput" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}" placeholder="新增子類別">
+        <button type="button" class="catAddSubBtn" data-cat-type="${type}" data-cat-main="${escapeHtml(m.name)}">新增</button>
+      </div>
+    </div>`).join('');
+}
+function renderCategories(){
+  renderCategoryBlocks('expense');
+  renderCategoryBlocks('income');
+}
+
+// 調整主類別顯示順序：在記憶體裡把該主類別跟相鄰的主類別互換位置，算出新的
+// 完整順序（主類別名稱陣列）後打後端 API 儲存；後端會把 Categories 表裡屬於
+// 同一個主類別的所有列（含子類別列）當成一個區塊整組搬動，達到「調整順序」
+// 的效果（不用額外加排序欄位）。
+async function reorderMainCategory(type, name, direction){
+  const tree = getCategoryTree(type);
+  const idx = tree.findIndex(m => m.name === name);
+  if(idx === -1) return;
+  const swapWith = idx + direction;
+  if(swapWith < 0 || swapWith >= tree.length) return;
+  const reordered = tree.slice();
+  const [moved] = reordered.splice(idx, 1);
+  reordered.splice(swapWith, 0, moved);
+  const order = reordered.map(m => m.name);
+  await apiPost('reorderMainCategories', null, { type, order });
+  state.categories[type] = reordered;
+}
+
+async function handleAddMainCategory(type, inputSel){
+  const input = $(inputSel);
+  const name = input.value;
+  try{
+    const ok = await runBusy(() => addMainCategory(type, name), '新增中…');
+    if(!ok){ alert('請輸入尚未存在的主類別名稱。'); return; }
+  }catch(err){
+    alert('新增失敗：' + err.message);
+    return;
+  }
+  input.value = '';
+  renderCategories();
+  refreshCategoryDependents();
+}
+$('#catAddExpenseBtn').addEventListener('click', () => handleAddMainCategory('expense', '#catAddExpense'));
+$('#catAddIncomeBtn').addEventListener('click', () => handleAddMainCategory('income', '#catAddIncome'));
+$('#catAddExpense').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddMainCategory('expense', '#catAddExpense'); } });
+$('#catAddIncome').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); handleAddMainCategory('income', '#catAddIncome'); } });
+
+// 類別的新增/改名/刪除現在都要打後端 API，這個 handler 改成 async：
+// 用 runBusy 顯示「處理中」避免使用者以為沒反應而重複點擊，失敗時要明確
+// alert 出來，不能讓使用者以為已經刪除/改名成功、其實後端沒有真的動到。
+async function handleCategoryBlockClick(e){
+  const moveUp = e.target.closest('.catMoveUpBtn');
+  if(moveUp){
+    const { catType, catMain } = moveUp.dataset;
+    try{
+      await runBusy(() => reorderMainCategory(catType, catMain, -1), '調整順序中…');
+    }catch(err){ alert('調整順序失敗：' + err.message); return; }
+    renderCategories();
+    return;
+  }
+  const moveDown = e.target.closest('.catMoveDownBtn');
+  if(moveDown){
+    const { catType, catMain } = moveDown.dataset;
+    try{
+      await runBusy(() => reorderMainCategory(catType, catMain, 1), '調整順序中…');
+    }catch(err){ alert('調整順序失敗：' + err.message); return; }
+    renderCategories();
+    return;
+  }
+  const renameMain = e.target.closest('.catRenameMainBtn');
+  if(renameMain){
+    const { catType, catMain } = renameMain.dataset;
+    const next = prompt(`重新命名主類別「${catMain}」：\n（同時會把過去已經記過、品項是「${catMain}」的記帳紀錄與固定項目一併改成新名稱）`, catMain);
+    if(next === null) return;
+    try{
+      const ok = await runBusy(() => renameMainCategory(catType, catMain, next), '重新命名中，同步更新舊紀錄…');
+      if(!ok){ alert('名稱不能為空，也不能跟現有主類別重複。'); return; }
+    }catch(err){
+      alert('重新命名失敗：' + err.message);
+      return;
+    }
+    renderCategories();
+    refreshCategoryDependents();
+    return;
+  }
+  const removeMain = e.target.closest('.catRemoveMainBtn');
+  if(removeMain){
+    const { catType, catMain } = removeMain.dataset;
+    if(!confirm(`確定刪除主類別「${catMain}」嗎？（連同底下子類別，不會影響已經記過的舊資料）`)) return;
+    try{
+      await runBusy(() => removeMainCategory(catType, catMain), '刪除中…');
+    }catch(err){
+      alert('刪除失敗：' + err.message);
+      return;
+    }
+    renderCategories();
+    refreshCategoryDependents();
+    return;
+  }
+  const renameSub = e.target.closest('.catRenameSubBtn');
+  if(renameSub){
+    const { catType, catMain, catSub } = renameSub.dataset;
+    const next = prompt(`重新命名子類別「${catSub}」（主類別：${catMain}）：\n（同時會把過去已經記過、品項是「${catMain}／${catSub}」的記帳紀錄與固定項目一併改成新名稱）`, catSub);
+    if(next === null) return;
+    try{
+      const ok = await runBusy(() => renameSubCategory(catType, catMain, catSub, next), '重新命名中，同步更新舊紀錄…');
+      if(!ok){ alert('名稱不能為空，也不能跟同一主類別下的子類別重複。'); return; }
+    }catch(err){
+      alert('重新命名失敗：' + err.message);
+      return;
+    }
+    renderCategories();
+    refreshCategoryDependents();
+    return;
+  }
+  const removeSub = e.target.closest('.catRemoveSubBtn');
+  if(removeSub){
+    const { catType, catMain, catSub } = removeSub.dataset;
+    if(!confirm(`確定刪除子類別「${catSub}」嗎？（不會影響已經記過的舊資料）`)) return;
+    try{
+      await runBusy(() => removeSubCategory(catType, catMain, catSub), '刪除中…');
+    }catch(err){
+      alert('刪除失敗：' + err.message);
+      return;
+    }
+    renderCategories();
+    refreshCategoryDependents();
+    return;
+  }
+  const addSubBtn = e.target.closest('.catAddSubBtn');
+  if(addSubBtn){
+    const { catType, catMain } = addSubBtn.dataset;
+    const input = addSubBtn.parentElement.querySelector('.catAddSubInput');
+    const subName = input.value;
+    try{
+      const ok = await runBusy(() => addSubCategory(catType, catMain, subName), '新增中…');
+      if(!ok){ alert('請輸入尚未存在的子類別名稱。'); return; }
+    }catch(err){
+      alert('新增失敗：' + err.message);
+      return;
+    }
+    input.value = '';
+    renderCategories();
+    refreshCategoryDependents();
+  }
+}
+$('#catBlocksExpense').addEventListener('click', handleCategoryBlockClick);
+$('#catBlocksIncome').addEventListener('click', handleCategoryBlockClick);
+$('#catBlocksExpense').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.target.classList.contains('catAddSubInput')){
+    e.preventDefault();
+    e.target.nextElementSibling.click();
+  }
+});
+$('#catBlocksIncome').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.target.classList.contains('catAddSubInput')){
+    e.preventDefault();
+    e.target.nextElementSibling.click();
+  }
+});
+
+// ---------- 共同帳本（誰先付、誰欠誰） ----------
+// 每筆記帳只要 splitMode !== 'personal' 就算共同帳本項目：
+//   split   平分：payer 那一方墊了一半屬於對方的錢 → 對方欠 payer 一半金額
+//   advance 全額代墊：整筆其實是對方的花費 → 對方欠 payer 全額
+// settled 為 true 的紀錄不計入餘額（已經轉帳結清過）。
+function ledgerUnsettledItems(){
+  return state.transactions.filter(t =>
+    t.type === 'expense' && t.splitMode && t.splitMode !== 'personal' && String(t.settled) !== 'true'
+  );
+}
+function ledgerOwed(t){
+  const amt = Number(t.amount) || 0;
+  return t.splitMode === 'advance' ? amt : amt / 2;
+}
+function ledgerBalance(items){
+  // 正值 = 對方欠我；負值 = 我欠對方
+  return items.reduce((sum, t) => sum + (t.payer === 'partner' ? -ledgerOwed(t) : ledgerOwed(t)), 0);
+}
+function renderLedger(){
+  const items = ledgerUnsettledItems();
+  const balance = ledgerBalance(items);
+  const valueEl = $('#ledgerBalanceValue');
+  const hintEl = $('#ledgerBalanceHint');
+  if(Math.abs(balance) < 0.01){
+    valueEl.textContent = '打平了';
+    hintEl.textContent = items.length ? '這些項目金額互相抵銷，暫時不用轉帳。' : '尚無未結算的共同帳本紀錄。';
+  } else if(balance > 0){
+    valueEl.textContent = `對方欠你 $${fmt(balance)}`;
+    hintEl.textContent = '累積夠多、方便轉帳時，可以按下方「結算」一次結清。';
+  } else {
+    valueEl.textContent = `你欠對方 $${fmt(-balance)}`;
+    hintEl.textContent = '累積夠多、方便轉帳時，可以按下方「結算」一次結清。';
+  }
+
+  const list = $('#ledgerList');
+  if(!items.length){
+    list.innerHTML = `<div class="empty">目前沒有未結算的共同帳本項目。</div>`;
+    return;
+  }
+  const sorted = [...items].sort((a,b) => (a.date < b.date ? 1 : -1));
+  list.innerHTML = sorted.map(t => {
+    const owed = ledgerOwed(t);
+    const payerLabel = t.payer === 'partner' ? '對方付' : '我付';
+    const modeLabel = t.splitMode === 'advance' ? '全額代墊' : '平分';
+    const direction = t.payer === 'partner' ? '你欠對方' : '對方欠你';
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${t.category || '其他'}</div>
+          <div class="item-note">${t.date} · ${payerLabel} · ${modeLabel}${t.note ? ' · ' + t.note : ''}</div>
+        </div>
+        <div class="item-value">$${fmt(t.amount)}</div>
+      </div>
+      <div class="item-meta"><span>${direction} <b>$${fmt(owed)}</b></span></div>
+      <div class="item-actions">
+        <button class="small" onclick="editLedgerItem('${t.id}')">編輯</button>
+        <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+// 從共同帳本清單直接編輯：表單會直接浮在「共同帳本」分頁下方填寫，
+// 不用切到「記帳」分頁，手機共同編輯時比較方便
+window.editLedgerItem = id => {
+  editTransaction(id);
+};
+$('#ledgerSettleBtn').addEventListener('click', async () => {
+  const items = ledgerUnsettledItems();
+  if(!items.length){ alert('目前沒有需要結算的項目。'); return; }
+  const balance = ledgerBalance(items);
+  const accountId = $('#ledgerSettleAccount').value;
+  const accountName = accountId ? (state.accounts.find(a => a.id === accountId) || {}).name : '';
+  const who = balance > 0 ? '對方轉給你' : balance < 0 ? '你轉給對方' : '不用轉帳';
+  const amount = Math.abs(balance);
+  let confirmMsg = `共 ${items.length} 筆未結算項目，結果為 ${who} $${fmt(amount)}。\n確定這筆錢已經轉帳完成，把這些項目標記為已結算嗎？`;
+  if(amount >= 0.01){
+    confirmMsg += accountId
+      ? `\n同時會把這筆金額計入帳戶「${accountName}」的餘額。`
+      : `\n（尚未選擇轉帳帳戶，只會標記已結算，不會更動任何帳戶餘額。）`;
+  }
+  if(!confirm(confirmMsg)) return;
+  // 金額有餘額且使用者有選帳戶時，額外新增一筆 type:'settlement' 的記帳紀錄，
+  // 讓這筆結算轉帳也會反映在帳戶餘額與記帳清單上；payer 用來決定金額方向：
+  // 'partner' = 對方轉給你（餘額增加），'me' = 你轉給對方（餘額減少）。
+  const settlement = (accountId && amount >= 0.01) ? {
+    date: new Date().toISOString().slice(0,10),
+    type: 'settlement',
+    category: '共同帳本結算',
+    subcategory: '',
+    amount,
+    accountId,
+    note: who,
+    payer: balance > 0 ? 'partner' : 'me',
+    splitMode: 'personal',
+    settled: true
+  } : null;
+  try{
+    await runBusy(async () => {
+      const ids = items.map(t => t.id);
+      const result = await apiPost('settleLedger','transactions',{ ids, settlement });
+      items.forEach(t => { t.settled = true; });
+      if(result.settlement) upsertLocal('transactions', result.settlement);
+      if(result.account) upsertLocal('accounts', result.account);
+      renderAll();
+    }, '結算中…');
+  }catch(err){ alert('結算失敗：' + err.message); }
+});
+
+// ---------- 匯入 CSV ----------
+// 純前端解析 CSV（支援雙引號欄位），對應欄位後用批次寫入（batchAddTransactions），
+// 一次 exec 內寫完所有列，不會一筆一筆來回，匯入大量資料也不會卡很久。
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field = ''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if(c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  const nonEmpty = rows.filter(r => r.some(v => String(v).trim() !== ''));
+  if(!nonEmpty.length) return { headers: [], rows: [] };
+  return { headers: nonEmpty[0], rows: nonEmpty.slice(1) };
+}
+
+let csvParsed = { headers: [], rows: [] };
+
+function guessColumn(headers, keywords){
+  const idx = headers.findIndex(h => keywords.some(k => String(h).toLowerCase().includes(k)));
+  return idx === -1 ? '' : String(idx);
+}
+
+function buildColSelect(select, headers, guessIdx, allowEmpty){
+  const opts = headers.map((h,i) => `<option value="${i}">${h || ('欄位 ' + (i+1))}</option>`);
+  select.innerHTML = (allowEmpty ? select.querySelector('option[value=""]')?.outerHTML || '' : '') + opts.join('');
+  if(guessIdx !== '') select.value = guessIdx;
+}
+
+$('#csvFile').addEventListener('change', () => {
+  const file = $('#csvFile').files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    csvParsed = parseCSV(String(reader.result));
+    if(!csvParsed.headers.length){ alert('讀不到內容，請確認檔案是否為 CSV。'); return; }
+    const h = csvParsed.headers;
+    buildColSelect($('#csvColDate'), h, guessColumn(h, ['日期','date','時間']), false);
+    buildColSelect($('#csvColAmount'), h, guessColumn(h, ['金額','amount','price','money']), false);
+    buildColSelect($('#csvColCategory'), h, guessColumn(h, ['品項','分類','主類別','類別','category','項目']), true);
+    buildColSelect($('#csvColSubcategory'), h, guessColumn(h, ['子類別','子分類','細項','subcategory','sub category','sub-category']), true);
+    buildColSelect($('#csvColNote'), h, guessColumn(h, ['備註','說明','note','memo']), true);
+    buildColSelect($('#csvColType'), h, guessColumn(h, ['收支','類型','type','收入支出']), true);
+    $('#csvMapSection').style.display = '';
+    $('#csvStatus').style.display = 'none';
+    renderCsvPreview();
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+['#csvColDate','#csvColAmount','#csvColCategory','#csvColSubcategory','#csvColNote','#csvColType','#csvTypeRule'].forEach(sel => {
+  $(sel).addEventListener('change', renderCsvPreview);
+});
+
+function mapCsvRow(row){
+  const get = idx => (idx === '' || idx === undefined) ? '' : (row[Number(idx)] || '').trim();
+  const dateRaw = get($('#csvColDate').value);
+  const amountRaw = get($('#csvColAmount').value).replace(/[,$\s]/g,'');
+  const categoryRaw = get($('#csvColCategory').value);
+  const subcategoryRaw = get($('#csvColSubcategory').value);
+  const noteRaw = get($('#csvColNote').value);
+  const typeRaw = get($('#csvColType').value).toLowerCase();
+
+  let date = dateRaw.replace(/\//g,'-');
+  const amountNum = parseFloat(amountRaw);
+
+  let type;
+  if(typeRaw){
+    type = (typeRaw.includes('收') || typeRaw.includes('income') || typeRaw.includes('in')) ? 'income' : 'expense';
+  } else {
+    const rule = $('#csvTypeRule').value;
+    if(rule === 'all_expense') type = 'expense';
+    else if(rule === 'all_income') type = 'income';
+    else type = amountNum < 0 ? 'expense' : 'income';
+  }
+  return {
+    date,
+    type,
+    category: categoryRaw || '其他',
+    subcategory: subcategoryRaw || '',
+    amount: Math.abs(amountNum) || 0,
+    accountId: '',
+    note: noteRaw,
+    payer: 'me',
+    splitMode: 'personal',
+    settled: false,
+    valid: !!date && !isNaN(amountNum)
+  };
+}
+
+function renderCsvPreview(){
+  const rows = csvParsed.rows.slice(0, 5).map(mapCsvRow);
+  const table = $('#csvPreviewTable');
+  table.innerHTML = `<tr><th>日期</th><th>收支</th><th>主類別</th><th>子類別</th><th>金額</th><th>備註</th></tr>` +
+    rows.map(r => `<tr style="${r.valid ? '' : 'color:var(--red)'}"><td>${r.date||'(空)'}</td><td>${r.type==='income'?'收入':'支出'}</td><td>${r.category}</td><td>${r.subcategory || ''}</td><td>${fmt(r.amount)}</td><td>${r.note}</td></tr>`).join('');
+}
+
+$('#csvImportBtn').addEventListener('click', async () => {
+  const mapped = csvParsed.rows.map(mapCsvRow).filter(r => r.valid);
+  const invalidCount = csvParsed.rows.length - mapped.length;
+  if(!mapped.length){ alert('沒有可匯入的資料，請確認日期／金額欄位對應是否正確。'); return; }
+  if(!confirm(`確定匯入 ${mapped.length} 筆記帳資料嗎？${invalidCount ? `（另有 ${invalidCount} 筆因日期或金額格式異常被略過）` : ''}`)) return;
+  try{
+    let skipped = 0;
+    await runBusy(async () => {
+      const rows = mapped.map(({valid, ...rest}) => rest);
+      const result = await apiPost('batchAddTransactions','transactions',{ rows });
+      skipped = (result && result.skipped) || 0;
+      const all = await apiGet('all');
+      state.accounts = all.accounts;
+      state.liabilities = all.liabilities;
+      state.transactions = all.transactions;
+      state.recurring = all.recurring || [];
+      state.categories = all.categories || state.categories;
+      state.transactionsFullyLoaded = true;
+      renderAll();
+    }, '匯入中…（資料量大可能需要一點時間）');
+    // 日期＋類型＋主/子類別＋金額都跟既有紀錄（或這份 CSV 裡自己）重複的列，
+    // 後端會自動略過不寫入，這裡把略過筆數也顯示出來，避免使用者以為資料不見了。
+    $('#csvStatus').textContent = `匯入完成，共新增 ${mapped.length - skipped} 筆記帳。` + (skipped ? `（${skipped} 筆因跟既有紀錄重複已自動略過）` : '');
+    $('#csvStatus').className = 'status ok';
+    $('#csvStatus').style.display = '';
+    $('#csvFile').value = '';
+    $('#csvMapSection').style.display = 'none';
+  }catch(err){
+    $('#csvStatus').textContent = '匯入失敗：' + err.message;
+    $('#csvStatus').className = 'status err';
+    $('#csvStatus').style.display = '';
+  }
+});
+$('#csvCancelBtn').addEventListener('click', () => {
+  $('#csvFile').value = '';
+  $('#csvMapSection').style.display = 'none';
+  $('#csvStatus').style.display = 'none';
+});
+
+// ---------- Settings ----------
+$('#cfgUrl').value = cfg.url;
+$('#cfgToken').value = cfg.token;
+$('#cfgSave').addEventListener('click', () => {
+  cfg.url = $('#cfgUrl').value.trim();
+  cfg.token = $('#cfgToken').value.trim();
+  localStorage.setItem(CFG_URL_KEY, cfg.url);
+  localStorage.setItem(CFG_TOKEN_KEY, cfg.token);
+  loadAll();
+});
+
+loadAll();
+</script>
+</body>
+</html>
