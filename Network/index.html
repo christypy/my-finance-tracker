@@ -2402,15 +2402,17 @@ function renderTransactions(){
     // 共同帳本項目：
     //   全額代墊且是「我先付」→ 整筆其實是對方的花費，不是我自己的支出，
     //   整張卡片用灰階顯示，數字前也不加 +/- 符號（不計入我的收支）。
-    //   平分（split）→ 這筆錢一半是我的、一半是對方的，除了顯示原始金額，
-    //   另外標出我自己實際要負擔的那一份（myExpenseShare_）。
+    //   平分（split）→ 這筆錢一半是我的、一半是對方的，主要（大字）要顯示的是
+    //   我自己實際要負擔的那一份（myExpenseShare_），原始總金額改成小字附註，
+    //   避免誤以為整筆都是自己花的。
     const isPureAdvance = isExpense && t.splitMode === 'advance' && t.payer !== 'partner';
     const isSplitShare = isExpense && t.splitMode === 'split';
     const shareNote = isSplitShare
-      ? `<div class="item-share-note">我的部分：<b>$${fmt(myExpenseShare_(t))}</b></div>`
+      ? `<div class="item-share-note">總金額 $${fmt(t.amount)}（平分）</div>`
       : '';
     const valueClass = isPureAdvance ? '' : (isExpense ? 'expense' : 'income');
     const sign = isPureAdvance ? '' : (isExpense ? '-' : '+');
+    const mainAmount = isSplitShare ? myExpenseShare_(t) : t.amount;
     return `<div class="item-card ${isPureAdvance ? 'advance-item' : ''}" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
       ${trBatchCheckboxHtml_(t.id)}
       <div class="item-top">
@@ -2419,7 +2421,7 @@ function renderTransactions(){
           <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
           ${shareNote}
         </div>
-        <div class="item-value ${valueClass}">${sign}$${fmt(t.amount)}</div>
+        <div class="item-value ${valueClass}">${sign}$${fmt(mainAmount)}</div>
       </div>
       <div class="item-actions">
         <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
