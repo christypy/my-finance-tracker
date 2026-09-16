@@ -660,18 +660,39 @@
   .sub-add-row button{ flex:none; min-height:34px; padding:5px 12px; font-size:12.5px; }
 
   /* ---- 各類別每月花費：長條圖（依類別頁面，改成跟「月/年」統計排行榜一致的視覺樣式） ---- */
-  .cat-chart-card{ margin-bottom:16px; cursor:default; }
+  .cat-chart-card{ margin-bottom:18px; cursor:default; }
   .cat-chart-card:last-child{ margin-bottom:0; }
-  .cat-chart-bars{ display:flex; align-items:flex-end; gap:3px; background:var(--paper); border:1px solid var(--paper-line); border-radius:8px; padding:6px 4px 4px; margin-top:8px; }
-  .cat-chart-col{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; cursor:pointer; border-radius:4px; transition:background .15s; }
-  .cat-chart-col:hover{ background:rgba(58,43,18,.05); }
-  .cat-chart-col.selected{ background:rgba(201,138,0,.14); }
-  .cat-chart-val{ font-size:8px; color:var(--ink-soft); line-height:1.3; height:11px; white-space:nowrap; }
-  .cat-chart-bar-track{ width:100%; height:56px; display:flex; align-items:flex-end; }
-  .cat-chart-bar{ width:100%; background:var(--red); border-radius:3px 3px 0 0; min-height:2px; transition:height .2s; }
-  .cat-chart-col.selected .cat-chart-bar{ background:var(--gold); }
-  .cat-chart-months{ display:flex; gap:3px; margin-top:4px; }
-  .cat-chart-month-label{ flex:1; text-align:center; font-size:9.5px; color:var(--ink-soft); }
+  .cat-chart-bars{
+    display:flex; align-items:flex-end; gap:5px;
+    background:linear-gradient(180deg, rgba(58,43,18,.04), rgba(58,43,18,0));
+    border:1px solid var(--paper-line);
+    border-radius:14px;
+    padding:16px 6px 8px;
+    margin-top:10px;
+  }
+  .cat-chart-col{
+    flex:1; min-width:0; display:flex; flex-direction:column; align-items:center;
+    cursor:pointer; border-radius:9px; padding:3px 1px 4px;
+    transition:background .15s;
+  }
+  .cat-chart-col:hover{ background:rgba(58,43,18,.06); }
+  .cat-chart-col.selected{ background:rgba(201,138,0,.16); }
+  .cat-chart-val{ font-size:9px; color:var(--ink-soft); line-height:1.3; height:12px; white-space:nowrap; font-weight:500; }
+  .cat-chart-val.peak{ color:var(--ink); font-weight:700; }
+  .cat-chart-col.selected .cat-chart-val{ color:var(--gold); font-weight:700; }
+  .cat-chart-bar-track{ width:100%; height:70px; display:flex; align-items:flex-end; }
+  .cat-chart-bar{
+    width:100%; border-radius:7px 7px 3px 3px; min-height:3px;
+    box-shadow:0 1px 3px rgba(58,43,18,.18) inset;
+    transition:height .25s ease, background .15s, box-shadow .15s;
+  }
+  .cat-chart-col.selected .cat-chart-bar{
+    background:linear-gradient(180deg, #f0b83a, var(--gold)) !important;
+    box-shadow:0 0 0 2px rgba(201,138,0,.32), 0 3px 10px rgba(201,138,0,.35);
+  }
+  .cat-chart-month-label{ font-size:9.5px; color:var(--ink-soft); margin-top:5px; line-height:1; }
+  .cat-chart-col.current .cat-chart-month-label{ color:var(--gold); font-weight:700; }
+  .cat-chart-current-dot{ display:inline-block; width:4px; height:4px; border-radius:50%; background:var(--gold); margin-left:2px; vertical-align:middle; }
   .cat-chart-subs-head{ font-size:11px; font-weight:600; color:var(--ink); margin-bottom:4px; }
 
   .stat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
@@ -2949,6 +2970,13 @@ function fmtShort(n){
   if(num >= 1000) return (num/1000).toFixed(1) + 'k';
   return String(Math.round(num));
 }
+// 把排行榜用的色點顏色轉成柔和漸層，讓每個類別的月度長條圖顏色跟它自己的色點呼應，
+// 一眼就能對起來，也比單一死板的紅色好看。
+function hexToRgb_(hex){
+  const h = hex.replace('#','');
+  const n = parseInt(h, 16);
+  return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+}
 function renderCategoryMonthCharts(year){
   const catMap = {}; // { 主類別: { arr:[12個月金額], monthSubs:[12個{子類別:金額}], count } }
   state.transactions.forEach(t => {
@@ -2978,18 +3006,26 @@ function renderCategoryMonthCharts(year){
     return;
   }
   const yearTotal = cats.reduce((s,c) => s + c.total, 0);
-  const monthLabels = Array.from({length:12}, (_,i) => `<div class="cat-chart-month-label">${i+1}</div>`).join('');
+  const now = new Date();
+  const isThisYear = String(now.getFullYear()) === String(year);
+  const curMonthIdx = now.getMonth();
   container.innerHTML = cats.map(({cat, arr, monthSubs, count, total, max}, i) => {
     const pct = yearTotal ? Math.round(total / yearTotal * 100) : 0;
     const avgMonth = total / 12;
     const selectedMonth = (expandedCatMonth_ && expandedCatMonth_.cat === cat) ? expandedCatMonth_.month : null;
+    const { r, g, b } = hexToRgb_(RANK_COLORS[i % RANK_COLORS.length]);
+    const barGradient = `linear-gradient(180deg, rgba(${r},${g},${b},.45), rgb(${r},${g},${b}))`;
     const cols = arr.map((v, m) => {
       const barPct = max ? Math.round(v / max * 100) : 0;
       const height = v > 0 ? Math.max(barPct, 4) : 0;
       const isSel = selectedMonth === m;
-      return `<div class="cat-chart-col${isSel ? ' selected' : ''}" data-month="${m}">
-        <div class="cat-chart-val">${fmtShort(v)}</div>
-        <div class="cat-chart-bar-track"><div class="cat-chart-bar" style="height:${height}%" title="${m+1} 月：$${fmt(v)}"></div></div>
+      const isPeak = max > 0 && v === max;
+      const isCurrent = isThisYear && m === curMonthIdx;
+      const barStyle = `height:${height}%;` + (isSel ? '' : `background:${barGradient};`);
+      return `<div class="cat-chart-col${isSel ? ' selected' : ''}${isCurrent ? ' current' : ''}" data-month="${m}">
+        <div class="cat-chart-val${isPeak ? ' peak' : ''}">${v > 0 ? fmtShort(v) : ''}</div>
+        <div class="cat-chart-bar-track"><div class="cat-chart-bar" style="${barStyle}" title="${m+1} 月：$${fmt(v)}"></div></div>
+        <div class="cat-chart-month-label">${m+1}${isCurrent ? '<span class="cat-chart-current-dot"></span>' : ''}</div>
       </div>`;
     }).join('');
     let subHtml = '';
@@ -3019,7 +3055,6 @@ function renderCategoryMonthCharts(year){
           <span>${count} 筆 · 月均 $${fmt(avgMonth)}</span>
         </div>
         <div class="cat-chart-bars">${cols}</div>
-        <div class="cat-chart-months">${monthLabels}</div>
         ${subHtml}
       </div>
     </div>`;
