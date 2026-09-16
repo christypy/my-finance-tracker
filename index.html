@@ -1270,6 +1270,15 @@
 <script>
 const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
+// 效能：搜尋輸入框這類「打字打很快、每個字都觸發重畫」的欄位用這個包一層，
+// 停下來一小段時間才真的重畫，避免資料量大時每敲一個字就重新整個清單重畫一次。
+function debounce_(fn, wait){
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), wait);
+  };
+}
 
 // ---------- 忙碌保護：避免等待時多點幾下造成重複紀錄 ----------
 let busyCount = 0;
@@ -2275,9 +2284,9 @@ function needsFullHistoryFor(year, month){
   const monthStr = `${year}-${pad2(month + 1)}`;
   return monthStr < state.transactionsSince.slice(0, 7);
 }
-$('#trSearchInput').addEventListener('input', () => {
+$('#trSearchInput').addEventListener('input', debounce_(() => {
   renderTransactions();
-});
+}, 150));
 $('#trSearchClear').addEventListener('click', () => {
   $('#trSearchInput').value = '';
   renderTransactions();
@@ -2768,20 +2777,25 @@ function expenseTotalOf(period){
     .filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME)
     .reduce((s,t) => s + myExpenseShare_(t), 0);
 }
-// 所有「有資料」的期間（依模式為月或年），用來計算平均值
-function periodsWithData(mode){
-  const set = new Set();
+// 效能：以前「跟平均比」每次都是「列出全部有資料的期間 → 對每個期間各自重新掃一次
+// 全部記帳」，期間一多（例如記了好幾年帳，依月模式平均要看三、四十個月）等於把全部
+// 記帳掃了三、四十遍。改成只掃一次全部記帳、依期間分組加總，不管有幾個期間都只掃一次。
+function expenseTotalsByPeriod_(mode){
+  const map = {};
   state.transactions.forEach(t => {
+    if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
     const d = t.date || '';
     if(!d) return;
-    set.add(mode === 'month' ? d.slice(0,7) : d.slice(0,4));
+    const key = mode === 'month' ? d.slice(0,7) : d.slice(0,4);
+    map[key] = (map[key] || 0) + myExpenseShare_(t);
   });
-  return Array.from(set);
+  return map;
 }
 function averageExpense(mode, excludePeriod){
-  const periods = periodsWithData(mode).filter(p => p !== excludePeriod);
+  const map = expenseTotalsByPeriod_(mode);
+  const periods = Object.keys(map).filter(p => p !== excludePeriod);
   if(!periods.length) return null;
-  const total = periods.reduce((s,p) => s + expenseTotalOf(p), 0);
+  const total = periods.reduce((s,p) => s + map[p], 0);
   return total / periods.length;
 }
 function renderCompareCard(label, current, base){

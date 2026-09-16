@@ -425,21 +425,52 @@ function deleteTransactionTx_(id) {
 }
 
 
+// 效能：以前是每個 id 各自呼叫 deleteTransactionTx_ ——每一筆都要「先讀整欄 id 找列號、
+// 再讀那一整列、再刪那一列」，同一個帳戶如果被好幾筆命中，帳戶餘額也會被讀寫好幾次。
+// 勾選很多筆一次刪除時（批次刪除功能就是為了這個情境設計的），這樣做會變成好幾十次
+// 來回的試算表操作，感覺特別慢。改成：一次讀整張表找出要刪的列＋加總每個帳戶的
+// 淨變化，帳戶餘額每個帳戶只讀寫一次，最後才由下往上實際刪列（由下往上刪是因為
+// 刪掉前面的列之後，後面待刪的列號會往上位移，由下往上刪才不會刪錯列）。
 function batchDeleteTransactionsTx_(ids) {
-  const accountsById = {};
+  const idList = (ids || []).filter(function (id) { return id !== null && id !== undefined && id !== ''; });
+  if (!idList.length) return { ids: [], accounts: [] };
+
+  const sheet = getSheet_('transactions');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ids: [], accounts: [] };
+
+  const headerRow = getActualHeaderRow_('transactions');
+  const idIdx = headerRow.indexOf('id');
+  if (idIdx === -1) return { ids: [], accounts: [] };
+
+  const lastCol = sheet.getLastColumn();
+  const numRows = lastRow - 1;
+  const values = sheet.getRange(2, 1, numRows, lastCol).getValues();
+
+  const idSet = {};
+  idList.forEach(function (id) { idSet[String(id)] = true; });
+
+  const deltas = {};
   const deletedIds = [];
-  (ids || []).forEach(function (id) {
-    try {
-      const result = deleteTransactionTx_(id);
-      deletedIds.push(id);
-      (result.accounts || []).forEach(function (acc) {
-        if (acc && acc.id) accountsById[acc.id] = acc;
-      });
-    } catch (err) {
-      // 找不到的（可能已經被刪過）直接跳過，繼續刪下一筆
-    }
-  });
-  return { ids: deletedIds, accounts: Object.keys(accountsById).map(function (k) { return accountsById[k]; }) };
+  const rowsToDelete = []; // 1-based 列號，稍後由後往前刪
+
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const rid = row[idIdx];
+    if (rid === '' || rid === null || !idSet[String(rid)]) continue;
+    const obj = {};
+    headerRow.forEach(function (h, hi) { if (h) obj[h] = normalizeCellValue_(h, row[hi]); });
+    accumulateBalanceDelta_(obj, -1, deltas);
+    deletedIds.push(rid);
+    rowsToDelete.push(i + 2);
+  }
+
+  // 每個帳戶的淨變化一次算好、一次讀寫，不管這次刪幾筆，同一個帳戶最多只會讀寫一次
+  const accountsTouched = applyBalanceDeltas_(deltas);
+
+  rowsToDelete.sort(function (a, b) { return b - a; }).forEach(function (row) { sheet.deleteRow(row); });
+
+  return { ids: deletedIds, accounts: accountsTouched };
 }
 
 
@@ -470,21 +501,32 @@ function batchAdd_(key, rows) {
 }
 
 
+// 效能：以前用 getDataRange() 把整張表「每一欄」都讀出來，其實只需要 id 跟 settled
+// 兩欄；而且命中的每一列都各自呼叫一次 setValue，勾選很多筆一次結算時，等於好幾十次
+// 各自獨立的試算表寫入。改成只讀需要的兩欄，命中的列直接在記憶體裡的陣列上改成
+// true，最後不管改了幾列，一次 setValues 寫回整欄，讀寫都只各做一次。
 function settleLedger_(ids, settlementData) {
   const sheet = getSheet_('transactions');
-  const idColIndex = colIndex_('transactions', 'id') - 1; // 轉成 0-based，配合下面用 getDataRange 讀出的陣列索引
-  const settledColIndex = colIndex_('transactions', 'settled') - 1;
+  const idCol = colIndex_('transactions', 'id');
+  const settledCol = colIndex_('transactions', 'settled');
   const idSet = {};
   (ids || []).forEach(id => (idSet[String(id)] = true));
 
-  const values = sheet.getDataRange().getValues();
+  const lastRow = sheet.getLastRow();
   let updated = 0;
-  for (let i = 1; i < values.length; i++) {
-    if (idSet[String(values[i][idColIndex])]) {
-      sheet.getRange(i + 1, settledColIndex + 1).setValue(true);
-      updated++;
+  if (lastRow >= 2) {
+    const numRows = lastRow - 1;
+    const idValues = sheet.getRange(2, idCol, numRows, 1).getValues();
+    const settledValues = sheet.getRange(2, settledCol, numRows, 1).getValues();
+    for (let i = 0; i < numRows; i++) {
+      if (idSet[String(idValues[i][0])]) {
+        settledValues[i][0] = true;
+        updated++;
+      }
     }
+    if (updated) sheet.getRange(2, settledCol, numRows, 1).setValues(settledValues);
   }
+
   let settlement = null;
   let account = null;
   if (settlementData) {
