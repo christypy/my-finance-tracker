@@ -659,39 +659,30 @@
   .sub-add-row input{ flex:1; min-height:34px; padding:6px 10px; font-size:13px; }
   .sub-add-row button{ flex:none; min-height:34px; padding:5px 12px; font-size:12.5px; }
 
-  /* ---- 各類別每月花費：長條圖（依類別頁面，改成跟「月/年」統計排行榜一致的視覺樣式） ---- */
+  /* ---- 各類別每月花費：趨勢線圖（依類別頁面，捨棄長條改用折線＋面積，
+     12 個月一次看完整年走勢，比長條更容易看出漲跌趨勢，也比較不佔垂直空間） ---- */
   .cat-chart-card{ margin-bottom:18px; cursor:default; }
   .cat-chart-card:last-child{ margin-bottom:0; }
-  .cat-chart-bars{
-    display:flex; align-items:flex-end; gap:5px;
+  .cat-chart-spark-wrap{
+    position:relative;
     background:linear-gradient(180deg, rgba(58,43,18,.04), rgba(58,43,18,0));
     border:1px solid var(--paper-line);
     border-radius:14px;
-    padding:16px 6px 8px;
+    padding:16px 6px 4px;
     margin-top:10px;
   }
-  .cat-chart-col{
-    flex:1; min-width:0; display:flex; flex-direction:column; align-items:center;
-    cursor:pointer; border-radius:9px; padding:3px 1px 4px;
-    transition:background .15s;
-  }
-  .cat-chart-col:hover{ background:rgba(58,43,18,.06); }
-  .cat-chart-col.selected{ background:rgba(201,138,0,.16); }
-  .cat-chart-val{ font-size:9px; color:var(--ink-soft); line-height:1.3; height:12px; white-space:nowrap; font-weight:500; }
-  .cat-chart-val.peak{ color:var(--ink); font-weight:700; }
-  .cat-chart-col.selected .cat-chart-val{ color:var(--gold); font-weight:700; }
-  .cat-chart-bar-track{ width:100%; height:70px; display:flex; align-items:flex-end; }
-  .cat-chart-bar{
-    width:100%; border-radius:7px 7px 3px 3px; min-height:3px;
-    box-shadow:0 1px 3px rgba(58,43,18,.18) inset;
-    transition:height .25s ease, background .15s, box-shadow .15s;
-  }
-  .cat-chart-col.selected .cat-chart-bar{
-    background:linear-gradient(180deg, #f0b83a, var(--gold)) !important;
-    box-shadow:0 0 0 2px rgba(201,138,0,.32), 0 3px 10px rgba(201,138,0,.35);
-  }
-  .cat-chart-month-label{ font-size:9.5px; color:var(--ink-soft); margin-top:5px; line-height:1; }
-  .cat-chart-col.current .cat-chart-month-label{ color:var(--gold); font-weight:700; }
+  .cat-chart-spark-svg{ display:block; width:100%; height:92px; overflow:visible; }
+  .cat-chart-point{ transition:r .15s; }
+  .cat-chart-val-label{ font-size:8.5px; font-family:'Noto Sans TC', sans-serif; fill:var(--ink-soft); }
+  .cat-chart-val-label.peak{ fill:var(--ink); font-weight:700; }
+  .cat-chart-val-label.selected{ fill:var(--gold); font-weight:700; }
+  .cat-chart-hit-row{ position:absolute; left:6px; right:6px; top:12px; bottom:8px; display:flex; }
+  .cat-chart-hit{ flex:1; min-width:0; cursor:pointer; border-radius:8px; transition:background .15s; }
+  .cat-chart-hit:hover{ background:rgba(58,43,18,.06); }
+  .cat-chart-hit.selected{ background:rgba(201,138,0,.14); }
+  .cat-chart-month-labels{ display:flex; margin-top:5px; padding:0 6px; }
+  .cat-chart-month-labels > div{ flex:1; min-width:0; text-align:center; font-size:9.5px; color:var(--ink-soft); line-height:1; }
+  .cat-chart-month-labels > div.current{ color:var(--gold); font-weight:700; }
   .cat-chart-current-dot{ display:inline-block; width:4px; height:4px; border-radius:50%; background:var(--gold); margin-left:2px; vertical-align:middle; }
   .cat-chart-subs-head{ font-size:11px; font-weight:600; color:var(--ink); margin-bottom:4px; }
 
@@ -1149,7 +1140,7 @@
         <div id="statsCategoryMonthSection" style="display:none;">
           <div class="stat-section">
             <h3>各類別每月花費</h3>
-            <p class="hint" style="margin-bottom:14px;">這個年度裡，每個主類別在各月份花了多少；長條愈高代表那個月花得愈多（以該類別自己全年最高的月份為基準）。</p>
+            <p class="hint" style="margin-bottom:14px;">這個年度裡，每個主類別在各月份花了多少；用趨勢線一次看完 12 個月的走勢，最高的月份會特別標出金額。點任一個月份可以看那個月的子類別明細。</p>
             <div id="statsCategoryCharts"></div>
           </div>
         </div>
@@ -1570,6 +1561,55 @@ async function apiPost(action, sheet, data){
   return json.data;
 }
 
+// ---------- 本地快取（解決「每次打開都要重新讀資料」的問題） ----------
+// 每次成功拿到資料（不管是最近幾個月、還是完整歷史）都順手存一份到瀏覽器的
+// localStorage。下次打開頁面時，先把上次的快取整份塞進 state 直接畫出來
+// （不用等網路），畫面幾乎是「秒開」；同時背景仍然會照原本的邏輯跟後端要
+// 最新資料，等回來後悄悄更新畫面並覆蓋快取，不會讓使用者一直看到舊資料。
+function cacheKey_(){ return 'fin_cache_v1_' + (cfg.url || 'default'); }
+function saveStateCache_(){
+  try{
+    const payload = {
+      accounts: state.accounts,
+      liabilities: state.liabilities,
+      transactions: state.transactions,
+      recurring: state.recurring,
+      categories: state.categories,
+      transactionsFullyLoaded: state.transactionsFullyLoaded,
+      transactionsSince: state.transactionsSince,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(cacheKey_(), JSON.stringify(payload));
+  }catch(err){
+    // 快取失敗（例如容量爆掉）不影響主要功能，安靜略過就好。
+    console.warn('寫入本地快取失敗（不影響資料本身）：', err);
+  }
+}
+let saveCacheTimer_ = null;
+// 資料異動很頻繁時（例如快速連續存檔），把寫快取這個動作合併、延後一點再做，
+// 避免每次都馬上序列化整包資料。
+function scheduleSaveCache_(){
+  clearTimeout(saveCacheTimer_);
+  saveCacheTimer_ = setTimeout(saveStateCache_, 400);
+}
+function loadStateCache_(){
+  try{
+    const raw = localStorage.getItem(cacheKey_());
+    return raw ? JSON.parse(raw) : null;
+  }catch(err){
+    return null;
+  }
+}
+function applyStateCache_(cached){
+  state.accounts = cached.accounts || [];
+  state.liabilities = cached.liabilities || [];
+  state.transactions = cached.transactions || [];
+  state.recurring = cached.recurring || [];
+  state.categories = cached.categories || { expense: [], income: [] };
+  state.transactionsFullyLoaded = !!cached.transactionsFullyLoaded;
+  state.transactionsSince = cached.transactionsSince || null;
+}
+
 // 記帳紀錄累積久了會很大量，一次全部載入常常是「載入資料中」卡很久的主因。
 // 這裡先只跟後端要最近 3 個月的記帳（帳戶/負債/利息/模板資料量小，一樣一次全拿），
 // 讓畫面能很快顯示出來、可以馬上開始記帳；完整歷史紀錄（統計分析、共同帳本、
@@ -1582,16 +1622,34 @@ async function loadAll(){
     $('#cfgStatus').className = 'status err';
     return;
   }
+  // 先看看瀏覽器裡有沒有上次的快取：有的話直接畫出來，讓使用者馬上就能看到
+  // （含之前已經補齊過的完整記帳歷史），不用每次打開都乾等網路。
+  const cached = loadStateCache_();
+  const hadFullHistoryCached = !!(cached && cached.transactionsFullyLoaded);
+  if(cached){
+    applyStateCache_(cached);
+    renderAll();
+    if(!$('#trId').value) populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
+    if(!$('#tplId').value) populateTplCategories($('#tplType').value, $('#tplCategory').value, $('#tplSubcategory').value);
+    $('#cfgStatus').textContent = '已顯示上次的資料，背景更新中…';
+    $('#cfgStatus').className = 'status ok';
+  }
   try{
     await runBusy(async () => {
       const all = await apiGet('all', { recentMonths: INITIAL_LOAD_RECENT_MONTHS });
       state.accounts = all.accounts;
       state.liabilities = all.liabilities;
-      state.transactions = all.transactions;
       state.recurring = all.recurring || [];
       state.categories = all.categories || { expense: [], income: [] };
-      state.transactionsFullyLoaded = !all.transactionsTruncated;
-      state.transactionsSince = all.transactionsSince || null;
+      // 如果快取裡本來就已經有完整歷史，這裡「最近 3 個月」的回應不要拿來
+      // 蓋掉既有的完整資料（不然畫面會突然從「全部年份都看得到」倒退回
+      // 「只剩最近 3 個月」，依類別頁面一年前面幾個月又會暫時看不到資料）；
+      // 完整歷史會在下面另外用背景更新去刷新。
+      if(!hadFullHistoryCached){
+        state.transactions = all.transactions;
+        state.transactionsFullyLoaded = !all.transactionsTruncated;
+        state.transactionsSince = all.transactionsSince || null;
+      }
       renderAll();
       // 記帳／模板表單的主類別、子類別選單在頁面一開始（IIFE）就先畫過一次，
       // 但那時候 state.categories 都還是空的（要等這裡 apiGet('all') 回來才有資料），
@@ -1600,7 +1658,8 @@ async function loadAll(){
       // 只有目前沒有正在編輯既有紀錄時才重畫，避免蓋掉使用者正在編輯的內容。
       if(!$('#trId').value) populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
       if(!$('#tplId').value) populateTplCategories($('#tplType').value, $('#tplCategory').value, $('#tplSubcategory').value);
-    }, '載入資料中…');
+      saveStateCache_();
+    }, cached ? '更新資料中…' : '載入資料中…');
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
     // 第一次接上這個試算表時，把舊版存在瀏覽器 localStorage 的自訂類別（如果有）
@@ -1610,12 +1669,20 @@ async function loadAll(){
       renderVisibleSection();
     });
     // 讓「記帳」清單先完整顯示、使用者可以馬上開始操作之後，才趁機在背景
-    // 偷偷補齊完整記帳歷史，避免一進畫面就同時打兩個請求互相搶時間，
-    // 拖慢最重要的「第一次看到畫面」這件事。
-    setTimeout(prefetchFullHistoryInBackground_, 800);
+    // 偷偷補齊（或刷新）完整記帳歷史，避免一進畫面就同時打兩個請求互相搶時間，
+    // 拖慢最重要的「第一次看到畫面」這件事。如果快取裡本來就有完整歷史，
+    // 這裡改成強制刷新一次（時間拉短一點），確保資料不會一直卡在舊快取。
+    setTimeout(() => prefetchFullHistoryInBackground_(hadFullHistoryCached), hadFullHistoryCached ? 300 : 800);
   }catch(err){
-    $('#cfgStatus').textContent = '連線失敗：' + err.message;
-    $('#cfgStatus').className = 'status err';
+    if(!cached){
+      $('#cfgStatus').textContent = '連線失敗：' + err.message;
+      $('#cfgStatus').className = 'status err';
+    } else {
+      // 已經有快取畫面可以看，這裡只提示背景更新失敗，不用整個報錯蓋掉畫面。
+      console.warn('背景更新資料失敗（畫面仍顯示上次的快取資料）：', err);
+      $('#cfgStatus').textContent = '背景更新失敗，目前顯示的是上次的快取資料：' + err.message;
+      $('#cfgStatus').className = 'status err';
+    }
   }
 }
 
@@ -1623,9 +1690,11 @@ async function loadAll(){
 // 日曆翻到比 transactionsSince 更舊的月份）才會用到。
 // loadFullTransactions_ 是實際去後端拿資料的共用邏輯（不管背景偷偷拿、
 // 還是使用者主動切頁等著拿，都走同一個 promise，不會重複打兩次請求）。
+// force 為 true 時，就算 state.transactionsFullyLoaded 已經是 true（例如來自
+// 快取），還是會重新跟後端要一次最新的完整資料，確保快取不會一直是舊的。
 let fullTransactionsLoadPromise = null;
-async function loadFullTransactions_(){
-  if(state.transactionsFullyLoaded) return;
+async function loadFullTransactions_(force){
+  if(state.transactionsFullyLoaded && !force) return;
   if(fullTransactionsLoadPromise) return fullTransactionsLoadPromise;
   fullTransactionsLoadPromise = (async () => {
     try{
@@ -1635,14 +1704,15 @@ async function loadFullTransactions_(){
       // 完整資料到手後，共同帳本／統計分析／記帳清單都要用新資料重算一次，
       // 但不馬上重畫——沒人在看的分頁沒必要現在就花時間算，等切過去再算就好。
       dirty.ledger = true; dirty.stats = true; dirty.transactions = true;
+      saveStateCache_();
     } finally {
       fullTransactionsLoadPromise = null;
     }
   })();
   return fullTransactionsLoadPromise;
 }
-// 使用者主動切到「共同帳本」「統計分析」等分頁、或搜尋記帳時：要讓使用者
-// 看到「補齊中」的提示並鎖住畫面，等資料回來才繼續。
+// 使用者主動切到「共同帳本」「統計分析」「依類別」等分頁、或搜尋記帳時：要讓
+// 使用者看到「補齊中」的提示並鎖住畫面，等資料回來才繼續，避免看到不完整的資料。
 async function ensureFullTransactionsLoaded(){
   if(state.transactionsFullyLoaded) return;
   try{
@@ -1658,8 +1728,8 @@ async function ensureFullTransactionsLoaded(){
 // 背景載完了，不用再等一次「補齊完整記帳歷史中…」。就算背景載入還沒完成、
 // 使用者已經手動點過去，也只會共用同一個 loadFullTransactions_ promise，
 // 不會重複打兩次請求，只是那時候才會看到「補齊中」的提示、繼續等剩下的時間。
-function prefetchFullHistoryInBackground_(){
-  loadFullTransactions_()
+function prefetchFullHistoryInBackground_(force){
+  loadFullTransactions_(force)
     .then(() => renderVisibleSection())
     .catch(err => console.warn('背景補齊記帳歷史失敗（不影響目前畫面）：', err));
 }
@@ -1766,6 +1836,7 @@ function renderAll(){
   renderAccountSelects();
   markAllDirty();
   renderVisibleSection();
+  scheduleSaveCache_();
 }
 
 // 帳戶撥息週期（月數）：沒有填的舊帳戶預設當作「每月」，相容既有資料
@@ -3009,25 +3080,61 @@ function renderCategoryMonthCharts(year){
   const now = new Date();
   const isThisYear = String(now.getFullYear()) === String(year);
   const curMonthIdx = now.getMonth();
+  // 折線圖幾何設定：viewBox 固定座標系（用 preserveAspectRatio="none" 拉滿容器寬度），
+  // 12 個月等距排開，y 依該類別全年最高月份 (max) 換算高度比例。
+  const SPARK_W = 480, SPARK_H = 92, SPARK_PAD_L = 4, SPARK_PAD_R = 4, SPARK_PAD_T = 20, SPARK_PAD_B = 6;
+  const stepX = (SPARK_W - SPARK_PAD_L - SPARK_PAD_R) / 11;
   container.innerHTML = cats.map(({cat, arr, monthSubs, count, total, max}, i) => {
     const pct = yearTotal ? Math.round(total / yearTotal * 100) : 0;
     const avgMonth = total / 12;
     const selectedMonth = (expandedCatMonth_ && expandedCatMonth_.cat === cat) ? expandedCatMonth_.month : null;
     const { r, g, b } = hexToRgb_(RANK_COLORS[i % RANK_COLORS.length]);
-    const barGradient = `linear-gradient(180deg, rgba(${r},${g},${b},.45), rgb(${r},${g},${b}))`;
-    const cols = arr.map((v, m) => {
-      const barPct = max ? Math.round(v / max * 100) : 0;
-      const height = v > 0 ? Math.max(barPct, 4) : 0;
-      const isSel = selectedMonth === m;
-      const isPeak = max > 0 && v === max;
-      const isCurrent = isThisYear && m === curMonthIdx;
-      const barStyle = `height:${height}%;` + (isSel ? '' : `background:${barGradient};`);
-      return `<div class="cat-chart-col${isSel ? ' selected' : ''}${isCurrent ? ' current' : ''}" data-month="${m}">
-        <div class="cat-chart-val${isPeak ? ' peak' : ''}">${v > 0 ? fmtShort(v) : ''}</div>
-        <div class="cat-chart-bar-track"><div class="cat-chart-bar" style="${barStyle}" title="${m+1} 月：$${fmt(v)}"></div></div>
-        <div class="cat-chart-month-label">${m+1}${isCurrent ? '<span class="cat-chart-current-dot"></span>' : ''}</div>
-      </div>`;
+    const lineColor = `rgb(${r},${g},${b})`;
+    const gradId = `catSparkGrad-${i}-${String(year).replace(/[^0-9a-z]/gi,'')}`;
+
+    const points = arr.map((v, m) => {
+      const x = SPARK_PAD_L + stepX * m;
+      const frac = max > 0 ? v / max : 0;
+      const y = SPARK_PAD_T + (SPARK_H - SPARK_PAD_T - SPARK_PAD_B) * (1 - frac);
+      return { x, y, v, m };
+    });
+    const linePath = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const baseY = (SPARK_H - SPARK_PAD_B).toFixed(1);
+    const areaPath = `${linePath} L${points[11].x.toFixed(1)},${baseY} L${points[0].x.toFixed(1)},${baseY} Z`;
+
+    const circles = points.map(p => {
+      const isSel = selectedMonth === p.m;
+      const isPeak = max > 0 && p.v === max;
+      const isCurrent = isThisYear && p.m === curMonthIdx;
+      const rad = isSel ? 5.5 : isPeak ? 4.5 : 3;
+      const cls = ['cat-chart-point', isSel ? 'selected' : '', isPeak ? 'peak' : '', isCurrent ? 'current' : ''].filter(Boolean).join(' ');
+      const fill = isSel ? 'var(--gold)' : lineColor;
+      let label = '';
+      if(p.v > 0 && (isPeak || isSel)){
+        const labelCls = ['cat-chart-val-label', isPeak ? 'peak' : '', isSel ? 'selected' : ''].filter(Boolean).join(' ');
+        label = `<text class="${labelCls}" x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" text-anchor="middle">${fmtShort(p.v)}</text>`;
+      }
+      return `<circle class="${cls}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${rad}" fill="${fill}"><title>${p.m+1} 月：$${fmt(p.v)}</title></circle>${label}`;
     }).join('');
+
+    const svg = `<svg class="cat-chart-spark-svg" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none">
+      <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(${r},${g},${b},.38)"/>
+        <stop offset="100%" stop-color="rgba(${r},${g},${b},0)"/>
+      </linearGradient></defs>
+      <path d="${areaPath}" fill="url(#${gradId})" stroke="none"></path>
+      <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      ${circles}
+    </svg>`;
+
+    const hitCols = arr.map((v, m) => `<div class="cat-chart-hit${selectedMonth === m ? ' selected' : ''}" data-month="${m}"></div>`).join('');
+
+    const monthLabels = arr.map((v, m) => {
+      const isCurrent = isThisYear && m === curMonthIdx;
+      return `<div${isCurrent ? ' class="current"' : ''}>${m+1}${isCurrent ? '<span class="cat-chart-current-dot"></span>' : ''}</div>`;
+    }).join('');
+
+    const cols = `<div class="cat-chart-spark-wrap">${svg}<div class="cat-chart-hit-row">${hitCols}</div></div><div class="cat-chart-month-labels">${monthLabels}</div>`;
     let subHtml = '';
     if(selectedMonth !== null){
       const subEntries = Object.entries(monthSubs[selectedMonth] || {}).sort((a,b) => b[1] - a[1]);
@@ -3054,7 +3161,7 @@ function renderCategoryMonthCharts(year){
         <div class="rank-meta">
           <span>${count} 筆 · 月均 $${fmt(avgMonth)}</span>
         </div>
-        <div class="cat-chart-bars">${cols}</div>
+        ${cols}
         ${subHtml}
       </div>
     </div>`;
@@ -3063,7 +3170,7 @@ function renderCategoryMonthCharts(year){
 // 點某個月份的長條才會展開/收合那個月的子類別明細（同一類別再點一次同月份會收合，
 // 點別的月份會直接切換），跟「月/年」統計排行榜點整列展開的邏輯區分開來。
 $('#statsCategoryCharts').addEventListener('click', e => {
-  const col = e.target.closest('.cat-chart-col');
+  const col = e.target.closest('.cat-chart-hit');
   if(!col) return;
   const card = col.closest('[data-cat]');
   if(!card) return;
@@ -3102,14 +3209,23 @@ $('#trSubNav').addEventListener('click', async e => {
   renderVisibleSection();
   updateTrFabVisibility();
 });
-// 統計：月/年 模式切換
-$('#statsModeNav').addEventListener('click', e => {
+// 統計：月/年/依類別 模式切換
+// 「依類別」「依年度」都是看一整年的資料，如果完整歷史還沒補齊（例如切進「統計分析」
+// 分頁那次的背景補齊還沒回來、使用者手比較快），這裡要再保險一次等資料到齊，
+// 不然像是切到今年前半年的類別月度圖時，會因為只有最近 3 個月的資料而誤以為
+// 「這幾個月沒有花費」，其實只是還沒讀到而已。
+const STATS_MODES_NEED_FULL_HISTORY = ['year', 'category'];
+$('#statsModeNav').addEventListener('click', async e => {
   const btn = e.target.closest('button[data-mode]');
   if(!btn) return;
   statsMode = btn.dataset.mode;
   $$('#statsModeNav button').forEach(b => b.classList.toggle('active', b === btn));
   $('#statsMonthInput').style.display = statsMode === 'month' ? '' : 'none';
   $('#statsYearInput').style.display = statsMode === 'month' ? 'none' : '';
+  if(STATS_MODES_NEED_FULL_HISTORY.includes(statsMode) && !state.transactionsFullyLoaded){
+    await ensureFullTransactionsLoaded(); // 內部補齊完再重畫，這裡不用再另外呼叫 renderStats
+    return;
+  }
   renderStats();
 });
 $('#statsMonthInput').addEventListener('change', renderStats);
