@@ -717,6 +717,17 @@
   .rank-mover.down{ color:var(--green); }
   .rank-mover.flat{ color:var(--ink-soft); }
 
+  /* ---- 統計：支出佔比圓餅圖（跟排行榜共用同一組顏色，一眼對照佔比與排名） ---- */
+  .donut-wrap{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin-bottom:16px; }
+  .donut-svg{ width:132px; height:132px; flex:none; }
+  .donut-center-label{ font-size:11px; fill:var(--ink-soft); font-family:'Noto Sans TC', sans-serif; }
+  .donut-center-value{ font-size:15px; fill:var(--ink); font-family:'Roboto Slab', serif; font-weight:700; }
+  .donut-legend{ flex:1 1 140px; min-width:140px; display:flex; flex-direction:column; gap:7px; }
+  .donut-legend-row{ display:flex; align-items:center; gap:7px; font-size:12px; color:var(--ink); }
+  .donut-legend-dot{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .donut-legend-label{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .donut-legend-val{ font-family:'Roboto Slab', serif; color:var(--ink-soft); flex:none; }
+
   @media (max-width:680px){
     .wrap{ padding:14px 10px calc(var(--nav-h) + 22px); }
     .tabs.top-tabs{ display:none; }
@@ -1112,26 +1123,29 @@
         <div class="summary-grid" id="statsSummaryGrid"></div>
         <div class="compare-grid" id="statsCompareGrid"></div>
 
-        <!-- ② 支出去了哪裡：排行 + 跟上期比（點一列可展開該類別的子類別明細） -->
+        <!-- ② 支出走勢：月模式看每日走勢、年模式看每月走勢，用走勢線一次看出高低起伏，
+             比原本一排長條清單更容易看出「什麼時候花比較多」 -->
+        <div class="stat-section">
+          <h3 id="statsTrendTitle">支出走勢</h3>
+          <p class="hint" id="statsTrendHint" style="margin-bottom:10px;"></p>
+          <div id="statsTrendChart"></div>
+        </div>
+
+        <!-- ③ 支出去了哪裡：圓餅圖看佔比 + 排行榜（跟上期比，點一列可展開該類別的子類別明細） -->
         <div class="stat-section">
           <h3>支出去了哪裡</h3>
-          <p class="hint" style="margin-bottom:10px;">點一列可以展開看該主類別底下的子類別花了多少。全額代墊給對方的款項不算在支出裡。</p>
+          <p class="hint" style="margin-bottom:10px;">圓餅圖看各類別佔比，點下方任一列可以展開看該主類別底下的子類別花了多少。全額代墊給對方的款項不算在支出裡。</p>
+          <div id="statsCategoryDonut"></div>
           <div class="category-rank-wrap">
             <div class="rank-list" id="statsCategoryRank"></div>
           </div>
         </div>
 
-        <!-- ③ 固定 vs 彈性支出 -->
+        <!-- ④ 固定 vs 彈性支出 -->
         <div class="stat-section">
           <h3>固定支出 vs 彈性支出</h3>
           <p class="hint" style="margin-bottom:10px;">固定支出＝由「模板」自動加入的紀錄（房租、訂閱費等）；其餘算彈性花費，是比較能省的部分。</p>
           <div id="statsFixedVsFlex"></div>
-        </div>
-
-        <!-- ④ 消費節奏：年模式看每月趨勢 -->
-        <div class="stat-section" id="statsYearlyTrendSection" style="display:none;">
-          <h3>年度每月支出趨勢</h3>
-          <div id="statsYearlyTrend"></div>
         </div>
 
         <!-- ⑤ 收入來源 -->
@@ -2990,7 +3004,37 @@ function renderStats(){
 
   renderCompare(period, expenseTotal);
 
-  // ② 支出去了哪裡：排行榜（跟上一期比較誰漲最多、誰降最多；每列可點開看子類別明細）
+  // ② 支出走勢：月模式看「這個月每一天」、年模式看「這一年每個月」，
+  // 用走勢線圖取代原本一排長條清單，時間先後的資料用走勢線更容易看出高低起伏、哪裡是尖峰。
+  if(statsMode === 'month' && period){
+    $('#statsTrendTitle').textContent = '本月每日支出走勢';
+    $('#statsTrendHint').textContent = '看這個月每一天花了多少，最高的那天會特別標出金額，今天則會用金色標出。';
+    const nDays = totalDaysInPeriod(period, 'month');
+    const dailyArr = dailyExpenseArray(period, nDays);
+    const labels = dailyArr.map((_, i) => String(i + 1));
+    const now = new Date();
+    const isCurrentMonth = period === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const highlightIndex = isCurrentMonth ? now.getDate() - 1 : null;
+    renderTrendChart($('#statsTrendChart'), labels, dailyArr, { highlightIndex, colorHex:'#93503a' });
+  } else if(statsMode === 'year' && period){
+    $('#statsTrendTitle').textContent = '年度每月支出走勢';
+    $('#statsTrendHint').textContent = '看這個年度 12 個月各花了多少，最高的月份會特別標出金額，今年目前的月份則會用金色標出。';
+    const monthlyExpense = Array(12).fill(0);
+    state.transactions.forEach(t => {
+      if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+      const d = t.date || '';
+      if(!d.startsWith(period)) return;
+      const m = parseInt(d.slice(5,7), 10) - 1;
+      if(m >= 0 && m < 12) monthlyExpense[m] += myExpenseShare_(t);
+    });
+    const labels = monthlyExpense.map((_, i) => `${i+1}月`);
+    const now = new Date();
+    const isThisYear = String(now.getFullYear()) === String(period);
+    const highlightIndex = isThisYear ? now.getMonth() : null;
+    renderTrendChart($('#statsTrendChart'), labels, monthlyExpense, { highlightIndex, colorHex:'#4b6b43' });
+  }
+
+  // ③ 支出去了哪裡：圓餅圖看佔比 + 排行榜（跟上一期比較誰漲最多、誰降最多；每列可點開看子類別明細）
   const prevPeriod = previousPeriodStr(period, statsMode);
   const curExpStats = categoryStatsFor(rows, 'expense');
   const prevExpStats = categoryStatsFor(transactionsInPeriod(prevPeriod), 'expense');
@@ -2998,42 +3042,126 @@ function renderStats(){
   // 不需要重新跑一次整個 renderStats（也不會不小心把使用者正在看的其他區塊重畫掉）。
   lastCurExpStats_ = curExpStats;
   lastPrevExpStats_ = prevExpStats;
+  renderCategoryDonut($('#statsCategoryDonut'), curExpStats);
   renderCategoryRanking($('#statsCategoryRank'), curExpStats, prevExpStats);
 
-  // ③ 固定 vs 彈性支出
+  // ④ 固定 vs 彈性支出
   renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
-
-  // ④ 消費節奏：年模式顯示每月趨勢
-  const trendSection = $('#statsYearlyTrendSection');
-  if(statsMode === 'year' && period){
-    trendSection.style.display = '';
-    const monthlyExpense = Array(12).fill(0);
-    let maxVal = 0;
-    state.transactions.forEach(t => {
-      if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
-      const d = t.date || '';
-      if(!d.startsWith(period)) return;
-      const m = parseInt(d.slice(5,7), 10) - 1;
-      if(m >= 0 && m < 12){
-        monthlyExpense[m] += myExpenseShare_(t);
-        maxVal = Math.max(maxVal, monthlyExpense[m]);
-      }
-    });
-    $('#statsYearlyTrend').innerHTML = monthlyExpense.map((val, i) => {
-      const pct = maxVal ? Math.round(val/maxVal*100) : 0;
-      return `<div class="stat-bar-row">
-        <div class="stat-bar-label">${i+1} 月</div>
-        <div class="stat-bar-track"><div class="stat-bar-fill expense" style="width:${pct}%"></div></div>
-        <div class="stat-bar-value">$${fmt(val)}</div>
-      </div>`;
-    }).join('');
-  } else {
-    trendSection.style.display = 'none';
-  }
 
   // ⑤ 收入來源
   const inc = breakdownByCategory(rows, 'income');
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
+}
+
+// 這個月每一天的支出金額陣列（index 0 = 1 號），全額代墊款項不算支出，
+// 共同分攤的支出只算自己該負擔的份額，邏輯跟其他統計數字一致。
+function dailyExpenseArray(period, nDays){
+  const arr = Array(nDays).fill(0);
+  state.transactions.forEach(t => {
+    if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+    const d = t.date || '';
+    if(!d.startsWith(period)) return;
+    const day = parseInt(d.slice(8, 10), 10) - 1;
+    if(day >= 0 && day < nDays) arr[day] += myExpenseShare_(t);
+  });
+  return arr;
+}
+
+// ---------- 支出走勢線圖（月/年模式共用）：viewBox 固定座標系＋preserveAspectRatio="none"
+// 拉滿容器寬度，資料點等距排開；最高點與「今天／本月」的點會特別標出金額，
+// 視覺樣式沿用「依類別」頁面的趨勢線圖（同一套 CSS class），維持整站風格一致。----------
+function renderTrendChart(container, labels, values, opts){
+  opts = opts || {};
+  const n = values.length;
+  if(!n || !values.some(v => v > 0)){
+    container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
+    return;
+  }
+  const max = Math.max(...values);
+  const W = 480, H = 92, PAD_L = 4, PAD_R = 4, PAD_T = 20, PAD_B = 6;
+  const stepX = n > 1 ? (W - PAD_L - PAD_R) / (n - 1) : 0;
+  const color = opts.colorHex || '#c98a00';
+  const { r, g, b } = hexToRgb_(color);
+  const gradId = 'trendGrad-' + Math.random().toString(36).slice(2, 9);
+  const coords = values.map((v, i) => {
+    const x = PAD_L + stepX * i;
+    const frac = max > 0 ? v / max : 0;
+    const y = PAD_T + (H - PAD_T - PAD_B) * (1 - frac);
+    return { x, y, v, i };
+  });
+  const linePath = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+  const baseY = (H - PAD_B).toFixed(1);
+  const areaPath = n > 1
+    ? `${linePath} L${coords[n-1].x.toFixed(1)},${baseY} L${coords[0].x.toFixed(1)},${baseY} Z`
+    : '';
+  const circles = coords.map(c => {
+    const isPeak = max > 0 && c.v === max;
+    const isHi = opts.highlightIndex === c.i;
+    const rad = isHi ? 5.5 : isPeak ? 4.5 : (n > 20 ? 1.8 : 3);
+    const cls = ['cat-chart-point', isHi ? 'selected' : '', isPeak ? 'peak' : ''].filter(Boolean).join(' ');
+    const fill = isHi ? 'var(--gold)' : color;
+    let label = '';
+    if(c.v > 0 && (isPeak || isHi)){
+      const labelCls = ['cat-chart-val-label', isPeak ? 'peak' : '', isHi ? 'selected' : ''].filter(Boolean).join(' ');
+      label = `<text class="${labelCls}" x="${c.x.toFixed(1)}" y="${(c.y - 8).toFixed(1)}" text-anchor="middle">${fmtShort(c.v)}</text>`;
+    }
+    return `<circle class="${cls}" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${rad}" fill="${fill}"><title>${escapeHtml(labels[c.i])}：$${fmt(c.v)}</title></circle>${label}`;
+  }).join('');
+  const svg = `<svg class="cat-chart-spark-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(${r},${g},${b},.35)"/>
+      <stop offset="100%" stop-color="rgba(${r},${g},${b},0)"/>
+    </linearGradient></defs>
+    ${areaPath ? `<path d="${areaPath}" fill="url(#${gradId})" stroke="none"></path>` : ''}
+    <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+    ${circles}
+  </svg>`;
+  const showEvery = Math.max(1, Math.ceil(n / 8));
+  const labelsHtml = labels.map((lb, i) => {
+    const show = (i % showEvery === 0) || i === n - 1;
+    const isHi = opts.highlightIndex === i;
+    return `<div${isHi ? ' class="current"' : ''}>${show ? escapeHtml(lb) : ''}</div>`;
+  }).join('');
+  container.innerHTML = `<div class="cat-chart-spark-wrap">${svg}</div><div class="cat-chart-month-labels">${labelsHtml}</div>`;
+}
+
+// ---------- 支出去了哪裡：圓餅圖（跟排行榜共用同一組顏色與排序，一眼對照佔比與排名，
+// 超過 6 個類別時把剩下的合併成「其他」，避免切片太細看不清楚）----------
+function renderCategoryDonut(container, cur){
+  const entries = Object.entries(cur.map).sort((a,b) => b[1].total - a[1].total);
+  if(!entries.length || !cur.total){
+    container.innerHTML = '';
+    return;
+  }
+  const MAX_SLICES = 6;
+  const top = entries.slice(0, MAX_SLICES);
+  const restTotal = entries.slice(MAX_SLICES).reduce((s, [,info]) => s + info.total, 0);
+  const slices = top.map(([cat, info], i) => ({ cat, val: info.total, color: RANK_COLORS[i % RANK_COLORS.length] }));
+  if(restTotal > 0.005) slices.push({ cat: '其他', val: restTotal, color: '#c9bfa8' });
+
+  const CX = 64, CY = 64, R = 50, STROKE = 18;
+  const circumference = 2 * Math.PI * R;
+  let offsetAcc = 0;
+  const segs = slices.map(s => {
+    const frac = cur.total ? s.val / cur.total : 0;
+    const len = frac * circumference;
+    const seg = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${s.color}" stroke-width="${STROKE}" stroke-dasharray="${len.toFixed(2)} ${(circumference - len).toFixed(2)}" stroke-dashoffset="${(-offsetAcc).toFixed(2)}"><title>${escapeHtml(s.cat)}：$${fmt(s.val)}（${Math.round(frac*100)}%）</title></circle>`;
+    offsetAcc += len;
+    return seg;
+  }).join('');
+  const legend = slices.map(s => {
+    const pct = cur.total ? Math.round(s.val / cur.total * 100) : 0;
+    return `<div class="donut-legend-row"><span class="donut-legend-dot" style="background:${s.color}"></span><span class="donut-legend-label">${escapeHtml(s.cat)}</span><span class="donut-legend-val">${pct}%</span></div>`;
+  }).join('');
+  container.innerHTML = `<div class="donut-wrap">
+    <svg viewBox="0 0 128 128" class="donut-svg">
+      <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--paper-line)" stroke-width="${STROKE}"></circle>
+      <g transform="rotate(-90 ${CX} ${CY})">${segs}</g>
+      <text x="${CX}" y="${CY-4}" text-anchor="middle" class="donut-center-label">支出</text>
+      <text x="${CX}" y="${CY+15}" text-anchor="middle" class="donut-center-value">${fmtShort(cur.total)}</text>
+    </svg>
+    <div class="donut-legend">${legend}</div>
+  </div>`;
 }
 
 // ---------- 各類別每月花費（依類別頁面）：視覺樣式改成跟「月/年」統計的支出排行榜一致
