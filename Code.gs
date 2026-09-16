@@ -56,8 +56,7 @@
 // 選單，跟網站前端無關，卻會讓每次類別小異動都要重寫整張 Transactions 表，
 // 記帳筆數一多就變得很慢）。需要重建下拉選單的話，到 Apps Script 編輯器手動
 // 執行一次 rebuildAllTransactionValidations() 即可。
-const BACKEND_VERSION_ = '2026-09-15-3';
-
+const BACKEND_VERSION_ = '2026-09-16-1';
 // 全額代墊的記帳／固定項目統一存成這個主類別名稱，跟前端 ADVANCE_CATEGORY_NAME 保持一致，
 // 這樣不管是使用者手動記帳、還是固定項目自動加入，代墊品項在清單上都長得一樣。
 const ADVANCE_CATEGORY_NAME_ = '代墊';
@@ -170,15 +169,33 @@ function getSheet_(key) {
   if (sheetCache_[key]) return sheetCache_[key];
   const ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES[key]);
+  let headerRow;
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAMES[key]);
     sheet.appendRow(SHEET_HEADERS[key]);
     setDateColumnsAsPlainText_(sheet, key);
     if (key === 'categories') seedDefaultCategories_(sheet);
+    headerRow = SHEET_HEADERS[key]; // 新建立的表，表頭就是這份定義，不用再讀一次
   } else {
-    ensureHeaders_(sheet, SHEET_HEADERS[key]);
+    headerRow = ensureHeaders_(sheet, SHEET_HEADERS[key]); // 效能：讓 ensureHeaders_ 把它剛剛讀到的表頭陣列回傳出來
   }
   sheetCache_[key] = sheet;
+  // 效能重點：下面 getColMap_ 原本會為了組欄位對應表，自己再對同一張表的
+  // 表頭「整列」多發一次 sheet.getRange(1,1,1,lastCol).getValues() 遠端呼叫，
+  // 等於同一份表頭資料被讀了兩次（一次在 ensureHeaders_、一次在 getColMap_）。
+  // Apps Script 對試算表的每一次呼叫都是一趟來回，這種重複讀取在「新增/編輯/
+  // 刪除記帳」這種一次要碰好幾張表（Transactions、Accounts…）的操作裡，會被
+  // 白白乘上好幾倍，是拖慢速度的主因之一。這裡直接用剛剛已經讀到手的表頭
+  // 陣列組出 colMap，一併存進 colMapCache_，getColMap_ 之後就能直接命中快取、
+  // 不用再多打一次 API。
+  if (!colMapCache_[key]) {
+    const map = {};
+    headerRow.forEach((h, i) => {
+      const name = String(h || '').trim();
+      if (name && map[name] === undefined) map[name] = i + 1; // 1-based 欄號；重複表頭取第一個
+    });
+    colMapCache_[key] = map;
+  }
   return sheet;
 }
 
@@ -243,6 +260,9 @@ function ensureHeaders_(sheet, headers) {
   if (missing.length) {
     sheet.getRange(1, currentHeaders.length + 1, 1, missing.length).setValues([missing]);
   }
+  // 回傳「目前實際的表頭陣列」（含剛剛補上的欄位），讓呼叫端（getSheet_）可以
+  // 直接拿去組欄位對應表，不用再對同一張表多發一次表頭讀取請求。
+  return missing.length ? currentHeaders.concat(missing) : currentHeaders;
 }
 
 // ---------- 欄位對應（不假設試算表的實際欄位順序） ----------
@@ -260,16 +280,11 @@ function ensureHeaders_(sheet, headers) {
 const colMapCache_ = {};
 function getColMap_(key) {
   if (colMapCache_[key]) return colMapCache_[key];
-  const sheet = getSheet_(key); // 內部已呼叫 ensureHeaders_，確保欄位標題齊全
-  const lastCol = sheet.getLastColumn();
-  const headerRow = lastCol ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
-  const map = {};
-  headerRow.forEach((h, i) => {
-    const name = String(h || '').trim();
-    if (name && map[name] === undefined) map[name] = i + 1; // 1-based 欄號；重複表頭取第一個
-  });
-  colMapCache_[key] = map;
-  return map;
+  // 效能：getSheet_ 內部已經呼叫 ensureHeaders_ 讀過表頭、並把 colMap 存進
+  // colMapCache_ 了（見 getSheet_ 內的說明），這裡呼叫它就是為了觸發那段快取
+  // 邏輯，不需要（也不應該）自己再對表頭多發一次 getRange().getValues()。
+  getSheet_(key);
+  return colMapCache_[key] || {};
 }
 
 // 取得某個欄位名稱目前實際的欄號（1-based）；找不到就丟例外（理論上不會
