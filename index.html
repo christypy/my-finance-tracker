@@ -3330,6 +3330,12 @@ $('#trDetails').addEventListener('toggle', () => {
   document.body.classList.toggle('tr-form-open', open);
   $('#trDetails').classList.toggle('editing', open);
   if(open){
+    // 新增記帳（非編輯既有紀錄）時，如果日曆上有點選日期，表單日期預設帶入
+    // 那一天；沒有點選日期（單純點「新增記帳」）才預設今天。
+    // 編輯既有紀錄時 trId 已先被填入，不會走到這裡覆蓋掉 editTransaction 設定的日期。
+    if(!$('#trId').value){
+      $('#trDate').value = calSelectedDate || new Date().toISOString().slice(0,10);
+    }
     moveTrDetailsToOverlay_();
     setTimeout(() => $('#trAmount').focus(), 150);
   } else {
