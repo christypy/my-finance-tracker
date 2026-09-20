@@ -954,7 +954,7 @@
                 <label>誰先付款
                   <select id="trPayer">
                     <option value="me">我先付</option>
-                    <option value="partner">對方先付</option>
+                    <option value="partner" selected>對方先付</option>
                   </select>
                 </label>
                 <label>分攤方式
@@ -3780,7 +3780,7 @@ function resetTransactionForm(){
   $('#trNote').value = '';
   $('#trShared').checked = false;
   $('#trLedgerFields').style.display = 'none';
-  $('#trPayer').value = 'me';
+  $('#trPayer').value = 'partner'; // 新增記帳勾選共同帳本時，預設「對方先付」
   $('#trSplitMode').value = 'split';
   setTrType('expense');
   $('#trFormTitle').textContent = '新增記帳';
