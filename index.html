@@ -508,6 +508,18 @@
   @keyframes spin{ to{ transform:rotate(360deg); } }
   @media (min-width:681px){ #busyToast{ bottom:24px; } }
 
+  /* ---- 背景同步狀態小標籤（不鎖畫面） ---- */
+  #syncChip{
+    position:fixed; right:12px; top:calc(env(safe-area-inset-top, 0px) + 10px); z-index:90;
+    background:var(--ink); color:#fff; font-size:12px; padding:6px 12px; border-radius:999px;
+    box-shadow:0 4px 14px rgba(58,43,18,.25); display:flex; align-items:center; gap:7px;
+    opacity:0; pointer-events:none; transition:opacity .2s; max-width:80vw;
+  }
+  #syncChip.show{ opacity:.92; }
+  #syncChip.warn{ background:var(--red); opacity:1; pointer-events:auto; cursor:pointer; }
+  #syncChip .spinner{ width:11px; height:11px; border-radius:50%; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; animation:spin .7s linear infinite; }
+  #syncChip.warn .spinner{ display:none; }
+
   .checkbox-row{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:var(--ink-soft); }
   .checkbox-row input[type="checkbox"]{ min-height:auto; width:17px; height:17px; padding:0; }
 
@@ -1248,6 +1260,11 @@
         <div class="status" id="cfgStatus"></div>
       </div>
 
+      <h2 style="font-size:15px; margin-top:22px;">開啟行為</h2>
+      <div class="settings-block">
+        <label class="checkbox-row"><input type="checkbox" id="cfgOpenForm"> 開啟網頁時直接打開記帳表單</label>
+      </div>
+
       <h2 style="font-size:15px; margin-top:22px;">版本資訊</h2>
       <p class="hint">改完 Apps Script 程式碼後，記得到「部署」→「管理部署作業」建立「新版本」，網址才會套用最新程式碼；這裡可以用來確認前端（這個網頁）跟後端（Apps Script）是不是同一個版本，避免改了程式碼卻忘記部署新版本，導致功能對不起來。</p>
       <div class="settings-block">
@@ -1363,7 +1380,7 @@ const cfg = {
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-09-15-3';
+const FRONTEND_VERSION = '2026-10-01-fast2';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -1467,7 +1484,12 @@ async function migrateLocalCategoriesIfNeeded_(){
   }
 }
 
-function getCategoryTree(type){ return (state.categories && state.categories[type]) || []; }
+function getCategoryTree(type){
+  const real = state.categories && state.categories[type];
+  if(real && real.length) return real;
+  // 還沒載入到（第一次開啟、沒有快取）時，先用內建預設類別，表單才能馬上使用；資料載入後會自動換成你的類別。
+  return state.dataLoaded_ ? [] : ((DEFAULT_CATEGORY_TREE && DEFAULT_CATEGORY_TREE[type]) || []);
+}
 function getCategoryNames(type){ return getCategoryTree(type).map(m => m.name); }
 function getSubcategories(type, mainName){
   const m = getCategoryTree(type).find(x => x.name === mainName);
@@ -1585,7 +1607,12 @@ async function apiPost(action, sheet, data){
   });
   const json = await res.json();
   reportBackendVersion_(json.version);
-  if(!json.ok) throw new Error(json.error || '操作失敗');
+  if(!json.ok){
+    const err = new Error(json.error || '操作失敗');
+    err.server = true;                                   // 後端明確拒絕（不是網路問題）
+    err.busy = /忙碌/.test(json.error || '');            // 後端鎖忙碌：可以稍後重試
+    throw err;
+  }
   return json.data;
 }
 
@@ -1644,69 +1671,96 @@ function applyStateCache_(cached){
 // 日曆翻到比較舊的月份）改成「真的要用到才載入」，不會一進畫面就自動在背景
 // 多打一次很花時間的完整資料請求，讓一開始進來、單純想記一筆帳的情境變快。
 const INITIAL_LOAD_RECENT_MONTHS = 3;
+const FULL_REFRESH_MAX_AGE_MS = 6 * 3600 * 1000; // 完整歷史快取超過這個時間才會在背景重新整理
+function fullSyncedKey_(){ return 'fin_full_synced_at_' + (cfg.url || 'default'); }
+
+// 效能重點（開啟就能記帳）：
+// 1. 有快取時：先用快取畫面「立刻」讓使用者可以記帳，背景悄悄更新，全程「不鎖畫面」。
+//    只有「第一次、完全沒有快取」才會顯示載入中並鎖住畫面。
+// 2. 背景更新回來時，如果快取已有完整歷史，只把「最近 3 個月」那段換新、舊的保留，
+//    不會每次打開都又抓一次完整歷史（以前每次開啟都會強制多打一個超大請求，拖慢 Apps Script）。
+// 3. 使用者在更新途中新記了帳，更新結果不會把他剛記的蓋掉（見 mutationSeq_）。
 async function loadAll(){
   if(!cfg.url || !cfg.token){
     $('#cfgStatus').textContent = '尚未設定，請先到「設定」填入網址與密鑰。';
     $('#cfgStatus').className = 'status err';
     return;
   }
-  // 先看看瀏覽器裡有沒有上次的快取：有的話直接畫出來，讓使用者馬上就能看到
-  // （含之前已經補齊過的完整記帳歷史），不用每次打開都乾等網路。
+  loadSyncQueue_();
   const cached = loadStateCache_();
-  const hadFullHistoryCached = !!(cached && cached.transactionsFullyLoaded);
   if(cached){
     applyStateCache_(cached);
+    state.dataLoaded_ = true;
     renderAll();
     if(!$('#trId').value) populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
     if(!$('#tplId').value) populateTplCategories($('#tplType').value, $('#tplCategory').value, $('#tplSubcategory').value);
     $('#cfgStatus').textContent = '已顯示上次的資料，背景更新中…';
     $('#cfgStatus').className = 'status ok';
   }
-  try{
-    await runBusy(async () => {
-      const all = await apiGet('all', { recentMonths: INITIAL_LOAD_RECENT_MONTHS });
-      state.accounts = all.accounts;
-      state.liabilities = all.liabilities;
-      state.recurring = all.recurring || [];
-      state.categories = all.categories || { expense: [], income: [] };
-      // 如果快取裡本來就已經有完整歷史，這裡「最近 3 個月」的回應不要拿來
-      // 蓋掉既有的完整資料（不然畫面會突然從「全部年份都看得到」倒退回
-      // 「只剩最近 3 個月」，依類別頁面一年前面幾個月又會暫時看不到資料）；
-      // 完整歷史會在下面另外用背景更新去刷新。
-      if(!hadFullHistoryCached){
-        state.transactions = all.transactions;
-        state.transactionsFullyLoaded = !all.transactionsTruncated;
+  // 上次沒送完的記帳（斷線、關掉網頁）先補送，再抓最新資料，才不會被舊資料蓋掉
+  if(syncQueue_.length) drainSyncQueue_(); // 背景補送，不等它，直接去抓最新資料
+
+  const fetchAndApply = async () => {
+    const win = beginFetchWindow_();
+    let all;
+    try{ all = await apiGet('all', { recentMonths: INITIAL_LOAD_RECENT_MONTHS }); }
+    finally { endFetchWindow_(win); }
+    const hasLocalChanges = win.size > 0 || syncQueue_.length > 0;
+    state.liabilities = all.liabilities;
+    state.recurring = all.recurring || [];
+    state.categories = all.categories || { expense: [], income: [] };
+    state.dataLoaded_ = true;
+    // 帳戶餘額：期間有本機記帳就先保留本機算好的（後端回應會逐筆校正）；沒有就直接用後端的
+    if(!(hasLocalChanges && state.accounts.length)) state.accounts = all.accounts;
+    let rows = all.transactions;
+    if(all.transactionsTruncated && state.transactionsFullyLoaded && all.transactionsSince){
+      const since = all.transactionsSince;
+      const older = state.transactions.filter(t => (t.date || '') < since && !win.has(t.id));
+      rows = older.concat(mergeServerTransactions_(rows, win));
+    } else {
+      rows = mergeServerTransactions_(rows, win);
+      if(all.transactionsTruncated){
+        state.transactionsFullyLoaded = false;
         state.transactionsSince = all.transactionsSince || null;
+      } else {
+        state.transactionsFullyLoaded = true;
+        state.transactionsSince = null;
       }
-      renderAll();
-      // 記帳／模板表單的主類別、子類別選單在頁面一開始（IIFE）就先畫過一次，
-      // 但那時候 state.categories 都還是空的（要等這裡 apiGet('all') 回來才有資料），
-      // 所以畫出來的選項是空的；這裡資料到手後要重新畫一次選單，不然要等使用者
-      // 自己把表單關掉重開（resetTransactionForm 會重畫）才會看到正確選項。
-      // 只有目前沒有正在編輯既有紀錄時才重畫，避免蓋掉使用者正在編輯的內容。
-      if(!$('#trId').value) populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
-      if(!$('#tplId').value) populateTplCategories($('#tplType').value, $('#tplCategory').value, $('#tplSubcategory').value);
-      saveStateCache_();
-    }, cached ? '更新資料中…' : '載入資料中…');
+    }
+    state.transactions = rows;
+    renderAll();
+    if(!$('#trId').value) populateTrCategories($('#trType').value, $('#trCategory').value, $('#trSubcategory').value);
+    if(!$('#tplId').value) populateTplCategories($('#tplType').value, $('#tplCategory').value, $('#tplSubcategory').value);
+    saveStateCache_();
+  };
+
+  try{
+    if(cached){
+      setSyncChip_('更新資料中…');
+      try{ await fetchAndApply(); } finally { updateSyncChip_(); }
+    } else {
+      // 第一次、沒有快取：一樣不鎖畫面，表單用內建類別先開放輸入，資料在背景載入
+      setSyncChip_('載入資料中…（可以先記帳）');
+      try{ await fetchAndApply(); } finally { updateSyncChip_(); }
+    }
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
-    // 第一次接上這個試算表時，把舊版存在瀏覽器 localStorage 的自訂類別（如果有）
-    // 搬到後端 Categories 表一次；只會跑一次，不會拖慢之後每次的載入。
     migrateLocalCategoriesIfNeeded_().then(() => {
       if(dirty) dirty.categories = true;
       renderVisibleSection();
     });
-    // 讓「記帳」清單先完整顯示、使用者可以馬上開始操作之後，才趁機在背景
-    // 偷偷補齊（或刷新）完整記帳歷史，避免一進畫面就同時打兩個請求互相搶時間，
-    // 拖慢最重要的「第一次看到畫面」這件事。如果快取裡本來就有完整歷史，
-    // 這裡改成強制刷新一次（時間拉短一點），確保資料不會一直卡在舊快取。
-    setTimeout(() => prefetchFullHistoryInBackground_(hadFullHistoryCached), hadFullHistoryCached ? 300 : 800);
+    // 完整歷史：沒有才補；已有就只在「超過 6 小時沒刷新」時才在背景重抓一次
+    if(!state.transactionsFullyLoaded){
+      setTimeout(() => prefetchFullHistoryInBackground_(false), 1500);
+    } else {
+      const last = Number(localStorage.getItem(fullSyncedKey_())) || 0;
+      if(Date.now() - last > FULL_REFRESH_MAX_AGE_MS) setTimeout(() => prefetchFullHistoryInBackground_(true), 4000);
+    }
   }catch(err){
     if(!cached){
       $('#cfgStatus').textContent = '連線失敗：' + err.message;
       $('#cfgStatus').className = 'status err';
     } else {
-      // 已經有快取畫面可以看，這裡只提示背景更新失敗，不用整個報錯蓋掉畫面。
       console.warn('背景更新資料失敗（畫面仍顯示上次的快取資料）：', err);
       $('#cfgStatus').textContent = '背景更新失敗，目前顯示的是上次的快取資料：' + err.message;
       $('#cfgStatus').className = 'status err';
@@ -1726,9 +1780,13 @@ async function loadFullTransactions_(force){
   if(fullTransactionsLoadPromise) return fullTransactionsLoadPromise;
   fullTransactionsLoadPromise = (async () => {
     try{
-      const full = await apiGet('transactions');
-      state.transactions = full;
+      const win = beginFetchWindow_();
+      let full;
+      try{ full = await apiGet('transactions'); }
+      finally { endFetchWindow_(win); }
+      state.transactions = mergeServerTransactions_(full, win);
       state.transactionsFullyLoaded = true;
+      try{ localStorage.setItem(fullSyncedKey_(), String(Date.now())); }catch(_){}
       // 完整資料到手後，共同帳本／統計分析／記帳清單都要用新資料重算一次，
       // 但不馬上重畫——沒人在看的分頁沒必要現在就花時間算，等切過去再算就好。
       dirty.ledger = true; dirty.stats = true; dirty.transactions = true;
@@ -1761,6 +1819,151 @@ function prefetchFullHistoryInBackground_(force){
     .then(() => renderVisibleSection())
     .catch(err => console.warn('背景補齊記帳歷史失敗（不影響目前畫面）：', err));
 }
+
+// ---------- 背景同步佇列（樂觀更新）：記帳先存在本機、畫面馬上更新，再慢慢送去試算表 ----------
+// 以前每次存檔都要「鎖住畫面 → 等 Apps Script 讀寫試算表 → 才能記下一筆」，
+// 現在：按下儲存的瞬間就更新畫面並清空表單，後端工作排進佇列依序在背景執行。
+// 佇列存在 localStorage，斷線或關掉網頁後下次打開會自動補送；
+// 每筆都有前端產生的 id，網路逾時重送時後端會先確認有沒有已經寫入，不會重複記帳。
+let syncQueue_ = [];
+let syncing_ = false;
+let mutationSeq_ = 0;
+let refreshAfterDrain_ = false;
+let syncRetryTimer_ = null;
+let syncFailCount_ = 0;
+function syncQueueKey_(){ return 'fin_sync_queue_v1_' + (cfg.url || 'default'); }
+function loadSyncQueue_(){
+  try{ syncQueue_ = JSON.parse(localStorage.getItem(syncQueueKey_()) || '[]') || []; }catch(_){ syncQueue_ = []; }
+  updateSyncChip_();
+}
+function persistSyncQueue_(){
+  try{ localStorage.setItem(syncQueueKey_(), JSON.stringify(syncQueue_)); }catch(_){}
+}
+function newClientId_(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
+const syncChip_ = document.createElement('div');
+syncChip_.id = 'syncChip';
+syncChip_.innerHTML = '<span class="spinner"></span><span id="syncChipText"></span>';
+document.body.appendChild(syncChip_);
+syncChip_.addEventListener('click', () => { if(syncChip_.classList.contains('warn')) drainSyncQueue_(); });
+function setSyncChip_(text, warn){
+  $('#syncChipText').textContent = text;
+  syncChip_.classList.toggle('warn', !!warn);
+  syncChip_.classList.add('show');
+}
+function updateSyncChip_(){
+  if(syncQueue_.length){
+    if(syncFailCount_ > 0) setSyncChip_(`${syncQueue_.length} 筆尚未同步，點此重試`, true);
+    else setSyncChip_(`同步中…（${syncQueue_.length}）`);
+  } else {
+    syncChip_.classList.remove('show', 'warn');
+  }
+}
+
+function enqueueOp_(action, data){
+  mutationSeq_++;
+  syncQueue_.push({ opId: newClientId_(), action, data, tries: 0 });
+  persistSyncQueue_();
+  updateSyncChip_();
+  drainSyncQueue_();
+}
+
+async function drainSyncQueue_(){
+  if(syncing_) return;
+  clearTimeout(syncRetryTimer_);
+  syncing_ = true;
+  try{
+    while(syncQueue_.length){
+      const op = syncQueue_[0];
+      const payload = Object.assign({}, op.data, { force: true }); // 重複確認已在前端做完
+      if(op.tries > 0) payload.retry = true;                       // 重送：後端先確認是否已寫入
+      try{
+        const result = await apiPost(op.action, 'transactions', payload);
+        syncQueue_.shift();
+        mutationSeq_++;
+        syncFailCount_ = 0;
+        persistSyncQueue_();
+        applyOpResult_(op, result);
+        updateSyncChip_();
+      }catch(err){
+        if(err.server && !err.busy){
+          // 後端明確拒絕這筆：丟掉，並用後端資料校正本機畫面
+          syncQueue_.shift();
+          persistSyncQueue_();
+          alert('有一筆記帳同步失敗，已還原為試算表上的資料：' + err.message);
+          refreshAfterDrain_ = true;
+          updateSyncChip_();
+          continue;
+        }
+        // 網路問題／逾時／後端忙碌：保留在佇列，稍後自動重試
+        op.tries++;
+        syncFailCount_++;
+        persistSyncQueue_();
+        updateSyncChip_();
+        syncRetryTimer_ = setTimeout(drainSyncQueue_, Math.min(30000, 2000 * syncFailCount_));
+        return;
+      }
+    }
+  } finally {
+    syncing_ = false;
+  }
+  if(refreshAfterDrain_){
+    refreshAfterDrain_ = false;
+    loadAll(); // 佇列清空後，靜悄悄跟試算表對一次帳
+  }
+}
+
+// 後端回應回來後，用後端的結果校正本機；但如果後面還有排隊的操作，
+// 就先不覆蓋（不然畫面會倒退回「還沒套用後面操作」的狀態）。
+function applyOpResult_(op, result){
+  if(!result) return;
+  const id = op.data && op.data.id;
+  const laterSameId = syncQueue_.some(o => o.data && o.data.id === id);
+  if(result.transaction && !laterSameId && !result.replayed){
+    upsertLocal('transactions', result.transaction);
+  }
+  if(!syncQueue_.length && result.accounts && result.accounts.length){
+    result.accounts.forEach(acc => upsertLocal('accounts', acc));
+  }
+  renderAll();
+}
+
+// 本機即時調整帳戶餘額（規則與後端 txDelta_ / accumulateBalanceDelta_ 一致）
+function accumulateLocalDelta_(t, sign, deltas){
+  const amt = Number(t.amount) || 0;
+  if(t.type === 'transfer'){
+    if(t.accountId) deltas[t.accountId] = (deltas[t.accountId] || 0) - amt * sign;
+    if(t.toAccountId) deltas[t.toAccountId] = (deltas[t.toAccountId] || 0) + amt * sign;
+  } else if(t.accountId){
+    let d = 0;
+    if(t.type === 'expense') d = -amt;
+    else if(t.type === 'income') d = amt;
+    else if(t.type === 'settlement') d = t.payer === 'partner' ? amt : -amt;
+    deltas[t.accountId] = (deltas[t.accountId] || 0) + d * sign;
+  }
+}
+function applyLocalDeltas_(deltas){
+  Object.keys(deltas).forEach(accId => {
+    const a = state.accounts.find(x => x.id === accId);
+    if(a && deltas[accId]) a.balance = (Number(a.balance) || 0) + deltas[accId];
+  });
+}
+// 前端版重複偵測（同日期＋類型＋主/子類別＋金額），取代以前要等後端掃整張表才知道
+function findLocalDuplicate_(data, excludeId){
+  if(data.type === 'transfer' || data.type === 'settlement') return null;
+  const key = t => [t.date, t.type, t.category || '', t.subcategory || '', Math.round((Number(t.amount) || 0) * 100)].join('|');
+  const target = key(data);
+  return state.transactions.find(t => t.id !== excludeId && t.date === data.date && key(t) === target) || null;
+}
+
+// 重新整理頁面／切到背景時，把還沒寫入的本機快取立刻存下來
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){ clearTimeout(saveCacheTimer_); saveStateCache_(); }
+});
+window.addEventListener('online', () => { if(syncQueue_.length) drainSyncQueue_(); });
 
 function fmt(n){
   const num = Number(n) || 0;
@@ -1804,13 +2007,31 @@ function defaultCashAccountId(){
 }
 
 // ---------- 本地狀態更新（避免每次操作都重新整批下載，減少等待） ----------
+// 背景抓資料的「時間窗」：抓的途中使用者在本機新增/修改/刪除的記帳，不能被稍後回來的舊快照蓋掉。
+const fetchWindows_ = [];
+function beginFetchWindow_(){ const w = new Set(); fetchWindows_.push(w); return w; }
+function endFetchWindow_(w){ const i = fetchWindows_.indexOf(w); if(i !== -1) fetchWindows_.splice(i, 1); }
+function markTouched_(id){ if(id) fetchWindows_.forEach(w => w.add(id)); }
+// 把後端傳回的記帳清單與本機合併：這段時間內動過的、還在佇列裡排隊的，一律以本機為準。
+function mergeServerTransactions_(serverRows, touched){
+  const localWins = new Set(touched);
+  syncQueue_.forEach(o => { if(o.data && o.data.id) localWins.add(o.data.id); });
+  if(!localWins.size) return serverRows;
+  const localById = {};
+  state.transactions.forEach(t => { if(localWins.has(t.id)) localById[t.id] = t; });
+  const out = serverRows.filter(t => !localWins.has(t.id));
+  Object.keys(localById).forEach(id => out.push(localById[id]));
+  return out;
+}
 function upsertLocal(key, obj){
   if(!obj) return;
+  if(key === 'transactions') markTouched_(obj.id);
   const list = state[key];
   const idx = list.findIndex(x => x.id === obj.id);
   if(idx === -1) list.push(obj); else list[idx] = obj;
 }
 function removeLocal(key, id){
+  if(key === 'transactions') markTouched_(id);
   state[key] = state[key].filter(x => x.id !== id);
 }
 
@@ -2158,7 +2379,7 @@ function renderTransferAccountOptions_(orderedAccounts, favoriteAccounts, option
 
   const trSel = $('#trAccount');
   const keepVal = trSel.value;
-  trSel.innerHTML = `<option value="">不指定</option>` + optionsHtmlFor(pickerAccountList_(trBase, orderedAccounts, keepVal));
+  trSel.innerHTML = `<option value="">${(!state.dataLoaded_ && !state.accounts.length) ? '不指定（帳戶載入中…）' : '不指定'}</option>` + optionsHtmlFor(pickerAccountList_(trBase, orderedAccounts, keepVal));
   trSel.value = keepVal; // 新增記帳的帳戶預設維持「不指定」，不自動帶入現金帳戶
 
   // 記帳表單「轉帳」類型的「到（轉入帳戶）」選單：一樣列出全部帳戶（全部銀行），不只常用銀行
@@ -3676,49 +3897,39 @@ $('#trForm').addEventListener('submit', async e => {
       settled: false
     };
   }
-  try{
-    let duplicateCancelled = false;
-    await runBusy(async () => {
-      let result;
-      if(id){
-        result = await apiPost('updateTransactionTx','transactions',data);
-        if(result.duplicate){
-          if(!confirmDuplicateTransaction_(result.duplicate)){ duplicateCancelled = true; return; }
-          data.force = true;
-          result = await apiPost('updateTransactionTx','transactions',data);
-        }
-        upsertLocal('transactions', result.transaction);
-        (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
-      } else {
-        delete data.id;
-        result = await apiPost('addTransactionTx','transactions',data);
-        if(result.duplicate){
-          if(!confirmDuplicateTransaction_(result.duplicate)){ duplicateCancelled = true; return; }
-          data.force = true;
-          result = await apiPost('addTransactionTx','transactions',data);
-        }
-        upsertLocal('transactions', result.transaction);
-        // 轉帳一次會影響「轉出＋轉入」兩個帳戶，之前這裡只用 result.account（單一帳戶），
-        // 導致新增轉帳後畫面上只有其中一個帳戶的餘額會更新，另一個要重新整理才會同步。
-        // 改用 result.accounts（後端回傳的完整清單）逐一寫回本地狀態，兩個帳戶都會即時更新。
-        (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
-      }
-      if(duplicateCancelled) return;
-      if(continueBatch && !id){
-        // 批量記帳模式：保留日期／主類別／子類別／帳戶／共同帳本設定，
-        // 只清空名稱跟金額，表單留在打開狀態，馬上可以繼續打下一筆。
-        $('#trAmount').value = '';
-        $('#trNote').value = '';
-        $('#trFormTitle').textContent = '新增記帳（已儲存，繼續記下一筆）';
-        renderAll();
-        setTimeout(() => $('#trAmount').focus(), 50);
-      } else {
-        resetTransactionForm();
-        $('#trDetails').open = false;
-        renderAll();
-      }
-    }, '儲存中…');
-  }catch(err){ alert('儲存失敗：' + err.message); }
+  // 樂觀更新：先在前端檢查重複、更新本機畫面與帳戶餘額、清空表單，
+  // 後端寫入丟進背景佇列，不用等，可以馬上記下一筆。
+  const dup = findLocalDuplicate_(data, id);
+  if(dup && !confirmDuplicateTransaction_(dup)) return;
+  const now = new Date().toISOString();
+  const deltas = {};
+  if(id){
+    const old = state.transactions.find(x => x.id === id);
+    if(old) accumulateLocalDelta_(old, -1, deltas);
+    const tx = Object.assign({}, old || {}, data, { id, updatedAt: now });
+    accumulateLocalDelta_(tx, 1, deltas);
+    upsertLocal('transactions', tx);
+    applyLocalDeltas_(deltas);
+    enqueueOp_('updateTransactionTx', Object.assign({}, tx));
+  } else {
+    const tx = Object.assign({}, data, { id: newClientId_(), updatedAt: now });
+    accumulateLocalDelta_(tx, 1, deltas);
+    upsertLocal('transactions', tx);
+    applyLocalDeltas_(deltas);
+    enqueueOp_('addTransactionTx', Object.assign({}, tx));
+  }
+  if(continueBatch && !id){
+    // 批量記帳模式：保留日期／類別／帳戶／共同帳本設定，只清空金額跟備註，馬上可繼續打下一筆。
+    $('#trAmount').value = '';
+    $('#trNote').value = '';
+    $('#trFormTitle').textContent = '新增記帳（已儲存，繼續記下一筆）';
+    renderAll();
+    $('#trAmount').focus();
+  } else {
+    resetTransactionForm();
+    $('#trDetails').open = false;
+    renderAll();
+  }
 });
 $('#trCancel').addEventListener('click', resetTransactionForm);
 
@@ -3820,16 +4031,17 @@ window.editTransaction = id => {
   moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
 };
-window.deleteTransaction = async id => {
+window.deleteTransaction = id => {
   if(!confirm('確定刪除這筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。')) return;
-  try{
-    await runBusy(async () => {
-      const result = await apiPost('deleteTransactionTx','transactions',{id});
-      removeLocal('transactions', id);
-      (result.accounts || (result.account ? [result.account] : [])).forEach(acc => upsertLocal('accounts', acc));
-      renderAll();
-    }, '刪除中…');
-  }catch(err){ alert('刪除失敗：' + err.message); }
+  const old = state.transactions.find(x => x.id === id);
+  if(old){
+    const deltas = {};
+    accumulateLocalDelta_(old, -1, deltas);
+    applyLocalDeltas_(deltas);
+  }
+  removeLocal('transactions', id);
+  renderAll();
+  enqueueOp_('deleteTransactionTx', { id });
 };
 
 // ---------- 新增記帳表單：模板快速選擇 ----------
@@ -4546,6 +4758,15 @@ $('#cfgSave').addEventListener('click', () => {
   loadAll();
 });
 
+const OPEN_FORM_KEY = 'mybook_open_form_on_start';
+$('#cfgOpenForm').checked = localStorage.getItem(OPEN_FORM_KEY) !== '0'; // 預設開啟
+$('#cfgOpenForm').addEventListener('change', () => {
+  try{ localStorage.setItem(OPEN_FORM_KEY, $('#cfgOpenForm').checked ? '1' : '0'); }catch(_){}
+});
+// 一打開就先把記帳表單開好、游標停在金額，不必等資料載入；資料在背景載入。
+if($('#cfgOpenForm').checked && cfg.url && cfg.token){
+  $('#trDetails').open = true;
+}
 loadAll();
 </script>
 </body>

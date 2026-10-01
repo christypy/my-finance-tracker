@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-09-16-1';
+const BACKEND_VERSION_ = '2026-10-01-fast';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -233,7 +233,7 @@ function readRowObj_(key, rowIndex) {
 
 function addRow_(key, data) {
   const sheet = getSheet_(key);
-  data.id = Utilities.getUuid();
+  data.id = data.id || Utilities.getUuid(); // 前端樂觀更新時會先產生 id，直接沿用
   data.updatedAt = new Date().toISOString();
   const row = buildRowArray_(key, data); // 依試算表目前實際的欄位順序組列，不假設固定順序
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
@@ -297,17 +297,35 @@ function accumulateBalanceDelta_(data, sign, deltas) {
   }
 }
 
-// 把算好的「每個帳戶淨變化多少」實際讀寫進 Accounts 表，一個帳戶只讀寫一次。
+// 把算好的「每個帳戶淨變化多少」實際讀寫進 Accounts 表。
+// 效能：帳戶表很小，整張只讀一次，記憶體裡找出要改的列，每個帳戶只寫一次
+// （以前每個帳戶要 讀id欄 + 讀整列 + 寫整列 共三次試算表呼叫）。
 function applyBalanceDeltas_(deltas) {
+  const ids = Object.keys(deltas).filter(id => deltas[id]);
+  if (!ids.length) return [];
+  const sheet = getSheet_('accounts');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const headerRow = getActualHeaderRow_('accounts');
+  const idIdx = headerRow.indexOf('id');
+  const values = sheet.getRange(2, 1, lastRow - 1, headerRow.length).getValues();
+  const rowOf = {};
+  for (let i = 0; i < values.length; i++) rowOf[String(values[i][idIdx])] = i;
   const touched = [];
-  Object.keys(deltas).forEach(accountId => {
-    if (!deltas[accountId]) return; // 淨變化剛好是 0，這個帳戶完全不用動
-    const acc = adjustAccountBalance_(accountId, deltas[accountId]);
-    if (acc) touched.push(acc);
+  const now = new Date().toISOString();
+  ids.forEach(accountId => {
+    const i = rowOf[String(accountId)];
+    if (i === undefined) return;
+    const obj = {};
+    headerRow.forEach((h, hi) => { if (h) obj[h] = normalizeCellValue_(h, values[i][hi]); });
+    obj.balance = (Number(obj.balance) || 0) + deltas[accountId];
+    obj.updatedAt = now;
+    const row = buildRowArray_('accounts', obj);
+    sheet.getRange(i + 2, 1, 1, row.length).setValues([row]);
+    touched.push(obj);
   });
   return touched;
 }
-
 
 function applyBalanceEffect_(data, sign) {
   const deltas = {};
@@ -381,7 +399,17 @@ function buildTransactionKeySet_() {
 
 
 function addTransactionTx_(data) {
-  if (!data.force) {
+  const force = !!data.force;
+  const isRetry = !!data.retry;
+  delete data.force;
+  delete data.retry;
+  // 前端是先在本機存好才背景送出，網路逾時後會「重送」同一筆（帶同一個 id）。
+  // 重送時先確認這個 id 是否其實已經寫進去了，避免重複記帳／重複扣餘額。
+  // 第一次送出（絕大多數情況）不做這個檢查，維持最快速度。
+  if (isRetry && data.id && findRowIndexById_('transactions', data.id) !== -1) {
+    return { transaction: data, account: null, accounts: [], replayed: true };
+  }
+  if (!force) {
     const dup = findDuplicateTransaction_(data);
     if (dup) return { duplicate: dup };
   }
@@ -396,7 +424,10 @@ function updateTransactionTx_(data) {
   const rowIndex = findRowIndexById_('transactions', data.id);
   if (rowIndex === -1) throw new Error('找不到這筆記帳: ' + data.id);
 
-  if (!data.force) {
+  const force = !!data.force;
+  delete data.force;
+  delete data.retry;
+  if (!force) {
     const dup = findDuplicateTransaction_(data, data.id);
     if (dup) return { duplicate: dup };
   }
