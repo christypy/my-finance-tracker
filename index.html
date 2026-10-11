@@ -747,6 +747,15 @@
     .page{ padding:16px 13px 22px; }
     .net-hero .value{ font-size:27px; }
   }
+  /* ---- 已下單（未付款）----- */
+  .orders-head{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin:4px 2px 8px; font-size:14px; font-weight:700; color:var(--ink); }
+  .orders-head small{ font-weight:500; color:var(--ink-soft); font-size:12px; }
+  .badge.pending{ background:var(--gold-soft); color:var(--gold); }
+  .pay-backdrop{ position:fixed; inset:0; background:rgba(20,26,42,.42); backdrop-filter:blur(2px); display:none; align-items:center; justify-content:center; padding:16px; z-index:70; }
+  .pay-backdrop.show{ display:flex; }
+  .pay-modal{ background:var(--card); border-radius:var(--radius); padding:18px; width:100%; max-width:440px; max-height:90vh; overflow:auto; box-shadow:0 20px 50px rgba(58,43,18,.3); }
+  .pay-modal h3{ margin:0 0 4px; font-size:17px; }
+  .pay-modal .pay-sub{ font-size:13px; color:var(--ink-soft); margin:0 0 12px; }
 </style>
 </head>
 <body>
@@ -897,6 +906,7 @@
         <div class="net-hero" id="trAvailHero">
           <div class="label" id="trAvailLabel">月預算</div>
           <div class="value" id="trAvailValue">$0</div>
+          <div id="trAvailPending" style="display:none; font-size:12px; color:#ffe9b3; margin-top:8px; line-height:1.6;"></div>
         </div>
         <!-- <p class="hint">點下方「＋新增記帳」或右下角圓形按鈕才會跳出記帳表單，平常只會單純顯示紀錄清單。支出、收入之外也可以選「轉帳」，用來記錄帳戶之間互轉的金額（例如提領現金、儲值行動支付），轉帳不會計入收入／支出統計。下方清單會依照日曆選取的日期（或當月）顯示；記帳項目直接點兩下（雙擊）就能開啟編輯。主類別／子類別選單最下面也有「＋新增」，記帳當下就能直接建立新類別，不用跳去類別設定。若要一次記好幾筆同類型的帳（例如逛超市買了好幾樣東西），可以用「儲存並記下一筆」：存檔後表單會保留日期、類別、帳戶等設定不用重選，只清空名稱跟金額，改完這兩項就能繼續存下一筆。有存好的模板時，表單最上面會出現一排模板按鈕，點一下就能帶入內容，只要調整日期或金額就能存檔；模板的新增／編輯／每月自動加入／刪除，請到「模板管理」分頁統一設定。</p> -->
         <!-- 利息／股息快速入帳：本質上就是一筆「收入」記帳，類別自動固定為
@@ -908,6 +918,41 @@
              也會計入收入統計，不用另外管理。 -->
         <div class="quick-actions-row" style="margin-bottom:10px;">
           <button type="button" class="small" id="trQuickInterestBtn">💰 記一筆利息／股息</button>
+        </div>
+        <!-- 已下單（尚未付款）：先把這筆金額算進月預算，才知道預算還剩多少；
+             確認付款後再填付款日期與付款方式，才會正式轉成一筆支出記帳；取消訂單就整筆移除、預算自動回補。 -->
+        <details class="entry-wrap" id="orderDetails">
+          <summary><span class="plus">＋</span><span id="ordFormTitle">新增已下單（尚未付款）</span></summary>
+          <form class="entry" id="orderForm">
+            <input type="hidden" id="ordId">
+            <label class="full">項目名稱
+              <input type="text" id="ordName" placeholder="例如：蝦皮購物、機票" required>
+            </label>
+            <label>金額
+              <input type="number" id="ordAmount" step="0.01" min="0" placeholder="0" required>
+            </label>
+            <label>下單日期（計入該月預算）
+              <input type="date" id="ordDate" required>
+            </label>
+            <label>主類別
+              <select id="ordCategory"></select>
+            </label>
+            <label>子類別（選填）
+              <select id="ordSubcategory"><option value="">不指定</option></select>
+            </label>
+            <label class="full">備註
+              <input type="text" id="ordNote" placeholder="選填">
+            </label>
+            <p class="hint full" style="margin:0;">已下單的金額會先從該月預算扣掉，但不會動帳戶餘額，也不會算進支出統計；付款後按「已付款」才會正式記帳。</p>
+            <div class="form-actions">
+              <button type="submit" class="primary">儲存已下單</button>
+              <button type="button" id="ordCancel">清空表單</button>
+            </div>
+          </form>
+        </details>
+        <div id="ordersSection" style="display:none;">
+          <div class="orders-head"><span>📦 已下單・待付款</span><small id="ordersSummary"></small></div>
+          <div class="item-list" id="ordersList" style="margin-bottom:16px;"></div>
         </div>
         <details class="entry-wrap" id="trDetails">
           <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
@@ -1282,6 +1327,29 @@
 </nav>
 <div class="entry-backdrop" id="trFormBackdrop"></div>
 <button type="button" class="fab" id="trFab" aria-label="新增記帳" style="display:none;">＋</button>
+<div class="pay-backdrop" id="payOrderBackdrop">
+  <div class="pay-modal">
+    <h3>確認付款</h3>
+    <p class="pay-sub" id="payOrderSub"></p>
+    <form class="entry" id="payOrderForm">
+      <input type="hidden" id="payOrderId">
+      <label>付款日期
+        <input type="date" id="payDate" required>
+      </label>
+      <label>實付金額
+        <input type="number" id="payAmount" step="0.01" min="0" required>
+      </label>
+      <label class="full">付款方式（扣款帳戶）
+        <select id="payAccount"></select>
+      </label>
+      <p class="hint full" style="margin:0;">確認後會新增一筆支出到記帳、從所選帳戶扣款，並移除這筆已下單（預算不會重複計算）。實付金額若跟下單時不同（例如運費），可以直接改。</p>
+      <div class="form-actions">
+        <button type="submit" class="primary">確認付款並記帳</button>
+        <button type="button" id="payCancel">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
 <div id="busyToast"><span class="spinner"></span><span id="busyToastText">處理中…</span></div>
 
 <script>
@@ -1397,7 +1465,7 @@ function reportBackendVersion_(version){
   }
 }
 
-let state = { accounts: [], liabilities: [], transactions: [], recurring: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null };
+let state = { accounts: [], liabilities: [], transactions: [], recurring: [], orders: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null };
 // 記帳品項（主類別 + 子類別，依收入/支出分開）。
 // 這份清單現在存在後端試算表的「Categories」表（跟 Accounts/Transactions 一樣），
 // 換裝置、清瀏覽器快取都不會不見，也可以直接在試算表上看到。前端只在「一開始
@@ -1629,6 +1697,7 @@ function saveStateCache_(){
       liabilities: state.liabilities,
       transactions: state.transactions,
       recurring: state.recurring,
+      orders: state.orders,
       categories: state.categories,
       transactionsFullyLoaded: state.transactionsFullyLoaded,
       transactionsSince: state.transactionsSince,
@@ -1660,6 +1729,7 @@ function applyStateCache_(cached){
   state.liabilities = cached.liabilities || [];
   state.transactions = cached.transactions || [];
   state.recurring = cached.recurring || [];
+  state.orders = cached.orders || [];
   state.categories = cached.categories || { expense: [], income: [] };
   state.transactionsFullyLoaded = !!cached.transactionsFullyLoaded;
   state.transactionsSince = cached.transactionsSince || null;
@@ -1708,6 +1778,9 @@ async function loadAll(){
     const hasLocalChanges = win.size > 0 || syncQueue_.length > 0;
     state.liabilities = all.liabilities;
     state.recurring = all.recurring || [];
+    // 已付款但還在背景同步的已下單，不要被剛抓回來的舊資料「復活」
+    const paidPending_ = new Set(syncQueue_.filter(o => o.action === 'payOrderTx').map(o => o.data && o.data.orderId));
+    state.orders = (all.orders || []).filter(o => !paidPending_.has(o.id));
     state.categories = all.categories || { expense: [], income: [] };
     state.dataLoaded_ = true;
     // 帳戶餘額：期間有本機記帳就先保留本機算好的（後端回應會逐筆校正）；沒有就直接用後端的
@@ -2570,11 +2643,21 @@ function renderTrAvailAndBudget_(){
   // 不是固定看今天所在的月份，切換月份時這裡的剩餘／超支金額也會跟著換算那個月。
   const monthStr = `${calYear}-${pad2(calMonth + 1)}`;
   const monthExpense = expenseTotalOf(monthStr);
-  const budgetLeft = MONTHLY_BUDGET - monthExpense;
+  // 已下單未付款的金額也要先從預算扣掉（依下單日期所在月份計入）
+  const monthOrders = ordersOfMonth_(monthStr);
+  const monthPending = monthOrders.reduce((s,o) => s + (Number(o.amount) || 0), 0);
+  const budgetLeft = MONTHLY_BUDGET - monthExpense - monthPending;
   const overBudget = budgetLeft < 0;
   $('#trAvailLabel').textContent = `月預算 $${fmt(MONTHLY_BUDGET)}・${overBudget ? '已超支' : '剩餘'}`;
   $('#trAvailValue').textContent = '$' + fmt(Math.abs(budgetLeft));
   $('#trAvailValue').style.color = overBudget ? '#e3ad93' : '';
+  const pendEl = $('#trAvailPending');
+  if(monthOrders.length){
+    pendEl.style.display = '';
+    pendEl.textContent = `已含「已下單未付款」$${fmt(monthPending)}（${monthOrders.length} 筆）・本月已付支出 $${fmt(monthExpense)}`;
+  } else {
+    pendEl.style.display = 'none';
+  }
 
   // 當日支出：有在日曆上點日期就看那天，沒點就預設看「今天」
   const now = new Date();
@@ -2594,6 +2677,185 @@ function renderTrAvailAndBudget_(){
     </div>
   `;
 }
+
+// ---------- 已下單（未付款）----------
+// 流程：下單時先記一筆「已下單」→ 金額立刻從當月預算扣掉（不動帳戶餘額、不算進支出統計）
+//   → 付款後按「已付款」，填付款日期＋付款帳戶，才正式轉成一筆支出記帳（並從帳戶扣款）
+//   → 若訂單取消，按「取消訂單」整筆移除，預算自動回補。
+function ordersOfMonth_(monthStr){
+  return (state.orders || []).filter(o => (o.orderDate || '').startsWith(monthStr));
+}
+function todayStr_(){ return new Date().toISOString().slice(0,10); }
+function populateOrdCategories_(selMain, selSub){
+  const names = getCategoryNames('expense');
+  $('#ordCategory').innerHTML = names.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  const main = (selMain && names.includes(selMain)) ? selMain : (names.includes('其他') ? '其他' : (names[0] || ''));
+  $('#ordCategory').value = main;
+  populateOrdSubcategories_(main, selSub);
+}
+function populateOrdSubcategories_(main, selSub){
+  const subs = getSubcategories('expense', main);
+  $('#ordSubcategory').innerHTML = `<option value="">不指定</option>` + subs.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  $('#ordSubcategory').value = (selSub && subs.includes(selSub)) ? selSub : '';
+}
+$('#ordCategory').addEventListener('change', () => populateOrdSubcategories_($('#ordCategory').value, ''));
+$('#ordAmount').addEventListener('wheel', () => { $('#ordAmount').blur(); }, { passive:true });
+$('#payAmount').addEventListener('wheel', () => { $('#payAmount').blur(); }, { passive:true });
+
+$('#orderDetails').addEventListener('toggle', () => {
+  if($('#orderDetails').open){
+    if(!$('#ordId').value){
+      $('#ordDate').value = $('#ordDate').value || todayStr_();
+      populateOrdCategories_($('#ordCategory').value, $('#ordSubcategory').value);
+    }
+  } else {
+    resetOrderForm_();
+  }
+});
+function resetOrderForm_(){
+  $('#ordId').value = '';
+  $('#ordName').value = '';
+  $('#ordAmount').value = '';
+  $('#ordDate').value = todayStr_();
+  $('#ordNote').value = '';
+  $('#ordFormTitle').textContent = '新增已下單（尚未付款）';
+  populateOrdCategories_('', '');
+}
+$('#ordCancel').addEventListener('click', resetOrderForm_);
+
+$('#orderForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = $('#ordId').value || undefined;
+  const amount = parseFloat($('#ordAmount').value) || 0;
+  if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
+  const data = {
+    id,
+    name: $('#ordName').value.trim(),
+    amount,
+    category: $('#ordCategory').value || '其他',
+    subcategory: $('#ordSubcategory').value || '',
+    orderDate: $('#ordDate').value,
+    note: $('#ordNote').value.trim()
+  };
+  try{
+    await runBusy(async () => {
+      let saved;
+      if(id) saved = await apiPost('update','orders',data);
+      else { delete data.id; saved = await apiPost('add','orders',data); }
+      upsertLocal('orders', saved);
+      resetOrderForm_();
+      $('#orderDetails').open = false;
+      renderAll();
+    }, '儲存中…');
+  }catch(err){ alert('儲存失敗：' + err.message + '\n（若是第一次使用，請確認 Apps Script 已更新並重新部署新版本。）'); }
+});
+
+function renderOrders_(){
+  const sec = $('#ordersSection');
+  if(!sec) return;
+  const orders = [...(state.orders || [])].sort((a,b) => ((a.orderDate || '') < (b.orderDate || '') ? 1 : -1));
+  if(!orders.length){ sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  const total = orders.reduce((s,o) => s + (Number(o.amount) || 0), 0);
+  $('#ordersSummary').textContent = `共 ${orders.length} 筆・$${fmt(total)}（已計入預算）`;
+  $('#ordersList').innerHTML = orders.map(o => {
+    const catLabel = `${o.category || '其他'}${o.subcategory ? ' · ' + o.subcategory : ''}`;
+    const meta = [`下單 ${escapeHtml(o.orderDate || '')}`, escapeHtml(catLabel)];
+    if(o.note) meta.push(escapeHtml(o.note));
+    return `<div class="item-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${escapeHtml(o.name || '')}</div>
+          <span class="badge pending">未付款</span>
+          <div class="item-note">${meta.filter(Boolean).join(' · ')}</div>
+        </div>
+        <div class="item-value expense">$${fmt(o.amount)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="small primary" onclick="openPayOrder('${o.id}')">已付款</button>
+        <button class="small" onclick="editOrder('${o.id}')">編輯</button>
+        <button class="small danger" onclick="cancelOrder('${o.id}')">取消訂單</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editOrder(id){
+  const o = (state.orders || []).find(x => x.id === id);
+  if(!o) return;
+  $('#orderDetails').open = true;
+  $('#ordId').value = o.id;
+  $('#ordName').value = o.name || '';
+  $('#ordAmount').value = o.amount;
+  $('#ordDate').value = o.orderDate || todayStr_();
+  $('#ordNote').value = o.note || '';
+  populateOrdCategories_(o.category, o.subcategory);
+  $('#ordFormTitle').textContent = '編輯已下單';
+  $('#orderDetails').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+async function cancelOrder(id){
+  const o = (state.orders || []).find(x => x.id === id);
+  if(!o) return;
+  if(!confirm(`確定取消訂單「${o.name}」$${fmt(o.amount)}？\n這筆會整個移除，預算金額會回補。`)) return;
+  try{
+    await runBusy(async () => {
+      await apiPost('delete','orders',{ id });
+      removeLocal('orders', id);
+      renderAll();
+    }, '取消中…');
+  }catch(err){ alert('取消失敗：' + err.message); }
+}
+
+function openPayOrder(id){
+  const o = (state.orders || []).find(x => x.id === id);
+  if(!o) return;
+  $('#payOrderId').value = id;
+  $('#payOrderSub').textContent = `${o.name}（下單 ${o.orderDate || ''}）`;
+  $('#payDate').value = todayStr_();
+  $('#payAmount').value = o.amount;
+  const accounts = sortAccountsForSelect(state.accounts);
+  $('#payAccount').innerHTML = `<option value="">不指定（不更新帳戶餘額）</option>` +
+    accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}（${escapeHtml(a.type)}）</option>`).join('');
+  $('#payAccount').value = defaultCashAccountId() || '';
+  $('#payOrderBackdrop').classList.add('show');
+}
+function closePayOrder_(){ $('#payOrderBackdrop').classList.remove('show'); }
+$('#payCancel').addEventListener('click', closePayOrder_);
+$('#payOrderBackdrop').addEventListener('click', e => { if(e.target.id === 'payOrderBackdrop') closePayOrder_(); });
+
+$('#payOrderForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const orderId = $('#payOrderId').value;
+  const o = (state.orders || []).find(x => x.id === orderId);
+  if(!o){ closePayOrder_(); return; }
+  const amount = parseFloat($('#payAmount').value) || 0;
+  if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
+  const tx = {
+    id: newClientId_(),
+    date: $('#payDate').value,
+    type: 'expense',
+    category: o.category || '其他',
+    subcategory: o.subcategory || '',
+    amount,
+    accountId: $('#payAccount').value,
+    note: o.note ? `${o.name}（${o.note}）` : o.name,
+    payer: 'me',
+    splitMode: 'personal',
+    settled: false,
+    updatedAt: new Date().toISOString()
+  };
+  // 樂觀更新：本機立刻移除已下單、新增正式支出並扣帳戶餘額，後端「新增記帳＋移除已下單」排進背景佇列一次完成
+  const deltas = {};
+  accumulateLocalDelta_(tx, 1, deltas);
+  removeLocal('orders', orderId);
+  upsertLocal('transactions', tx);
+  applyLocalDeltas_(deltas);
+  enqueueOp_('payOrderTx', Object.assign({}, tx, { orderId }));
+  closePayOrder_();
+  renderAll();
+});
+
 // ---------- 記帳頁面：批次刪除 ----------
 // 開啟批次模式後，每筆記帳前面會出現勾選框；勾好之後按「刪除已選」一次刪掉，
 // 帳戶餘額會透過後端 batchDeleteTransactionsTx（內部逐筆呼叫跟單筆刪除一樣的
@@ -2656,6 +2918,7 @@ $('#trBatchDeleteBtn').addEventListener('click', async () => {
 
 function renderTransactions(){
   renderTrAvailAndBudget_();
+  renderOrders_();
   renderCalendar();
   const list = $('#transactionsList');
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
@@ -4724,6 +4987,7 @@ $('#csvImportBtn').addEventListener('click', async () => {
       state.liabilities = all.liabilities;
       state.transactions = all.transactions;
       state.recurring = all.recurring || [];
+      state.orders = all.orders || state.orders;
       state.categories = all.categories || state.categories;
       state.transactionsFullyLoaded = true;
       renderAll();

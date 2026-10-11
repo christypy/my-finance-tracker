@@ -7,7 +7,8 @@ const SHEET_NAMES = {
   liabilities: 'Liabilities',
   transactions: 'Transactions',
   recurring: 'RecurringTemplates',
-  categories: 'Categories'
+  categories: 'Categories',
+  orders: 'Orders'
 };
 
 const SHEET_HEADERS = {
@@ -19,7 +20,10 @@ const SHEET_HEADERS = {
   
   recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode', 'toAccountId'],
   
-  categories: ['id', 'type', 'mainName', 'subName', 'updatedAt']
+  categories: ['id', 'type', 'mainName', 'subName', 'updatedAt'],
+  // 已下單、尚未付款的項目：先計入月預算，但不影響帳戶餘額、也不算進記帳支出。
+  // 付款確認後會轉成一筆正式支出（Transactions）並從這張表移除；取消訂單則直接刪除這列。
+  orders: ['id', 'name', 'amount', 'category', 'subcategory', 'orderDate', 'note', 'updatedAt']
 };
 
 
@@ -179,7 +183,7 @@ function checkToken_(token) {
 }
 
 
-const DATE_ONLY_FIELDS_ = ['date', 'dueDate'];
+const DATE_ONLY_FIELDS_ = ['date', 'dueDate', 'orderDate'];
 function normalizeCellValue_(header, value) {
   if (value instanceof Date) {
     const tz = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
@@ -442,6 +446,25 @@ function updateTransactionTx_(data) {
   accumulateBalanceDelta_(tx, 1, deltas);
   const accountsTouched = applyBalanceDeltas_(deltas);
   return { transaction: tx, accounts: accountsTouched };
+}
+
+// 已下單項目「確認付款」：一次完成「新增一筆正式支出（含扣帳戶餘額）＋移除這筆已下單」，
+// 放在同一個後端呼叫裡，不會出現「記帳寫進去了但已下單還留著」造成預算重複計算的情況。
+// 前端網路逾時重送時（retry），若這筆記帳的 id 已經寫入，就只確保已下單被移除，不會重複記帳／重複扣餘額。
+function payOrderTx_(data) {
+  const orderId = data.orderId;
+  delete data.orderId;
+  delete data.force;
+  delete data.retry;
+  const orderRow = orderId ? findRowIndexById_('orders', orderId) : -1;
+  if (data.id && findRowIndexById_('transactions', data.id) !== -1) {
+    if (orderRow !== -1) getSheet_('orders').deleteRow(orderRow);
+    return { transaction: data, account: null, accounts: [], replayed: true };
+  }
+  const tx = addRow_('transactions', data);
+  const accountsTouched = applyBalanceEffect_(tx, 1);
+  if (orderRow !== -1) getSheet_('orders').deleteRow(orderRow);
+  return { transaction: tx, account: accountsTouched[0] || null, accounts: accountsTouched };
 }
 
 function deleteTransactionTx_(id) {
@@ -1074,6 +1097,7 @@ function doGet(e) {
           liabilities: readAll_('liabilities'),
           transactions: txResult.rows,
           recurring: readAll_('recurring'),
+          orders: readAll_('orders'),
           categories: getCategoryTreeData_(),
           transactionsTruncated: truncated,
           transactionsSince: since
@@ -1106,6 +1130,7 @@ function doPost(e) {
       const action = body.action;
 
       if (action === 'addTransactionTx') return jsonOut_({ ok: true, data: addTransactionTx_(body.data) });
+      if (action === 'payOrderTx') return jsonOut_({ ok: true, data: payOrderTx_(body.data) });
       if (action === 'updateTransactionTx') return jsonOut_({ ok: true, data: updateTransactionTx_(body.data) });
       if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });
       if (action === 'batchDeleteTransactionsTx') return jsonOut_({ ok: true, data: batchDeleteTransactionsTx_((body.data && body.data.ids) || []) });
