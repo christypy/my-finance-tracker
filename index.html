@@ -943,6 +943,27 @@
             <label class="full">備註
               <input type="text" id="ordNote" placeholder="選填">
             </label>
+            <div class="full checkbox-row">
+              <input type="checkbox" id="ordShared">
+              <label for="ordShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
+            </div>
+            <div class="full" id="ordLedgerFields" style="display:none;">
+              <div class="map-grid">
+                <label>誰先付款
+                  <select id="ordPayer">
+                    <option value="me">我先付</option>
+                    <option value="partner" selected>對方先付</option>
+                  </select>
+                </label>
+                <label>分攤方式
+                  <select id="ordSplitMode">
+                    <option value="split">平分（各一半）</option>
+                    <option value="advance">全額代墊</option>
+                  </select>
+                </label>
+              </div>
+              <p class="hint" style="margin:6px 0 0;">預算只會扣「你自己要負擔的那一份」：平分算一半；「我先付、全額代墊」整筆是對方的，不佔你的預算；「對方先付、全額代墊」整筆是你的，全額計入。</p>
+            </div>
             <p class="hint full" style="margin:0;">已下單的金額會先從該月預算扣掉，但不會動帳戶餘額，也不會算進支出統計；付款後按「已付款」才會正式記帳。</p>
             <div class="form-actions">
               <button type="submit" class="primary">儲存已下單</button>
@@ -1338,6 +1359,12 @@
       </label>
       <label>實付金額
         <input type="number" id="payAmount" step="0.01" min="0" required>
+      </label>
+      <label class="full" id="payPayerWrap" style="display:none;">誰先付款（共同帳本）
+        <select id="payPayer">
+          <option value="me">我先付</option>
+          <option value="partner">對方先付</option>
+        </select>
       </label>
       <label class="full">付款方式（扣款帳戶）
         <select id="payAccount"></select>
@@ -2645,7 +2672,7 @@ function renderTrAvailAndBudget_(){
   const monthExpense = expenseTotalOf(monthStr);
   // 已下單未付款的金額也要先從預算扣掉（依下單日期所在月份計入）
   const monthOrders = ordersOfMonth_(monthStr);
-  const monthPending = monthOrders.reduce((s,o) => s + (Number(o.amount) || 0), 0);
+  const monthPending = monthOrders.reduce((s,o) => s + myExpenseShare_(o), 0); // 共同帳本只算自己負擔的份額
   const budgetLeft = MONTHLY_BUDGET - monthExpense - monthPending;
   const overBudget = budgetLeft < 0;
   $('#trAvailLabel').textContent = `月預算 $${fmt(MONTHLY_BUDGET)}・${overBudget ? '已超支' : '剩餘'}`;
@@ -2718,10 +2745,17 @@ function resetOrderForm_(){
   $('#ordAmount').value = '';
   $('#ordDate').value = todayStr_();
   $('#ordNote').value = '';
+  $('#ordShared').checked = false;
+  $('#ordPayer').value = 'partner';
+  $('#ordSplitMode').value = 'split';
+  $('#ordLedgerFields').style.display = 'none';
   $('#ordFormTitle').textContent = '新增已下單（尚未付款）';
   populateOrdCategories_('', '');
 }
 $('#ordCancel').addEventListener('click', resetOrderForm_);
+$('#ordShared').addEventListener('change', () => {
+  $('#ordLedgerFields').style.display = $('#ordShared').checked ? '' : 'none';
+});
 
 $('#orderForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -2735,7 +2769,9 @@ $('#orderForm').addEventListener('submit', async e => {
     category: $('#ordCategory').value || '其他',
     subcategory: $('#ordSubcategory').value || '',
     orderDate: $('#ordDate').value,
-    note: $('#ordNote').value.trim()
+    note: $('#ordNote').value.trim(),
+    payer: $('#ordShared').checked ? $('#ordPayer').value : 'me',
+    splitMode: $('#ordShared').checked ? $('#ordSplitMode').value : 'personal'
   };
   try{
     await runBusy(async () => {
@@ -2756,20 +2792,36 @@ function renderOrders_(){
   const orders = [...(state.orders || [])].sort((a,b) => ((a.orderDate || '') < (b.orderDate || '') ? 1 : -1));
   if(!orders.length){ sec.style.display = 'none'; return; }
   sec.style.display = '';
-  const total = orders.reduce((s,o) => s + (Number(o.amount) || 0), 0);
-  $('#ordersSummary').textContent = `共 ${orders.length} 筆・$${fmt(total)}（已計入預算）`;
+  const total = orders.reduce((s,o) => s + myExpenseShare_(o), 0);
+  $('#ordersSummary').textContent = `共 ${orders.length} 筆・預算已扣 $${fmt(total)}`;
   $('#ordersList').innerHTML = orders.map(o => {
     const catLabel = `${o.category || '其他'}${o.subcategory ? ' · ' + o.subcategory : ''}`;
     const meta = [`下單 ${escapeHtml(o.orderDate || '')}`, escapeHtml(catLabel)];
     if(o.note) meta.push(escapeHtml(o.note));
-    return `<div class="item-card">
+    const isSplit = o.splitMode === 'split';
+    const isAdv = o.splitMode === 'advance';
+    const myPays = o.payer !== 'partner';
+    let ledgerBadge = '';
+    let shareNote = '';
+    if(isSplit){
+      ledgerBadge = `<span class="badge">共同・平分・${myPays ? '我先付' : '對方先付'}</span>`;
+      shareNote = `<div class="item-share-note">總金額 $${fmt(o.amount)}（平分），預算只扣我的一半</div>`;
+    } else if(isAdv){
+      ledgerBadge = `<span class="badge">共同・全額代墊・${myPays ? '我先付' : '對方先付'}</span>`;
+      shareNote = myPays
+        ? `<div class="item-share-note">整筆是對方的花費，不佔我的預算</div>`
+        : `<div class="item-share-note">整筆是我的花費，預算全額計入</div>`;
+    }
+    const myShare = myExpenseShare_(o);
+    return `<div class="item-card ${isAdv && myPays ? 'advance-item' : ''}">
       <div class="item-top">
         <div>
           <div class="item-name">${escapeHtml(o.name || '')}</div>
-          <span class="badge pending">未付款</span>
+          <span class="badge pending">未付款</span> ${ledgerBadge}
           <div class="item-note">${meta.filter(Boolean).join(' · ')}</div>
+          ${shareNote}
         </div>
-        <div class="item-value expense">$${fmt(o.amount)}</div>
+        <div class="item-value expense">$${fmt(isSplit ? myShare : (isAdv && myPays ? o.amount : o.amount))}</div>
       </div>
       <div class="item-actions">
         <button class="small primary" onclick="openPayOrder('${o.id}')">已付款</button>
@@ -2789,6 +2841,11 @@ function editOrder(id){
   $('#ordAmount').value = o.amount;
   $('#ordDate').value = o.orderDate || todayStr_();
   $('#ordNote').value = o.note || '';
+  const sharedOrd = o.splitMode === 'split' || o.splitMode === 'advance';
+  $('#ordShared').checked = sharedOrd;
+  $('#ordPayer').value = o.payer === 'partner' ? 'partner' : 'me';
+  $('#ordSplitMode').value = sharedOrd ? o.splitMode : 'split';
+  $('#ordLedgerFields').style.display = sharedOrd ? '' : 'none';
   populateOrdCategories_(o.category, o.subcategory);
   $('#ordFormTitle').textContent = '編輯已下單';
   $('#orderDetails').scrollIntoView({ behavior:'smooth', block:'start' });
@@ -2817,9 +2874,18 @@ function openPayOrder(id){
   const accounts = sortAccountsForSelect(state.accounts);
   $('#payAccount').innerHTML = `<option value="">不指定（不更新帳戶餘額）</option>` +
     accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}（${escapeHtml(a.type)}）</option>`).join('');
-  $('#payAccount').value = defaultCashAccountId() || '';
+  const sharedOrd = o.splitMode === 'split' || o.splitMode === 'advance';
+  $('#payPayerWrap').style.display = sharedOrd ? '' : 'none';
+  $('#payPayer').value = o.payer === 'partner' ? 'partner' : 'me';
+  syncPayAccountDefault_();
   $('#payOrderBackdrop').classList.add('show');
 }
+// 對方先付時，錢不是從我的帳戶出，預設「不指定」；我先付才預設現金帳戶（仍可手動更改）
+function syncPayAccountDefault_(){
+  const partnerPays = $('#payPayerWrap').style.display !== 'none' && $('#payPayer').value === 'partner';
+  $('#payAccount').value = partnerPays ? '' : (defaultCashAccountId() || '');
+}
+$('#payPayer').addEventListener('change', syncPayAccountDefault_);
 function closePayOrder_(){ $('#payOrderBackdrop').classList.remove('show'); }
 $('#payCancel').addEventListener('click', closePayOrder_);
 $('#payOrderBackdrop').addEventListener('click', e => { if(e.target.id === 'payOrderBackdrop') closePayOrder_(); });
@@ -2831,17 +2897,22 @@ $('#payOrderForm').addEventListener('submit', e => {
   if(!o){ closePayOrder_(); return; }
   const amount = parseFloat($('#payAmount').value) || 0;
   if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
+  const sharedOrd = o.splitMode === 'split' || o.splitMode === 'advance';
+  const payer = sharedOrd ? $('#payPayer').value : 'me';
+  const splitMode = sharedOrd ? o.splitMode : 'personal';
+  // 跟共同帳本記帳規則一致：「我先付、全額代墊」整筆是對方的花費，統一存成「代墊」類別
+  const isAdvance = splitMode === 'advance' && payer !== 'partner';
   const tx = {
     id: newClientId_(),
     date: $('#payDate').value,
     type: 'expense',
-    category: o.category || '其他',
-    subcategory: o.subcategory || '',
+    category: isAdvance ? ADVANCE_CATEGORY_NAME : (o.category || '其他'),
+    subcategory: isAdvance ? '' : (o.subcategory || ''),
     amount,
     accountId: $('#payAccount').value,
     note: o.note ? `${o.name}（${o.note}）` : o.name,
-    payer: 'me',
-    splitMode: 'personal',
+    payer,
+    splitMode,
     settled: false,
     updatedAt: new Date().toISOString()
   };

@@ -23,7 +23,7 @@ const SHEET_HEADERS = {
   categories: ['id', 'type', 'mainName', 'subName', 'updatedAt'],
   // 已下單、尚未付款的項目：先計入月預算，但不影響帳戶餘額、也不算進記帳支出。
   // 付款確認後會轉成一筆正式支出（Transactions）並從這張表移除；取消訂單則直接刪除這列。
-  orders: ['id', 'name', 'amount', 'category', 'subcategory', 'orderDate', 'note', 'updatedAt']
+  orders: ['id', 'name', 'amount', 'category', 'subcategory', 'orderDate', 'note', 'updatedAt', 'payer', 'splitMode']
 };
 
 
