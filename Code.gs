@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-10-12-toorder';
+const BACKEND_VERSION_ = '2026-10-12-recorder';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -23,7 +23,7 @@ const SHEET_HEADERS = {
   categories: ['id', 'type', 'mainName', 'subName', 'updatedAt'],
   // 已下單、尚未付款的項目：先計入月預算，但不影響帳戶餘額、也不算進記帳支出。
   // 付款確認後會轉成一筆正式支出（Transactions）並從這張表移除；取消訂單則直接刪除這列。
-  orders: ['id', 'name', 'amount', 'category', 'subcategory', 'orderDate', 'note', 'updatedAt', 'payer', 'splitMode']
+  orders: ['id', 'name', 'amount', 'category', 'subcategory', 'orderDate', 'note', 'updatedAt', 'payer', 'splitMode', 'recurringId']
 };
 
 
@@ -469,6 +469,60 @@ function payOrderTx_(data) {
 
 // 把一筆已記好的「支出」改成「已下單（尚未付款）」：同一個後端呼叫內
 // 先新增已下單、再刪除這筆記帳並還原帳戶餘額，不會出現兩邊都存在而重複計算預算。
+// 每月固定繳款：把「模板」裡填了「每月幾號繳」的支出模板，每個月自動新增一筆「已下單・待付款」。
+// 冪等：同一個模板同一個月只會產生一次——已經有（或曾經有、後來被取消的）已下單、
+// 或這個月已經有帶同一個 recurringId 的正式記帳，就不會再新增，多台裝置同時開啟也不會重複。
+function generateRecurringOrders_(month) {
+  month = String(month || '');
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    const tz = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
+    month = Utilities.formatDate(new Date(), tz, 'yyyy-MM');
+  }
+  const props = PropertiesService.getScriptProperties();
+  let keys = {};
+  try { keys = JSON.parse(props.getProperty('RECURRING_ORDER_KEYS') || '{}') || {}; } catch (err) { keys = {}; }
+  const done = {};
+  (keys[month] || []).forEach(id => { done[String(id)] = true; });
+  readAll_('orders').forEach(o => {
+    if (o.recurringId && String(o.orderDate || '').indexOf(month) === 0) done[String(o.recurringId)] = true;
+  });
+  readTransactionsSince_(month + '-01').rows.forEach(t => {
+    if (t.recurringId && String(t.date || '').indexOf(month) === 0) done[String(t.recurringId)] = true;
+  });
+
+  const added = [];
+  readAll_('recurring').forEach(t => {
+    if (t.type !== 'expense') return;
+    if (t.active === false || String(t.active) === 'false') return;
+    const day = parseInt(t.dayOfMonth, 10);
+    if (!day || day < 1 || day > 31) return;
+    if (done[String(t.id)]) return;
+    const shared = t.splitMode === 'split' || t.splitMode === 'advance';
+    const dd = ('0' + Math.min(day, 28)).slice(-2);
+    const order = addRow_('orders', {
+      name: t.name || t.note || t.category || '',
+      amount: Number(t.amount) || 0,
+      category: t.category || '其他',
+      subcategory: t.subcategory || '',
+      orderDate: month + '-' + dd,
+      note: t.note || '',
+      payer: shared ? (t.payer || 'me') : 'me',
+      splitMode: shared ? t.splitMode : 'personal',
+      recurringId: t.id
+    });
+    done[String(t.id)] = true;
+    (keys[month] = keys[month] || []).push(t.id);
+    added.push(order);
+  });
+
+  if (added.length) {
+    const kept = {};
+    Object.keys(keys).forEach(m => { if (m >= month) kept[m] = keys[m]; });
+    props.setProperty('RECURRING_ORDER_KEYS', JSON.stringify(kept));
+  }
+  return { added: added, month: month };
+}
+
 function convertTxToOrderTx_(data) {
   const rowIndex = findRowIndexById_('transactions', data.id);
   if (rowIndex === -1) throw new Error('找不到這筆記帳（可能已被刪除或轉換）');
@@ -1159,6 +1213,7 @@ function doPost(e) {
 
       if (action === 'addTransactionTx') return jsonOut_({ ok: true, data: addTransactionTx_(body.data) });
       if (action === 'payOrderTx') return jsonOut_({ ok: true, data: payOrderTx_(body.data) });
+      if (action === 'generateRecurringOrders') return jsonOut_({ ok: true, data: generateRecurringOrders_(body.data && body.data.month) });
       if (action === 'convertTxToOrderTx') return jsonOut_({ ok: true, data: convertTxToOrderTx_(body.data) });
       if (action === 'updateTransactionTx') return jsonOut_({ ok: true, data: updateTransactionTx_(body.data) });
       if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });

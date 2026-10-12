@@ -749,6 +749,9 @@
   }
   /* ---- 已下單（未付款）----- */
   .orders-head{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin:4px 2px 8px; font-size:14px; font-weight:700; color:var(--ink); }
+  .orders-head{ cursor:pointer; user-select:none; }
+  .orders-head .orders-caret{ display:inline-block; font-size:10px; color:var(--ink-soft); margin-right:4px; transition:transform .15s; }
+  .orders-head.open .orders-caret{ transform:rotate(90deg); }
   .orders-head small{ font-weight:500; color:var(--ink-soft); font-size:12px; }
   .badge.pending{ background:var(--gold-soft); color:var(--gold); }
   .pay-backdrop{ position:fixed; inset:0; background:rgba(20,26,42,.42); backdrop-filter:blur(2px); display:none; align-items:center; justify-content:center; padding:16px; z-index:70; }
@@ -972,8 +975,8 @@
           </form>
         </details>
         <div id="ordersSection" style="display:none;">
-          <div class="orders-head"><span>📦 已下單・待付款</span><small id="ordersSummary"></small></div>
-          <div class="item-list" id="ordersList" style="margin-bottom:16px;"></div>
+          <div class="orders-head" id="ordersToggle"><span><span class="orders-caret">▶</span>📦 已下單・待付款</span><small id="ordersSummary"></small></div>
+          <div class="item-list" id="ordersList" style="margin-bottom:16px; display:none;"></div>
         </div>
         <details class="entry-wrap" id="trDetails">
           <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
@@ -1145,7 +1148,7 @@
                 <option value="">請選擇</option>
               </select>
             </label>
-            <label>每月幾號繳（選填，僅供提醒）
+            <label>每月幾號繳（選填；支出模板填了就會每月自動新增到「已下單・待付款」）
               <input type="number" id="tplDayOfMonth" min="1" max="28" placeholder="例如：5">
             </label>
             <label class="full">備註（加入記帳時的名稱，留空則用模板名稱）
@@ -1476,7 +1479,7 @@ const cfg = {
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-10-12-toorder';
+const FRONTEND_VERSION = '2026-10-12-recorder';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -1846,6 +1849,7 @@ async function loadAll(){
     }
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
+    generateRecurringOrdersNow_();
     migrateLocalCategoriesIfNeeded_().then(() => {
       if(dirty) dirty.categories = true;
       renderVisibleSection();
@@ -2772,7 +2776,8 @@ $('#orderForm').addEventListener('submit', async e => {
     orderDate: $('#ordDate').value,
     note: $('#ordNote').value.trim(),
     payer: $('#ordShared').checked ? $('#ordPayer').value : 'me',
-    splitMode: $('#ordShared').checked ? $('#ordSplitMode').value : 'personal'
+    splitMode: $('#ordShared').checked ? $('#ordSplitMode').value : 'personal',
+    recurringId: ((state.orders || []).find(x => x.id === id) || {}).recurringId || ''
   };
   try{
     await runBusy(async () => {
@@ -2787,6 +2792,13 @@ $('#orderForm').addEventListener('submit', async e => {
   }catch(err){ alert('儲存失敗：' + err.message + '\n（若是第一次使用，請確認 Apps Script 已更新並重新部署新版本。）'); }
 });
 
+// 已下單清單預設收合，點標題列展開／收合（只在這次開啟期間記住，重新整理又會收合）
+let ordersOpen_ = false;
+$('#ordersToggle').addEventListener('click', () => {
+  ordersOpen_ = !ordersOpen_;
+  $('#ordersToggle').classList.toggle('open', ordersOpen_);
+  $('#ordersList').style.display = ordersOpen_ ? '' : 'none';
+});
 function renderOrders_(){
   const sec = $('#ordersSection');
   if(!sec) return;
@@ -2795,6 +2807,8 @@ function renderOrders_(){
   sec.style.display = '';
   const total = orders.reduce((s,o) => s + myExpenseShare_(o), 0);
   $('#ordersSummary').textContent = `共 ${orders.length} 筆・預算已扣 $${fmt(total)}`;
+  $('#ordersToggle').classList.toggle('open', ordersOpen_);
+  $('#ordersList').style.display = ordersOpen_ ? '' : 'none';
   $('#ordersList').innerHTML = orders.map(o => {
     const catLabel = `${o.category || '其他'}${o.subcategory ? ' · ' + o.subcategory : ''}`;
     const meta = [`下單 ${escapeHtml(o.orderDate || '')}`, escapeHtml(catLabel)];
@@ -2863,6 +2877,29 @@ async function cancelOrder(id){
       renderAll();
     }, '取消中…');
   }catch(err){ alert('取消失敗：' + err.message); }
+}
+
+// 每月固定繳款：後端會把「模板」裡有填「每月幾號繳」的支出模板，每個月自動新增一筆已下單・待付款
+// （同一個模板同一個月只會新增一次，取消訂單後也不會再重新長出來）。
+function hasRecurringOrderTemplates_(){
+  return state.recurring.some(t => t.type === 'expense' && parseInt(t.dayOfMonth, 10) > 0 && t.active !== false && String(t.active) !== 'false');
+}
+let generatingRecurring_ = false;
+async function generateRecurringOrdersNow_(){
+  if(generatingRecurring_ || !cfg.url || !cfg.token || !hasRecurringOrderTemplates_()) return;
+  generatingRecurring_ = true;
+  try{
+    const result = await apiPost('generateRecurringOrders', null, { month: currentMonthStr() });
+    const added = (result && result.added) || [];
+    if(added.length){
+      added.forEach(o => upsertLocal('orders', o));
+      renderAll();
+    }
+  }catch(err){
+    console.warn('自動新增每月固定繳款到已下單失敗（不影響其他功能）：', err);
+  } finally {
+    generatingRecurring_ = false;
+  }
 }
 
 // 在「編輯記帳」表單裡按「改為已下單」：把目前正在編輯的這筆支出（含表單上剛改的內容）
@@ -2959,6 +2996,7 @@ $('#payOrderForm').addEventListener('submit', e => {
     payer,
     splitMode,
     settled: false,
+    recurringId: o.recurringId || '',
     updatedAt: new Date().toISOString()
   };
   // 樂觀更新：本機立刻移除已下單、新增正式支出並扣帳戶餘額，後端「新增記帳＋移除已下單」排進背景佇列一次完成
@@ -4645,6 +4683,7 @@ $('#tplForm').addEventListener('submit', async e => {
     }, id ? '更新模板中…' : '新增模板中…');
   }catch(err){ alert((id ? '更新模板失敗：' : '新增模板失敗：') + err.message); return; }
   resetTplForm_();
+  generateRecurringOrdersNow_();
 });
 
 // 模板管理清單：顯示所有模板（不管本月是否已加入），可直接編輯/刪除
