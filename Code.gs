@@ -21,7 +21,7 @@ const SHEET_HEADERS = {
   recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode', 'toAccountId'],
   
   categories: ['id', 'type', 'mainName', 'subName', 'updatedAt'],
-  // 已下單、尚未付款的項目：先計入月預算，但不影響帳戶餘額、也不算進記帳支出。
+  // 待付款、尚未付款的項目：先計入月預算，但不影響帳戶餘額、也不算進記帳支出。
   // 付款確認後會轉成一筆正式支出（Transactions）並從這張表移除；取消訂單則直接刪除這列。
   orders: ['id', 'name', 'amount', 'category', 'subcategory', 'orderDate', 'note', 'updatedAt', 'payer', 'splitMode', 'recurringId']
 };
@@ -448,9 +448,9 @@ function updateTransactionTx_(data) {
   return { transaction: tx, accounts: accountsTouched };
 }
 
-// 已下單項目「確認付款」：一次完成「新增一筆正式支出（含扣帳戶餘額）＋移除這筆已下單」，
-// 放在同一個後端呼叫裡，不會出現「記帳寫進去了但已下單還留著」造成預算重複計算的情況。
-// 前端網路逾時重送時（retry），若這筆記帳的 id 已經寫入，就只確保已下單被移除，不會重複記帳／重複扣餘額。
+// 待付款項目「確認付款」：一次完成「新增一筆正式支出（含扣帳戶餘額）＋移除這筆待付款」，
+// 放在同一個後端呼叫裡，不會出現「記帳寫進去了但待付款還留著」造成預算重複計算的情況。
+// 前端網路逾時重送時（retry），若這筆記帳的 id 已經寫入，就只確保待付款被移除，不會重複記帳／重複扣餘額。
 function payOrderTx_(data) {
   const orderId = data.orderId;
   delete data.orderId;
@@ -467,10 +467,10 @@ function payOrderTx_(data) {
   return { transaction: tx, account: accountsTouched[0] || null, accounts: accountsTouched };
 }
 
-// 把一筆已記好的「支出」改成「已下單（尚未付款）」：同一個後端呼叫內
-// 先新增已下單、再刪除這筆記帳並還原帳戶餘額，不會出現兩邊都存在而重複計算預算。
-// 每月固定繳款：把「模板」裡填了「每月幾號繳」的支出模板，每個月自動新增一筆「已下單・待付款」。
-// 冪等：同一個模板同一個月只會產生一次——已經有（或曾經有、後來被取消的）已下單、
+// 把一筆已記好的「支出」改成「待付款」：同一個後端呼叫內
+// 先新增待付款、再刪除這筆記帳並還原帳戶餘額，不會出現兩邊都存在而重複計算預算。
+// 每月固定繳款：把「模板」裡填了「每月幾號繳」的支出模板，每個月自動新增一筆「待付款」。
+// 冪等：同一個模板同一個月只會產生一次——已經有（或曾經有、後來被取消的）待付款、
 // 或這個月已經有帶同一個 recurringId 的正式記帳，就不會再新增，多台裝置同時開啟也不會重複。
 function generateRecurringOrders_(month) {
   month = String(month || '');
@@ -527,9 +527,9 @@ function convertTxToOrderTx_(data) {
   const rowIndex = findRowIndexById_('transactions', data.id);
   if (rowIndex === -1) throw new Error('找不到這筆記帳（可能已被刪除或轉換）');
   const old = readRowObj_('transactions', rowIndex);
-  if (old.type !== 'expense') throw new Error('只有支出可以改成已下單');
+  if (old.type !== 'expense') throw new Error('只有支出可以改成待付款');
   const oldShared = old.splitMode === 'split' || old.splitMode === 'advance';
-  if (oldShared && String(old.settled) === 'true') throw new Error('這筆共同帳本項目已經結算過，不能改成已下單');
+  if (oldShared && String(old.settled) === 'true') throw new Error('這筆共同帳本項目已經結算過，不能改成待付款');
   // 前端會帶入編輯表單上目前的內容；沒帶的欄位就沿用原本那筆記帳
   const splitMode = data.splitMode !== undefined ? data.splitMode : (oldShared ? old.splitMode : 'personal');
   const isShared = splitMode === 'split' || splitMode === 'advance';
