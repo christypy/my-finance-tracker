@@ -474,17 +474,21 @@ function convertTxToOrderTx_(data) {
   if (rowIndex === -1) throw new Error('找不到這筆記帳（可能已被刪除或轉換）');
   const old = readRowObj_('transactions', rowIndex);
   if (old.type !== 'expense') throw new Error('只有支出可以改成已下單');
-  const shared = old.splitMode === 'split' || old.splitMode === 'advance';
-  if (shared && String(old.settled) === 'true') throw new Error('這筆共同帳本項目已經結算過，不能改成已下單');
+  const oldShared = old.splitMode === 'split' || old.splitMode === 'advance';
+  if (oldShared && String(old.settled) === 'true') throw new Error('這筆共同帳本項目已經結算過，不能改成已下單');
+  // 前端會帶入編輯表單上目前的內容；沒帶的欄位就沿用原本那筆記帳
+  const splitMode = data.splitMode !== undefined ? data.splitMode : (oldShared ? old.splitMode : 'personal');
+  const isShared = splitMode === 'split' || splitMode === 'advance';
+  const amount = data.amount !== undefined ? Number(data.amount) : Number(old.amount);
   const order = addRow_('orders', {
     name: data.name || old.note || old.category || '',
-    amount: Number(old.amount) || 0,
+    amount: amount || 0,
     category: data.category || old.category || '其他',
     subcategory: data.subcategory || '',
-    orderDate: old.date,
+    orderDate: data.orderDate || old.date,
     note: '',
-    payer: shared ? (old.payer || 'me') : 'me',
-    splitMode: shared ? old.splitMode : 'personal'
+    payer: isShared ? (data.payer || old.payer || 'me') : 'me',
+    splitMode: isShared ? splitMode : 'personal'
   });
   getSheet_('transactions').deleteRow(rowIndex);
   const accountsTouched = applyBalanceEffect_(old, -1);

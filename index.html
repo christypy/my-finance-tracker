@@ -1051,6 +1051,7 @@
           <div class="entry-footer">
             <div class="form-actions">
               <button type="button" id="trCancel">清空表單</button>
+              <button type="button" id="trToOrderBtn" style="display:none;">改為已下單</button>
               <button type="submit" form="trForm" id="trSaveContinue">儲存並記下一筆</button>
               <button type="submit" form="trForm" class="primary">儲存記帳</button>
             </div>
@@ -2864,40 +2865,49 @@ async function cancelOrder(id){
   }catch(err){ alert('取消失敗：' + err.message); }
 }
 
-// 把一筆已記好的「支出」改成「已下單（尚未付款）」：不用刪掉重填。
-// 後端在同一個呼叫裡「新增已下單＋刪除這筆記帳＋還原帳戶餘額」，不會出現預算重複計算。
-window.convertTransactionToOrder = async id => {
+// 在「編輯記帳」表單裡按「改為已下單」：把目前正在編輯的這筆支出（含表單上剛改的內容）
+// 轉成「已下單（尚未付款）」，不用刪除重填。後端同一個呼叫內新增已下單、刪除這筆記帳並還原帳戶餘額。
+async function convertEditingTransactionToOrder_(){
+  const id = $('#trId').value;
   const t = state.transactions.find(x => x.id === id);
   if(!t || t.type !== 'expense') return;
   if(syncQueue_.some(o => o.data && o.data.id === id)){
     alert('這筆記帳還在同步到試算表，請等右上角同步完成後再試一次。');
     return;
   }
-  const shared = t.splitMode === 'split' || t.splitMode === 'advance';
+  const shared = $('#trShared').checked;
   if(shared && String(t.settled) === 'true'){
     alert('這筆共同帳本項目已經結算過，不能改成已下單。');
     return;
   }
-  const label = t.note || t.category || '這筆記帳';
-  if(!confirm(`確定把「${label}」$${fmt(t.amount)} 改成「已下單（尚未付款）」嗎？\n這筆記帳會移除，帳戶餘額自動還原，金額改計入 ${(t.date || '').slice(0,7)} 的月預算。`)) return;
-  const isAdv = t.category === ADVANCE_CATEGORY_NAME;
+  const amount = parseFloat($('#trAmount').value) || 0;
+  if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
+  const date = $('#trDate').value;
+  if(!date){ alert('請選擇日期。'); return; }
+  const note = $('#trNote').value.trim();
+  const advance = isAdvanceMode_();
+  const category = advance ? '其他' : ($('#trCategory').value || '其他');
+  const subcategory = advance ? '' : ($('#trSubcategory').value || '');
+  const splitMode = shared ? $('#trSplitMode').value : 'personal';
+  const payer = shared ? $('#trPayer').value : 'me';
+  const label = note || category;
+  if(!confirm(`確定把「${label}」$${fmt(amount)} 改成「已下單（尚未付款）」嗎？\n這筆記帳會移除，帳戶餘額自動還原，金額改計入 ${date.slice(0,7)} 的月預算。`)) return;
   try{
     await runBusy(async () => {
       const result = await apiPost('convertTxToOrderTx', 'transactions', {
-        id,
-        name: t.note || (isAdv ? '代墊' : (t.category || '其他')),
-        category: isAdv ? '其他' : (t.category || '其他'),
-        subcategory: isAdv ? '' : (t.subcategory || '')
+        id, name: label, amount, orderDate: date, category, subcategory, payer, splitMode
       });
       removeLocal('transactions', id);
       if(result.order) upsertLocal('orders', result.order);
       (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      $('#trDetails').open = false; // 關閉時會自動清空表單
       renderAll();
     }, '轉為已下單中…');
   }catch(err){
     alert('轉換失敗：' + err.message + '\n（請確認 Apps Script 已更新並重新部署新版本。）');
   }
-};
+}
+$('#trToOrderBtn').addEventListener('click', convertEditingTransactionToOrder_);
 
 function openPayOrder(id){
   const o = (state.orders || []).find(x => x.id === id);
@@ -3134,7 +3144,6 @@ function renderTransactions(){
       </div>
       <div class="item-actions">
         <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
-        ${isExpense ? `<button class="small" onclick="convertTransactionToOrder('${t.id}')">改為已下單</button>` : ''}
         <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
       </div>
     </div>`;
@@ -4366,6 +4375,7 @@ function resetTransactionForm(){
   setTrType('expense');
   $('#trFormTitle').textContent = '新增記帳';
   $('#trSaveContinue').style.display = ''; // 新增模式才需要「儲存並記下一筆」
+  $('#trToOrderBtn').style.display = 'none';
   renderTrTemplateChips(); // 新增模式才顯示模板快速選擇（會依有沒有模板自動顯示/隱藏）
   // 編輯表單存檔/取消後，一律搬回「記帳」分頁原本的位置
   restoreTrDetailsHome_();
@@ -4397,6 +4407,7 @@ window.editTransaction = id => {
   // 不管是電腦還是手機，都不用捲動或切分頁
   $('#trFormTitle').textContent = '編輯記帳';
   $('#trSaveContinue').style.display = 'none'; // 編輯既有記帳時不適用批量連續新增
+  $('#trToOrderBtn').style.display = t.type === 'expense' ? '' : 'none'; // 只有支出可以改成已下單
   $('#trTemplateRow').style.display = 'none'; // 編輯既有記帳時不能再套用模板（會被誤認成新增）
   moveTrDetailsToOverlay_();
   $('#trDetails').open = true;
