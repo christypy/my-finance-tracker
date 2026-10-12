@@ -1475,7 +1475,7 @@ const cfg = {
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-10-01-fast2';
+const FRONTEND_VERSION = '2026-10-12-toorder';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -2864,6 +2864,41 @@ async function cancelOrder(id){
   }catch(err){ alert('取消失敗：' + err.message); }
 }
 
+// 把一筆已記好的「支出」改成「已下單（尚未付款）」：不用刪掉重填。
+// 後端在同一個呼叫裡「新增已下單＋刪除這筆記帳＋還原帳戶餘額」，不會出現預算重複計算。
+window.convertTransactionToOrder = async id => {
+  const t = state.transactions.find(x => x.id === id);
+  if(!t || t.type !== 'expense') return;
+  if(syncQueue_.some(o => o.data && o.data.id === id)){
+    alert('這筆記帳還在同步到試算表，請等右上角同步完成後再試一次。');
+    return;
+  }
+  const shared = t.splitMode === 'split' || t.splitMode === 'advance';
+  if(shared && String(t.settled) === 'true'){
+    alert('這筆共同帳本項目已經結算過，不能改成已下單。');
+    return;
+  }
+  const label = t.note || t.category || '這筆記帳';
+  if(!confirm(`確定把「${label}」$${fmt(t.amount)} 改成「已下單（尚未付款）」嗎？\n這筆記帳會移除，帳戶餘額自動還原，金額改計入 ${(t.date || '').slice(0,7)} 的月預算。`)) return;
+  const isAdv = t.category === ADVANCE_CATEGORY_NAME;
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('convertTxToOrderTx', 'transactions', {
+        id,
+        name: t.note || (isAdv ? '代墊' : (t.category || '其他')),
+        category: isAdv ? '其他' : (t.category || '其他'),
+        subcategory: isAdv ? '' : (t.subcategory || '')
+      });
+      removeLocal('transactions', id);
+      if(result.order) upsertLocal('orders', result.order);
+      (result.accounts || []).forEach(acc => upsertLocal('accounts', acc));
+      renderAll();
+    }, '轉為已下單中…');
+  }catch(err){
+    alert('轉換失敗：' + err.message + '\n（請確認 Apps Script 已更新並重新部署新版本。）');
+  }
+};
+
 function openPayOrder(id){
   const o = (state.orders || []).find(x => x.id === id);
   if(!o) return;
@@ -3099,6 +3134,7 @@ function renderTransactions(){
       </div>
       <div class="item-actions">
         <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
+        ${isExpense ? `<button class="small" onclick="convertTransactionToOrder('${t.id}')">改為已下單</button>` : ''}
         <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
       </div>
     </div>`;

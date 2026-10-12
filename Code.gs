@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-10-01-fast';
+const BACKEND_VERSION_ = '2026-10-12-toorder';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -465,6 +465,30 @@ function payOrderTx_(data) {
   const accountsTouched = applyBalanceEffect_(tx, 1);
   if (orderRow !== -1) getSheet_('orders').deleteRow(orderRow);
   return { transaction: tx, account: accountsTouched[0] || null, accounts: accountsTouched };
+}
+
+// 把一筆已記好的「支出」改成「已下單（尚未付款）」：同一個後端呼叫內
+// 先新增已下單、再刪除這筆記帳並還原帳戶餘額，不會出現兩邊都存在而重複計算預算。
+function convertTxToOrderTx_(data) {
+  const rowIndex = findRowIndexById_('transactions', data.id);
+  if (rowIndex === -1) throw new Error('找不到這筆記帳（可能已被刪除或轉換）');
+  const old = readRowObj_('transactions', rowIndex);
+  if (old.type !== 'expense') throw new Error('只有支出可以改成已下單');
+  const shared = old.splitMode === 'split' || old.splitMode === 'advance';
+  if (shared && String(old.settled) === 'true') throw new Error('這筆共同帳本項目已經結算過，不能改成已下單');
+  const order = addRow_('orders', {
+    name: data.name || old.note || old.category || '',
+    amount: Number(old.amount) || 0,
+    category: data.category || old.category || '其他',
+    subcategory: data.subcategory || '',
+    orderDate: old.date,
+    note: '',
+    payer: shared ? (old.payer || 'me') : 'me',
+    splitMode: shared ? old.splitMode : 'personal'
+  });
+  getSheet_('transactions').deleteRow(rowIndex);
+  const accountsTouched = applyBalanceEffect_(old, -1);
+  return { order: order, id: data.id, accounts: accountsTouched };
 }
 
 function deleteTransactionTx_(id) {
@@ -1131,6 +1155,7 @@ function doPost(e) {
 
       if (action === 'addTransactionTx') return jsonOut_({ ok: true, data: addTransactionTx_(body.data) });
       if (action === 'payOrderTx') return jsonOut_({ ok: true, data: payOrderTx_(body.data) });
+      if (action === 'convertTxToOrderTx') return jsonOut_({ ok: true, data: convertTxToOrderTx_(body.data) });
       if (action === 'updateTransactionTx') return jsonOut_({ ok: true, data: updateTransactionTx_(body.data) });
       if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });
       if (action === 'batchDeleteTransactionsTx') return jsonOut_({ ok: true, data: batchDeleteTransactionsTx_((body.data && body.data.ids) || []) });
