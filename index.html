@@ -1277,15 +1277,12 @@
     <!-- 設定 -->
     <div class="view" id="view-settings">
       <h2>設定</h2>
-      <p class="hint">填入你部署 Google Apps Script 後取得的網址與密鑰，只存在你這台裝置的瀏覽器裡，不會上傳到 GitHub。</p>
+      <p class="hint">Apps Script 網址已固定，只需要輸入密碼（SECRET_TOKEN）一次。密碼只存在這台裝置的瀏覽器裡，輸入過就會一直記住，不會被自動清除；只有你自己在這裡改成新密碼才會更換。</p>
       <div class="settings-block">
-        <label>Apps Script 網址
-          <input type="text" id="cfgUrl" placeholder="https://script.google.com/macros/s/xxx/exec">
+        <label>密碼 (SECRET_TOKEN)
+          <input type="password" id="cfgToken" autocomplete="current-password" placeholder="你在 Apps Script 指令碼屬性設定的值">
         </label>
-        <label>密鑰 (SECRET_TOKEN)
-          <input type="text" id="cfgToken" placeholder="你在 Apps Script 指令碼屬性設定的值">
-        </label>
-        <button id="cfgSave" class="primary">儲存設定並重新連線</button>
+        <button id="cfgSave" class="primary">儲存密碼並連線</button>
         <div class="status" id="cfgStatus"></div>
       </div>
 
@@ -1493,10 +1490,17 @@ const CFG_TOKEN_KEY = 'mybook_ledger_apps_script_token';
   if(legacyUrl) localStorage.removeItem('fin_url');
   if(legacyToken) localStorage.removeItem('fin_token');
 })();
+// 固定的 Apps Script 網址：寫死在程式裡，不用輸入、也不會被任何操作改動。
+const FIXED_URL = 'https://script.google.com/macros/s/AKfycbyXb0hKCDQIdwY5iJ_btkwDmrkV8_FsgjcSDte6DZngUsnKG3ciUuRo5dE5Wfsj77FQ-Q/exec';
+function readSavedToken_(){
+  try{ return localStorage.getItem(CFG_TOKEN_KEY) || ''; }catch(_){ return ''; }
+}
 const cfg = {
-  url: localStorage.getItem(CFG_URL_KEY) || '',
-  token: localStorage.getItem(CFG_TOKEN_KEY) || ''
+  url: FIXED_URL,
+  token: readSavedToken_()
 };
+// 請瀏覽器把本站資料列為「持久儲存」，降低密碼被瀏覽器自動清掉的機會
+try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(_){}
 
 // 前端版本號：每次你改完這個檔案、要重新上傳到 GitHub Pages 時，
 // 記得順手更新這個字串（例如改成今天的日期），才能在「設定」頁看出
@@ -1734,6 +1738,7 @@ async function apiPost(action, sheet, data){
     const err = new Error(json.error || '操作失敗');
     err.server = true;                                   // 後端明確拒絕（不是網路問題）
     err.busy = /忙碌/.test(json.error || '');            // 後端鎖忙碌：可以稍後重試
+    err.auth = /密鑰/.test(json.error || '');            // 密碼錯誤：不是資料問題，不能丟掉排隊中的記帳
     throw err;
   }
   return json.data;
@@ -1807,8 +1812,10 @@ function fullSyncedKey_(){ return 'fin_full_synced_at_' + (cfg.url || 'default')
 // 3. 使用者在更新途中新記了帳，更新結果不會把他剛記的蓋掉（見 mutationSeq_）。
 async function loadAll(){
   if(!cfg.url || !cfg.token){
-    $('#cfgStatus').textContent = '尚未設定，請先到「設定」填入網址與密鑰。';
+    $('#cfgStatus').textContent = '請輸入密碼後按「儲存密碼並連線」。';
     $('#cfgStatus').className = 'status err';
+    switchTab('settings');
+    setTimeout(() => $('#cfgToken').focus(), 200);
     return;
   }
   loadSyncQueue_();
@@ -1887,10 +1894,11 @@ async function loadAll(){
     }
   }catch(err){
     if(!cached){
-      $('#cfgStatus').textContent = '連線失敗：' + err.message;
+      $('#cfgStatus').textContent = '連線失敗：' + (/密鑰/.test(err.message) ? '密碼錯誤，請重新輸入。' : err.message);
       $('#cfgStatus').className = 'status err';
     } else {
       console.warn('背景更新資料失敗（畫面仍顯示上次的快取資料）：', err);
+      if(/密鑰/.test(err.message)) err.message = '密碼錯誤，請到「設定」重新輸入（原本的密碼沒有被清除）';
       $('#cfgStatus').textContent = '背景更新失敗，目前顯示的是上次的快取資料：' + err.message;
       $('#cfgStatus').className = 'status err';
     }
@@ -2018,7 +2026,7 @@ async function drainSyncQueue_(){
         applyOpResult_(op, result);
         updateSyncChip_();
       }catch(err){
-        if(err.server && !err.busy){
+        if(err.server && !err.busy && !err.auth){
           // 後端明確拒絕這筆：丟掉，並用後端資料校正本機畫面
           syncQueue_.shift();
           persistSyncQueue_();
@@ -5209,13 +5217,20 @@ $('#csvCancelBtn').addEventListener('click', () => {
 });
 
 // ---------- Settings ----------
-$('#cfgUrl').value = cfg.url;
 $('#cfgToken').value = cfg.token;
 $('#cfgSave').addEventListener('click', () => {
-  cfg.url = $('#cfgUrl').value.trim();
-  cfg.token = $('#cfgToken').value.trim();
-  localStorage.setItem(CFG_URL_KEY, cfg.url);
-  localStorage.setItem(CFG_TOKEN_KEY, cfg.token);
+  const t = $('#cfgToken').value.trim();
+  if(!t){
+    // 留空不會蓋掉已儲存的密碼
+    $('#cfgStatus').textContent = cfg.token ? '密碼欄位是空的，已保留原本儲存的密碼。' : '請先輸入密碼。';
+    $('#cfgStatus').className = 'status err';
+    $('#cfgToken').value = cfg.token;
+    return;
+  }
+  cfg.token = t;
+  try{ localStorage.setItem(CFG_TOKEN_KEY, t); }catch(_){
+    alert('這個瀏覽器無法儲存密碼（可能開啟了無痕模式），下次開啟需要重新輸入。');
+  }
   loadAll();
 });
 
