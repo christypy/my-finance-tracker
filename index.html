@@ -3192,6 +3192,7 @@ function renderTransactions(){
           <div class="item-value ${isIn ? 'income' : 'expense'}">${isIn ? '+' : '-'}$${fmt(t.amount)}</div>
         </div>
         <div class="item-actions">
+          <button class="small" onclick="changeSettlementAccount('${t.id}')">修改帳戶</button>
           <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
         </div>
       </div>`;
@@ -5022,6 +5023,45 @@ function renderLedger(){
     </div>`;
   }).join('');
 }
+// 修改「結算」紀錄的轉帳帳戶（結算時選錯帳戶用）。
+// 一次結算多筆項目只會產生一筆結算紀錄，所以只要改這一筆；
+// 後端 updateTransactionTx_ 會先還原舊帳戶餘額、再套用新帳戶餘額，不用手動調整。
+window.changeSettlementAccount = id => {
+  const t = state.transactions.find(x => x.id === id);
+  if(!t || t.type !== 'settlement') return;
+  const accounts = sortAccountsForSelect(state.accounts);
+  const dlg = document.createElement('div');
+  dlg.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(59,42,26,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+  dlg.innerHTML = `<div style="background:var(--card);color:var(--ink);border:1px solid var(--paper-line);border-radius:var(--radius);padding:18px;width:100%;max-width:360px;">
+    <div style="font-weight:700;margin-bottom:6px;">修改結算帳戶</div>
+    <div style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;">${t.date} · ${t.payer === 'partner' ? '對方轉入' : '轉給對方'} $${fmt(t.amount)}<br>修改後會自動還原舊帳戶餘額、並套用到新帳戶。</div>
+    <select id="chgSettleAcc" style="width:100%;margin-bottom:14px;">
+      ${accounts.map(a => `<option value="${a.id}" ${a.id === t.accountId ? 'selected' : ''}>${a.name}（${a.type}）</option>`).join('')}
+    </select>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="small" id="chgSettleCancel" type="button">取消</button>
+      <button class="small" id="chgSettleOk" type="button">儲存</button>
+    </div>
+  </div>`;
+  document.body.appendChild(dlg);
+  const close = () => dlg.remove();
+  dlg.addEventListener('click', e => { if(e.target === dlg) close(); });
+  dlg.querySelector('#chgSettleCancel').onclick = close;
+  dlg.querySelector('#chgSettleOk').onclick = () => {
+    const newAcc = dlg.querySelector('#chgSettleAcc').value;
+    close();
+    if(!newAcc || newAcc === t.accountId) return;
+    const deltas = {};
+    accumulateLocalDelta_(t, -1, deltas);
+    const tx = Object.assign({}, t, { accountId: newAcc, updatedAt: new Date().toISOString() });
+    accumulateLocalDelta_(tx, 1, deltas);
+    upsertLocal('transactions', tx);
+    applyLocalDeltas_(deltas);
+    enqueueOp_('updateTransactionTx', Object.assign({}, tx));
+    renderAll();
+  };
+};
+
 // 從共同帳本清單直接編輯：表單會直接浮在「共同帳本」分頁下方填寫，
 // 不用切到「記帳」分頁，手機共同編輯時比較方便
 window.editLedgerItem = id => {
