@@ -438,6 +438,8 @@ function updateTransactionTx_(data) {
 
   const old = readRowObj_('transactions', rowIndex);
 
+  // 後端保險：已結算的紀錄，編輯時不能被改回未結算（結算只能由 settleLedger 設定）
+  if (String(old.settled) === 'true') data.settled = true;
   const tx = updateRow_('transactions', data, rowIndex);
 
 

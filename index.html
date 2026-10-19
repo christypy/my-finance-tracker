@@ -4399,6 +4399,11 @@ $('#trForm').addEventListener('submit', async e => {
       recurringId: $('#trRecurringId').value || ''
     };
   }
+  // 編輯既有記帳時保留原本的「已結算」狀態，不能因為改名稱／金額就又變成未結算、重新出現在共同款項
+  if(id){
+    const oldTx = state.transactions.find(x => x.id === id);
+    if(oldTx && String(oldTx.settled) === 'true') data.settled = true;
+  }
   // 勾選「還沒付款」：存成待付款（不動帳戶餘額），其餘流程（付款、取消、預算）沿用待付款機制
   if(!id && data.type === 'expense' && $('#trPending').checked){
     const advance = data.splitMode === 'advance' && data.payer !== 'partner';
