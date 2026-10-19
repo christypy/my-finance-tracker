@@ -542,7 +542,8 @@ function convertTxToOrderTx_(data) {
     orderDate: data.orderDate || old.date,
     note: '',
     payer: isShared ? (data.payer || old.payer || 'me') : 'me',
-    splitMode: isShared ? splitMode : 'personal'
+    splitMode: isShared ? splitMode : 'personal',
+    recurringId: old.recurringId || '' // 保留固定支出標記，轉成待付款再付款後統計才不會變彈性
   });
   getSheet_('transactions').deleteRow(rowIndex);
   const accountsTouched = applyBalanceEffect_(old, -1);

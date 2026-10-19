@@ -1338,6 +1338,10 @@
                 <input type="text" id="ordNote" placeholder="選填">
               </label>
               <div class="full checkbox-row">
+                <input type="checkbox" id="ordFixed">
+                <label for="ordFixed" style="margin:0;">這是固定支出（房租、訂閱等，統計會歸入「固定支出」）</label>
+              </div>
+              <div class="full checkbox-row">
                 <input type="checkbox" id="ordShared">
                 <label for="ordShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
               </div>
@@ -2784,6 +2788,7 @@ function resetOrderForm_(){
   $('#ordAmount').value = '';
   $('#ordDate').value = todayStr_();
   $('#ordNote').value = '';
+  $('#ordFixed').checked = false;
   $('#ordShared').checked = false;
   $('#ordPayer').value = 'partner';
   $('#ordSplitMode').value = 'split';
@@ -2811,8 +2816,11 @@ $('#orderForm').addEventListener('submit', async e => {
     note: $('#ordNote').value.trim(),
     payer: $('#ordShared').checked ? $('#ordPayer').value : 'me',
     splitMode: $('#ordShared').checked ? $('#ordSplitMode').value : 'personal',
-    recurringId: ((state.orders || []).find(x => x.id === id) || {}).recurringId || ''
+    // 有模板產生的 recurringId 就保留；沒有的話，勾選「固定支出」就用 manual-fixed 當標記
+    recurringId: (((state.orders || []).find(x => x.id === id) || {}).recurringId) || ($('#ordFixed').checked ? 'manual-fixed' : '')
   };
+  // 取消勾選時，只清掉手動標記，不動模板產生的 recurringId
+  if(!$('#ordFixed').checked && data.recurringId === 'manual-fixed') data.recurringId = '';
   try{
     await runBusy(async () => {
       let saved;
@@ -2903,6 +2911,7 @@ function editOrder(id){
   $('#ordDate').value = o.orderDate || todayStr_();
   $('#ordNote').value = o.note || '';
   const sharedOrd = o.splitMode === 'split' || o.splitMode === 'advance';
+  $('#ordFixed').checked = !!o.recurringId;
   $('#ordShared').checked = sharedOrd;
   $('#ordPayer').value = o.payer === 'partner' ? 'partner' : 'me';
   $('#ordSplitMode').value = sharedOrd ? o.splitMode : 'split';
@@ -3594,6 +3603,22 @@ $('#statsCategoryRank').addEventListener('click', e => {
 });
 
 // ---------- 固定支出 vs 彈性支出 ----------
+// 判斷一筆支出是不是「固定支出」：
+// 1) 有 recurringId（模板自動產生，或在待付款勾選「固定支出」）
+// 2) 舊資料補救：沒有 recurringId，但備註開頭＝某個「有填每月幾號繳」的模板名稱，
+//    或主類別＋子類別（子類別不為空）跟這種模板完全相同。
+function isFixedExpense_(t){
+  if(t.recurringId) return true;
+  const tpls = (state.recurring || []).filter(r =>
+    r.type === 'expense' && parseInt(r.dayOfMonth, 10) > 0 && r.active !== false && String(r.active) !== 'false');
+  if(!tpls.length) return false;
+  const note = String(t.note || '').trim();
+  return tpls.some(r => {
+    const name = String(r.name || '').trim();
+    if(name && note && (note === name || note.indexOf(name + '（') === 0)) return true;
+    return !!r.subcategory && r.category === t.category && r.subcategory === t.subcategory;
+  });
+}
 function renderFixedVsFlexible(container, rows){
   const expenseRows = rows.filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME);
   const total = expenseRows.reduce((s,t) => s + myExpenseShare_(t), 0);
@@ -3601,7 +3626,7 @@ function renderFixedVsFlexible(container, rows){
     container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
     return;
   }
-  const fixed = expenseRows.filter(t => t.recurringId).reduce((s,t) => s + myExpenseShare_(t), 0);
+  const fixed = expenseRows.filter(isFixedExpense_).reduce((s,t) => s + myExpenseShare_(t), 0);
   const flexible = total - fixed;
   const parts = [
     { label: '固定支出', val: fixed, cls: '' },
