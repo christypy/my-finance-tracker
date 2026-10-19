@@ -767,6 +767,8 @@
   .fab-badge{ position:absolute; top:-4px; right:-4px; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--red); color:#fff; font-size:11px; font-weight:700; line-height:18px; text-align:center; font-family:'Roboto Slab', serif; }
   body.orders-modal-open{ overflow:hidden; }
   body.orders-modal-open .fab{ opacity:0; pointer-events:none; }
+  #orderDetails:not([open]) > summary{ display:none; }
+  #orderDetails{ margin-bottom:12px; }
   #trDetails:not(.editing){ margin:0; }
   #trDetails:not(.editing) > summary{ display:none; }
   .pay-backdrop{ position:fixed; inset:0; background:rgba(20,26,42,.42); backdrop-filter:blur(2px); display:none; align-items:center; justify-content:center; padding:16px; z-index:70; }
@@ -941,6 +943,7 @@
           <summary><span class="plus">＋</span><span id="trFormTitle">新增記帳</span></summary>
           <form class="entry" id="trForm">
             <input type="hidden" id="trId">
+            <input type="hidden" id="trRecurringId">
             <div class="full type-toggle">
               <button type="button" class="expense active" data-type="expense">支出</button>
               <button type="button" class="income" data-type="income">收入</button>
@@ -985,6 +988,10 @@
             <label class="full">名稱
               <input type="text" id="trNote" placeholder="例如：午餐、超商、加油">
             </label>
+            <div class="full checkbox-row" id="trPendingRow" style="display:none;">
+              <input type="checkbox" id="trPending">
+              <label for="trPending" style="margin:0;">還沒付款（記成「待付款」：先計入該月預算，不動帳戶餘額）</label>
+            </div>
             <div class="full checkbox-row" id="trSharedRow">
               <input type="checkbox" id="trShared">
               <label for="trShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
@@ -1314,7 +1321,7 @@
       <h3>📦 待付款</h3>
       <button type="button" class="orders-close" id="ordersModalClose" aria-label="關閉">×</button>
     </div>
-    <p class="pay-sub">已經下單、還沒付錢的項目：金額先從該月預算扣掉，付款後再轉成正式記帳。</p>
+    <p class="pay-sub">還沒付款的項目：金額先從該月預算扣掉，付款後再轉成正式記帳。要新增請按右下角「＋」，勾選「還沒付款」即可；這裡只能編輯、付款或取消。</p>
     <details class="entry-wrap" id="orderDetails">
             <summary><span class="plus">＋</span><span id="ordFormTitle">新增待付款</span></summary>
             <form class="entry" id="orderForm">
@@ -1337,10 +1344,6 @@
               <label class="full">備註
                 <input type="text" id="ordNote" placeholder="選填">
               </label>
-              <div class="full checkbox-row">
-                <input type="checkbox" id="ordFixed">
-                <label for="ordFixed" style="margin:0;">這是固定支出（房租、訂閱等，統計會歸入「固定支出」）</label>
-              </div>
               <div class="full checkbox-row">
                 <input type="checkbox" id="ordShared">
                 <label for="ordShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
@@ -2788,7 +2791,6 @@ function resetOrderForm_(){
   $('#ordAmount').value = '';
   $('#ordDate').value = todayStr_();
   $('#ordNote').value = '';
-  $('#ordFixed').checked = false;
   $('#ordShared').checked = false;
   $('#ordPayer').value = 'partner';
   $('#ordSplitMode').value = 'split';
@@ -2816,11 +2818,8 @@ $('#orderForm').addEventListener('submit', async e => {
     note: $('#ordNote').value.trim(),
     payer: $('#ordShared').checked ? $('#ordPayer').value : 'me',
     splitMode: $('#ordShared').checked ? $('#ordSplitMode').value : 'personal',
-    // 有模板產生的 recurringId 就保留；沒有的話，勾選「固定支出」就用 manual-fixed 當標記
-    recurringId: (((state.orders || []).find(x => x.id === id) || {}).recurringId) || ($('#ordFixed').checked ? 'manual-fixed' : '')
+    recurringId: ((state.orders || []).find(x => x.id === id) || {}).recurringId || ''
   };
-  // 取消勾選時，只清掉手動標記，不動模板產生的 recurringId
-  if(!$('#ordFixed').checked && data.recurringId === 'manual-fixed') data.recurringId = '';
   try{
     await runBusy(async () => {
       let saved;
@@ -2911,7 +2910,6 @@ function editOrder(id){
   $('#ordDate').value = o.orderDate || todayStr_();
   $('#ordNote').value = o.note || '';
   const sharedOrd = o.splitMode === 'split' || o.splitMode === 'advance';
-  $('#ordFixed').checked = !!o.recurringId;
   $('#ordShared').checked = sharedOrd;
   $('#ordPayer').value = o.payer === 'partner' ? 'partner' : 'me';
   $('#ordSplitMode').value = sharedOrd ? o.splitMode : 'split';
@@ -3384,8 +3382,20 @@ function setTrType(type, selectedCategory, selectedSub){
     $('#trLedgerFields').style.display = $('#trShared').checked ? '' : 'none';
     populateTrCategories(type, selectedCategory, selectedSub);
   }
+  if(type !== 'expense') $('#trRecurringId').value = ''; // 收入／轉帳不會是固定支出
   syncCatRowVisibility();
+  syncTrPendingUI_();
 }
+// 「還沒付款」只在「新增支出」時出現；勾選後不需要選帳戶（待付款不動帳戶餘額），名稱必填
+function syncTrPendingUI_(){
+  const canPend = $('#trType').value === 'expense' && !$('#trId').value && !trQuickInterestMode;
+  $('#trPendingRow').style.display = canPend ? '' : 'none';
+  if(!canPend) $('#trPending').checked = false;
+  const pending = $('#trPending').checked;
+  $('#trAccountWrap').style.display = pending ? 'none' : '';
+  $('#trNote').required = pending;
+}
+$('#trPending').addEventListener('change', syncTrPendingUI_);
 
 // ---------- 記帳統計分析 ----------
 let statsMode = 'month'; // 'month' | 'year' | 'category'
@@ -4385,8 +4395,42 @@ $('#trForm').addEventListener('submit', async e => {
       note: $('#trNote').value,
       payer,
       splitMode,
-      settled: false
+      settled: false,
+      recurringId: $('#trRecurringId').value || ''
     };
+  }
+  // 勾選「還沒付款」：存成待付款（不動帳戶餘額），其餘流程（付款、取消、預算）沿用待付款機制
+  if(!id && data.type === 'expense' && $('#trPending').checked){
+    const advance = data.splitMode === 'advance' && data.payer !== 'partner';
+    const orderData = {
+      name: (data.note || '').trim() || data.category || '其他',
+      amount,
+      category: advance ? '其他' : (data.category || '其他'),
+      subcategory: advance ? '' : (data.subcategory || ''),
+      orderDate: data.date,
+      note: '',
+      payer: data.payer,
+      splitMode: data.splitMode,
+      recurringId: data.recurringId || ''
+    };
+    try{
+      await runBusy(async () => {
+        const saved = await apiPost('add', 'orders', orderData);
+        upsertLocal('orders', saved);
+      }, '儲存中…');
+    }catch(err){ alert('儲存待付款失敗：' + err.message); return; }
+    if(continueBatch){
+      $('#trAmount').value = '';
+      $('#trNote').value = '';
+      $('#trFormTitle').textContent = '新增記帳（待付款已儲存，繼續記下一筆）';
+      renderAll();
+      $('#trAmount').focus();
+    } else {
+      resetTransactionForm();
+      $('#trDetails').open = false;
+      renderAll();
+    }
+    return;
   }
   // 樂觀更新：先在前端檢查重複、更新本機畫面與帳戶餘額、清空表單，
   // 後端寫入丟進背景佇列，不用等，可以馬上記下一筆。
@@ -4475,6 +4519,8 @@ function resetTransactionForm(){
   trQuickInterestMode = false; // 表單重置／關閉時一併取消利息快速入帳模式，帳戶選單才會恢復正常
   trQuickIncomeCategory = '';
   $('#trId').value = '';
+  $('#trRecurringId').value = '';
+  $('#trPending').checked = false;
   $('#trDate').value = new Date().toISOString().slice(0,10);
   $('#trAmount').value = '';
   $('#trAccount').value = ''; // 新增記帳的帳戶預設為「不指定」，不自動帶入常用現金帳戶
@@ -4515,6 +4561,7 @@ window.editTransaction = id => {
     syncCatRowVisibility();
   }
   $('#trNote').value = t.note || '';
+  $('#trRecurringId').value = t.recurringId || ''; // 保留固定支出標記
   // 編輯時一律把表單搬到最上層、固定浮在畫面下方——不管目前在哪個子分頁、
   // 不管是電腦還是手機，都不用捲動或切分頁
   $('#trFormTitle').textContent = '編輯記帳';
@@ -4585,6 +4632,9 @@ window.applyTemplateToTr = id => {
     $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
   }
   syncCatRowVisibility();
+  // 選了模板＝固定支出：把模板 id 記成 recurringId，統計會自動歸入「固定支出」，不用另外勾選
+  $('#trRecurringId').value = trType === 'expense' ? t.id : '';
+  syncTrPendingUI_();
   $('#trFormTitle').textContent = `新增記帳（已帶入模板：${t.name}）`;
   $('#trSaveContinue').style.display = ''; // 這一律是新增，可以繼續用批量記帳按鈕
   setTimeout(() => $('#trAmount').focus(), 50);
