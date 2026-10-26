@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-10-27-people';
+const BACKEND_VERSION_ = '2026-10-27-sister-v3';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -31,7 +31,7 @@ const DEFAULT_CATEGORY_TREE_ = {
   expense: [
     { name: '餐飲', subs: ['早餐', '午餐', '晚餐', '飲料', '消夜'] },
     { name: '交通', subs: ['大眾運輸', '加油', '停車', '計程車', '保養'] },
-    { name: '購物', subs: ['日用品', '服飾', '電器', '其他'] },
+    { name: '購物', subs: ['日用品', '防曬', '保養品', '化妝品', '服飾', '電器', '其他'] },
     { name: '娛樂', subs: ['電影', '遊戲', '訂閱', '旅遊'] },
     { name: '醫療', subs: ['看診', '藥品', '保健品'] },
     { name: '教育', subs: ['書籍', '課程', '學費'] },
@@ -269,12 +269,10 @@ function deleteRow_(key, id) {
 
 
 // 另一半／妹妹先付的支出，錢不是從我的帳戶出的：帳戶一律清空，避免扣到我的餘額。
-// 「代購／妹妹幫我買」也一律視為妹妹先付。只影響之後新增／編輯的紀錄；
+// 只影響之後新增／編輯的紀錄；
 // 編輯舊紀錄時，舊的扣款仍會用原本的帳戶正確還原。
 function normalizePayerAccount_(d) {
-  if (d && d.type === 'expense' &&
-      (d.payer === 'partner' || d.payer === 'sister' ||
-       (d.category === '代購' && d.subcategory === '妹妹幫我買'))) {
+  if (d && d.type === 'expense' && (d.payer === 'partner' || d.payer === 'sister')) {
     d.accountId = '';
   }
   return d;
@@ -1338,6 +1336,59 @@ function migrateSponsorV2() {
       log.push('已移除舊的「贊助金」主類別');
     }
     log.unshift('完成：共更新 ' + changed + ' 筆紀錄。');
+  } finally {
+    lock.releaseLock();
+  }
+  const report = log.join('\n');
+  Logger.log(report);
+  return report;
+}
+
+
+// ============================================================
+// 一次性遷移（在 Apps Script 編輯器手動執行一次即可，可重複執行不會重複改）：
+//  妹妹往來改版：不再有「代購 › 妹妹幫我買」，改成「真正的類別＋勾選妹妹先付」。
+//  1. 確保「購物」底下有 防曬／保養品／化妝品
+//  2. 舊的「代購 › 妹妹幫我買」記帳／待付款 → 類別改「購物」（子類別清空，可自己再改成化妝品等）、
+//     付款人改妹妹先付、帳戶清空（走 updateTransactionTx_，帳戶餘額會自動還原再重算）
+//  3. 移除「代購 › 妹妹幫我買」子類別，只留「我幫妹妹買」
+//  4. 回報有幾筆舊的「代購結清」轉帳（以前會動到妹妹共用錢包，現在往來已不看轉帳，需要的話請手動處理）
+// ============================================================
+function migrateSisterV3() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return '系統忙碌中，請稍後再執行一次。';
+  const log = [];
+  try {
+    ['防曬', '保養品', '化妝品'].forEach(function (s) {
+      try { addSubCategory_('expense', '購物', s); log.push('購物 新增子類別 ' + s); } catch (e) { /* 已存在 */ }
+    });
+
+    let txChanged = 0;
+    readTransactionsSince_('').rows.forEach(function (t) {
+      if (t.type === 'expense' && t.category === '代購' && t.subcategory === '妹妹幫我買') {
+        updateTransactionTx_(Object.assign({}, t, { category: '購物', subcategory: '', payer: 'sister', splitMode: 'personal', accountId: '', force: true }));
+        txChanged++;
+        log.push('記帳 ' + t.date + ' ' + (t.note || '') + ' → 購物／妹妹先付');
+      }
+    });
+
+    let orderChanged = 0;
+    readAll_('orders').forEach(function (o) {
+      if (o.category === '代購' && o.subcategory === '妹妹幫我買') {
+        updateRow_('orders', Object.assign({}, o, { category: '購物', subcategory: '', payer: 'sister', splitMode: 'personal' }));
+        orderChanged++;
+      }
+    });
+
+    const removed = removeSubCategory_('expense', '代購', '妹妹幫我買').removed;
+    if (removed) log.push('已移除子類別「代購 › 妹妹幫我買」');
+
+    const oldSettle = readTransactionsSince_('').rows.filter(function (t) {
+      return t.type === 'transfer' && String(t.note || '').indexOf('代購結清') === 0;
+    }).length;
+    if (oldSettle) log.push('注意：還有 ' + oldSettle + ' 筆舊的「代購結清」轉帳，不會再計入妹妹往來，請自行確認。');
+
+    log.unshift('完成：記帳 ' + txChanged + ' 筆、待付款 ' + orderChanged + ' 筆已轉換。');
   } finally {
     lock.releaseLock();
   }

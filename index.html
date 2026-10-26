@@ -1011,7 +1011,7 @@
             </div>
             <div class="full checkbox-row" id="trSisterRow">
               <input type="checkbox" id="trSisterPaid">
-              <label for="trSisterPaid" style="margin:0;">妹妹先付（她的信用卡／她的錢，不扣我的帳戶）</label>
+              <label for="trSisterPaid" style="margin:0;">妹妹先幫我付（不用選帳戶、不扣我的錢，之後再還她）</label>
             </div>
             <div class="full checkbox-row" id="trSharedRow">
               <input type="checkbox" id="trShared">
@@ -3101,7 +3101,7 @@ $('#payOrderForm').addEventListener('submit', e => {
   const amount = parseFloat($('#payAmount').value) || 0;
   if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
   const sharedOrd = o.splitMode === 'split' || o.splitMode === 'advance';
-  const sisOrd = o.payer === 'sister' || (o.category === SIS_CATEGORY_NAME && o.subcategory === SIS_IN);
+  const sisOrd = o.payer === 'sister';
   const payer = sharedOrd ? $('#payPayer').value : (sisOrd ? 'sister' : 'me');
   const splitMode = sharedOrd ? o.splitMode : 'personal';
   // 跟共同帳本記帳規則一致：「我先付、全額代墊」整筆是對方的花費，統一存成「代墊」類別
@@ -3319,7 +3319,7 @@ function renderTransactions(){
     //   避免誤以為整筆都是自己花的。
     const isPureAdvance = isExpense && t.splitMode === 'advance' && t.payer !== 'partner';
     const isSponsor = isSponsorCat_(t.category);
-    const isSis = isExpense && t.category === SIS_CATEGORY_NAME;
+    const isSis = isExpense && (t.category === SIS_CATEGORY_NAME || t.payer === 'sister');
     const isSplitShare = isExpense && t.splitMode === 'split';
     const shareNote = isSplitShare
       ? `<div class="item-share-note">總金額 $${fmt(t.amount)}（平分）</div>`
@@ -3421,23 +3421,21 @@ function populateTrSubcategories(type, mainName, selectedSub){
   populateSubcategorySelect_($('#trSubcategory'), getSubcategories(type, mainName), selectedSub);
 }
 bindInlineCategoryCreation_($('#trCategory'), $('#trSubcategory'), () => $('#trType').value, populateTrCategories, populateTrSubcategories);
-// 付款人規則：「另一半先付」「妹妹先付」「妹妹幫我買」這類錢不是從我的帳戶出的，
+// 付款人規則：「另一半先付」「妹妹先付」這類錢不是從我的帳戶出的，
 // 帳戶欄一律停用並清空，避免像 9/12 抹布那樣明明是別人付的卻扣了我的現金。
 // （贊助金不再自動換帳戶：帳戶＝錢實際從哪裡付，誰的錢由主類別決定。）
 function syncPayerAccount_(){
   const isExp = $('#trType').value === 'expense';
-  const sisSub = isExp && $('#trCategory').value === SIS_CATEGORY_NAME && $('#trSubcategory').value === SIS_IN;
-  if(sisSub && !$('#trShared').checked) $('#trSisterPaid').checked = true;
   if(isExp && $('#trSisterPaid').checked && $('#trShared').checked){
     $('#trShared').checked = false;
     $('#trLedgerFields').style.display = 'none';
   }
   const partner = isExp && $('#trShared').checked && $('#trPayer').value === 'partner';
-  const lock = isExp && ($('#trSisterPaid').checked || partner || sisSub);
+  const lock = isExp && ($('#trSisterPaid').checked || partner);
   $('#trAccount').disabled = lock;
   if(lock) $('#trAccount').value = '';
 }
-['#trSisterPaid','#trShared','#trPayer','#trCategory','#trSubcategory'].forEach(sel => $(sel).addEventListener('change', syncPayerAccount_));
+['#trSisterPaid','#trShared','#trPayer'].forEach(sel => $(sel).addEventListener('change', syncPayerAccount_));
 // 金額直接輸入，不需要 +50/+100 之類的快速加值按鈕；
 // 另外數字輸入框在滑鼠停留時用滾輪很容易不小心改動金額，這裡讓輸入框
 // 在滾輪事件時直接失焦，避免滾動網頁時誤觸改變數字。
@@ -3454,12 +3452,13 @@ const ADVANCE_CATEGORY_NAME = '代墊';
 // 但獨立成自己的主類別，在統計分析有專屬區塊，不跟共同帳本的代墊混在一起。
 const SPONSOR_CATEGORY_NAME = '贊助金';
 const SPONSOR_DEFAULT_SUBS = ['計程車','停車費','餐費','手機','其他'];
-// 妹妹代購：主類別「代購」＋子類別。「我幫妹妹買」是我先付、妹妹之後要還我，不是我的花費；
-// 「妹妹幫我買」是我真正的花費（只是妹妹先付），所以仍然計入預算與統計。
+// 妹妹往來規則：
+//  ‧ 妹妹幫我買東西：照實填類別（購物 › 化妝品…），勾「妹妹先幫我付」＝ payer:'sister'，
+//    不選帳戶、不扣我的錢，仍計入我的預算與統計；之後我欠妹妹。
+//  ‧ 我先墊錢幫妹妹買：主類別「代購」＋子類別「我幫妹妹買」，不是我的花費，之後妹妹欠我。
+//  ‧ 往來只用「類別＋付款人」計算，完全不碰「妹妹共用錢包」；共用錢包只收贊助金剩餘的轉入。
 const SIS_CATEGORY_NAME = '代購';
 const SIS_OUT = '我幫妹妹買';
-const SIS_IN = '妹妹幫我買';
-const SIS_SETTLE_NOTE = '代購結清';
 // 爸爸／媽媽贊助：主類別直接分人、不設子類別。舊的「贊助金」類別仍相容（用子類別／帳戶／備註判斷是誰的）。
 const SPONSOR_PEOPLE = [
   { key:'dad', name:'爸爸', cat:'爸爸贊助' },
@@ -3477,7 +3476,7 @@ function sponsorPersonOf_(t){
   const hay = [t.subcategory, acc && acc.name, t.note].map(x => String(x || '')).join('|');
   return hay.includes('爸') ? SPONSOR_PEOPLE[0] : SPONSOR_PEOPLE[1];
 }
-function isSisterPaid_(t){ return t.payer === 'sister' || (t.category === SIS_CATEGORY_NAME && t.subcategory === SIS_IN); }
+function isSisterPaid_(t){ return t.payer === 'sister'; }
 function isOffBudgetTx_(t){
   const c = t.category;
   if(c === ADVANCE_CATEGORY_NAME || isSponsorCat_(c) || c === SIS_REPAY_OUT || c === SIS_REPAY_IN) return true;
@@ -4045,10 +4044,10 @@ function sponsorStats_(p){
   st.remaining = st.inc - st.spent;
   return st;
 }
+// 妹妹共用錢包：只用在「結清贊助剩餘 → 放進妹妹共同」的轉入，跟妹妹債務完全無關
 function sisterAccount_(){ return state.accounts.find(a => String(a.name).includes('妹妹')); }
-// 妹妹往來每一筆：＋妹妹欠我、－我欠妹妹
+// 妹妹往來每一筆：＋妹妹欠我、－我欠妹妹（只看類別與付款人，不看任何帳戶／轉帳）
 function sisterRows_(){
-  const w = sisterAccount_();
   const rows = [];
   state.transactions.forEach(t => {
     const amt = Number(t.amount) || 0;
@@ -4058,9 +4057,6 @@ function sisterRows_(){
       else if(t.category === SIS_REPAY_OUT) rows.push({ t, delta: amt, label: '我已還妹妹' });
     } else if(t.type === 'income' && t.category === SIS_REPAY_IN){
       rows.push({ t, delta: -amt, label: '妹妹已還我' });
-    } else if(t.type === 'transfer' && w && String(t.note || '').indexOf(SIS_SETTLE_NOTE) === 0){ // 舊版「代購結清」轉帳
-      if(t.accountId === w.id && t.toAccountId !== w.id) rows.push({ t, delta: -amt, label: '妹妹已還我' });
-      else if(t.toAccountId === w.id && t.accountId !== w.id) rows.push({ t, delta: amt, label: '我已還妹妹' });
     }
   });
   return rows.sort((a,b) => (a.t.date < b.t.date ? 1 : -1));
@@ -4199,7 +4195,7 @@ window.closeSponsor_ = key => {
 };
 
 // 贊助金類別：第一次連線後自動在「支出類別」建立主類別與預設子類別（只做一次；之後刪掉不會再自動長回來）
-const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v4';
+const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v5';
 async function ensureSponsorCategory_(){
   if(localStorage.getItem(SPONSOR_SEEDED_FLAG) || !state.dataLoaded_) return;
   try{
@@ -4210,7 +4206,8 @@ async function ensureSponsorCategory_(){
       { type:'income', name:'媽媽贊助', subs:[] },
       { type:'expense', name:SIS_REPAY_OUT, subs:[] },
       { type:'income', name:SIS_REPAY_IN, subs:[] },
-      { type:'expense', name:SIS_CATEGORY_NAME, subs:[SIS_OUT, SIS_IN] }
+      { type:'expense', name:'購物', subs:['防曬','保養品','化妝品'] },
+      { type:'expense', name:SIS_CATEGORY_NAME, subs:[SIS_OUT] }
     ];
     for(const seed of seeds){
       if(!getCategoryNames(seed.type).includes(seed.name)) await addMainCategory(seed.type, seed.name);
