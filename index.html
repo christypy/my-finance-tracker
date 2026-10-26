@@ -1206,7 +1206,6 @@
         <div class="stat-section" id="statsSponsorSection">
           <h3>贊助金支出（專款，不計入預算）</h3>
           <p class="hint" style="margin-bottom:10px;">主類別「贊助金」的支出會獨立顯示在這裡，不會算進上面的支出、月預算與排行榜。記帳時帳戶選「贊助金」專款帳戶，就能看出有沒有超支動用到自己的錢。</p>
-          <div id="statsSponsorOwed"></div>
           <div id="statsSponsor"></div>
         </div>
 
@@ -1386,6 +1385,7 @@
               </div>
             </form>
           </details>
+    <div id="sponsorOwedModal" style="margin-bottom:14px;"></div>
     <div id="ordersSection">
       <div class="orders-head"><span>待付款清單</span><small id="ordersSummary"></small></div>
       <div class="item-list" id="ordersList"></div>
@@ -2894,9 +2894,11 @@ function renderOrders_(){
   const sec = $('#ordersSection');
   if(!sec) return;
   const orders = [...(state.orders || [])].sort((a,b) => ((a.orderDate || '') < (b.orderDate || '') ? 1 : -1));
+  // 贊助金待補款也放在這個視窗裡；徽章數字＝待付款筆數＋有待補款的帳戶數
+  const owedCount = renderSponsorOwed_($('#sponsorOwedModal'));
   const badge = $('#orderFabBadge');
-  badge.textContent = orders.length;
-  badge.style.display = orders.length ? '' : 'none';
+  badge.textContent = orders.length + owedCount;
+  badge.style.display = (orders.length + owedCount) ? '' : 'none';
   $('#ordersEmpty').style.display = orders.length ? 'none' : '';
   $('#ordersList').style.display = orders.length ? '' : 'none';
   $('#ordersSummary').textContent = orders.length ? `共 ${orders.length} 筆・預算已扣 $${fmt(orders.reduce((s,o) => s + myExpenseShare_(o), 0))}` : '';
@@ -3839,7 +3841,6 @@ function renderStats(){
   renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
 
   // ④-2 贊助金支出
-  renderSponsorOwed_($('#statsSponsorOwed'));
   renderSponsorStats_($('#statsSponsor'), rows);
 
   // ⑤ 收入來源
@@ -3924,7 +3925,7 @@ function renderSponsorOwed_(container){
   const owed = sponsorOwedByAccount_();
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
   const items = Object.entries(owed).filter(([id, v]) => byId[id] && Math.abs(v) >= 0.005);
-  if(!items.length){ container.innerHTML = ''; return; }
+  if(!items.length){ container.innerHTML = ''; return 0; }
   const rows = items.map(([id, v]) => {
     const need = v > 0;
     return `<div class="item-card sponsor-item" style="margin-bottom:8px;">
@@ -3938,12 +3939,14 @@ function renderSponsorOwed_(container){
       ${need && sponsorAcc ? `<div class="item-actions"><button class="small" onclick="reimburseSponsor_('${id}', ${v})">轉帳補款</button></div>` : ''}
     </div>`;
   }).join('');
-  container.innerHTML = `<div class="stat-bar-label" style="width:auto;margin-bottom:6px;font-weight:600;color:var(--sponsor);">待補款（累計，已扣掉補過的轉帳）</div>${rows}`;
+  container.innerHTML = `<div class="orders-head"><span style="color:var(--sponsor);">贊助金待補款</span><small>累計，已扣掉補過的轉帳</small></div>${rows}`;
+  return items.filter(([,v]) => v > 0).length;
 }
 // 點「轉帳補款」：開啟記帳表單，自動填好「贊助金帳戶 → 墊款帳戶」與金額，確認後儲存即可
 window.reimburseSponsor_ = (toId, amount) => {
   const sponsorAcc = state.accounts.find(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
   if(!sponsorAcc) return;
+  if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
   resetTransactionForm();
   $('#trDetails').open = true;
   setTrType('transfer');
