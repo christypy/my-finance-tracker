@@ -1551,7 +1551,7 @@ try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persis
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-10-27-people'; // 贊助金功能只改前端，後端版本號不變
+const FRONTEND_VERSION = '2026-10-27-people-v2'; // 贊助金功能只改前端，後端版本號不變
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -2783,7 +2783,7 @@ function renderTrAvailAndBudget_(){
   const monthSponsor = sponsorExpenseOf_(monthStr);
   const daySponsor = sponsorExpenseOf_(dayStr);
   const monthSponsorIn = state.transactions
-    .filter(t => t.type === 'income' && isSponsorCat_(t.category) && (t.date || '').startsWith(monthStr))
+    .filter(t => isSponsorFundIncome_(t) && (t.date || '').startsWith(monthStr))
     .reduce((s,t) => s + (Number(t.amount) || 0), 0);
   const sponsorCards = (monthSponsor || daySponsor || monthSponsorIn) ? (monthSponsorIn ? `
     <div class="summary-card sponsor-card-in">
@@ -3232,7 +3232,7 @@ function renderTransactions(){
   rows = [...rows].sort((a,b) => (a.date < b.date ? 1 : -1));
 
   // 分類檢視：收入／支出（都不含贊助金）／贊助金（收入＋支出）各自獨立，不混在一起
-  const isSponsorTx = t => isSponsorCat_(t.category) && (t.type === 'income' || t.type === 'expense');
+  const isSponsorTx = t => isSponsorFlow_(t);
   if(trKindFilter === 'income') rows = rows.filter(t => t.type === 'income' && !isSponsorTx(t));
   else if(trKindFilter === 'expense') rows = rows.filter(t => t.type === 'expense' && !isSponsorTx(t));
   else if(trKindFilter === 'sponsor') rows = rows.filter(isSponsorTx);
@@ -3318,7 +3318,7 @@ function renderTransactions(){
     //   我自己實際要負擔的那一份（myExpenseShare_），原始總金額改成小字附註，
     //   避免誤以為整筆都是自己花的。
     const isPureAdvance = isExpense && t.splitMode === 'advance' && t.payer !== 'partner';
-    const isSponsor = isSponsorCat_(t.category);
+    const isSponsor = isSponsorFlow_(t);
     const isSis = isExpense && (t.category === SIS_CATEGORY_NAME || t.payer === 'sister');
     const isSplitShare = isExpense && t.splitMode === 'split';
     const shareNote = isSplitShare
@@ -3477,6 +3477,27 @@ function sponsorPersonOf_(t){
   return hay.includes('爸') ? SPONSOR_PEOPLE[0] : SPONSOR_PEOPLE[1];
 }
 function isSisterPaid_(t){ return t.payer === 'sister'; }
+// 贊助「收入」依「收到的帳戶」決定去哪裡（類別只決定是哪位爸／媽）：
+//   fund   ＝ 進爸爸／媽媽贊助金帳戶 → 代管款（不算收入、淨資產扣掉、可結清）
+//   shared ＝ 進妹妹共用錢包 → 直接算共同錢包的錢（不算我的收入、也不算代管款）
+//   own    ＝ 進現金或其他自己的帳戶 → 當自己的收入，照一般收入統計
+//   沒填帳戶（舊資料）維持 fund，相容舊紀錄
+function sponsorIncomeKind_(t){
+  if(!t || t.type !== 'income' || !isSponsorCat_(t.category)) return null;
+  if(!t.accountId) return 'fund';
+  const acc = state.accounts.find(a => a.id === t.accountId);
+  const name = String(acc && acc.name || '');
+  if(name.includes(SPONSOR_CATEGORY_NAME)) return 'fund';
+  if(name.includes('妹妹')) return 'shared';
+  return 'own';
+}
+function isSponsorFundIncome_(t){ return sponsorIncomeKind_(t) === 'fund'; }
+// 贊助相關的流水（贊助支出＋進贊助金／妹妹共用錢包的贊助收入）；進自己帳戶的贊助收入不算
+function isSponsorFlow_(t){
+  if(!t || !isSponsorCat_(t.category)) return false;
+  if(t.type === 'expense') return true;
+  return t.type === 'income' && sponsorIncomeKind_(t) !== 'own';
+}
 function isOffBudgetTx_(t){
   const c = t.category;
   if(c === ADVANCE_CATEGORY_NAME || isSponsorCat_(c) || c === SIS_REPAY_OUT || c === SIS_REPAY_IN) return true;
@@ -3863,7 +3884,7 @@ function renderStats(){
   // 另外，共同分攤的支出（splitMode === 'split'）不管誰先付，「支出」統計都只算我自己
   // 該負擔的那一份，不是整筆金額，見 myExpenseShare_。
   const isRealExpense_ = t => t.type === 'expense' && !isOffBudgetTx_(t);
-  const incomeTotal = rows.filter(t=>t.type==='income' && !isSponsorCat_(t.category) && t.category !== SIS_REPAY_IN).reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const incomeTotal = rows.filter(t=>t.type==='income' && !isSponsorFlow_(t) && t.category !== SIS_REPAY_IN).reduce((s,t)=>s+(Number(t.amount)||0),0);
   const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+myExpenseShare_(t),0);
   // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
   // 沒有填帳戶的紀錄（多半是舊資料匯入，沒有對應到任何帳戶）只計入上面的收入／支出總額，
@@ -3942,7 +3963,7 @@ function renderStats(){
   renderSponsorStats_($('#statsSponsor'), rows);
 
   // ⑤ 收入來源
-  const inc = breakdownByCategory(rows.filter(t => !(t.type === 'income' && (isSponsorCat_(t.category) || t.category === SIS_REPAY_IN))), 'income');
+  const inc = breakdownByCategory(rows.filter(t => !(t.type === 'income' && (isSponsorFlow_(t) || t.category === SIS_REPAY_IN))), 'income');
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
 }
 
@@ -3950,10 +3971,10 @@ function renderStats(){
 // ---------- 贊助金支出：獨立統計（總額、筆數、子類別分佈、專款帳戶餘額、明細） ----------
 function renderSponsorStats_(container, rows){
   const sponsorAll = rows
-    .filter(t => (t.type === 'expense' || t.type === 'income') && isSponsorCat_(t.category))
+    .filter(t => (t.type === 'expense' || t.type === 'income') && isSponsorFlow_(t))
     .sort((a,b) => (a.date < b.date ? 1 : -1));
   const sponsorRows = sponsorAll.filter(t => t.type === 'expense');
-  const sponsorIncomeTotal = sponsorAll.filter(t => t.type === 'income').reduce((s,t) => s + (Number(t.amount) || 0), 0);
+  const sponsorIncomeTotal = sponsorAll.filter(t => t.type === 'income' && isSponsorFundIncome_(t)).reduce((s,t) => s + (Number(t.amount) || 0), 0);
   const sponsorAccounts = state.accounts.filter(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
   if(!sponsorAll.length && !sponsorAccounts.length){
     container.innerHTML = `<div class="empty">這段期間沒有贊助金支出。</div>`;
@@ -4025,7 +4046,7 @@ function sponsorStats_(p){
     const who = sponsorPersonOf_(t);
     if(who && who.key === p.key){
       const inMonth = String(t.date || '').startsWith(month);
-      if(t.type === 'income'){ st.inc += amt; if(inMonth) st.mIn += amt; }
+      if(t.type === 'income'){ if(isSponsorFundIncome_(t)){ st.inc += amt; if(inMonth) st.mIn += amt; } } // 進現金／自己帳戶＝自己的收入，進妹妹共用錢包＝共同錢包，都不算代管款
       else if(t.type === 'expense'){
         const share = myExpenseShare_(t);
         st.spent += share; if(inMonth) st.mOut += share;
@@ -4090,6 +4111,14 @@ function sponsorStatsAll_(){
       st.sister -= take; e.amt -= take;
       st.fronted[e.acc] = (st.fronted[e.acc] || 0) + take;
     }
+    // 補回的錢若轉到別的自己帳戶（例如先墊的是銀行、補回轉進現金），錢已經回到你手上，
+    // 用負數抵掉其他帳戶的待拿回，避免出現假的「要拿回」而重複扣贊助金
+    let neg = 0;
+    Object.keys(st.fronted).forEach(id => { if(st.fronted[id] < -0.005){ neg += -st.fronted[id]; st.fronted[id] = 0; } });
+    Object.keys(st.fronted).forEach(id => {
+      const v = st.fronted[id];
+      if(neg > 0.005 && v > 0.005){ const take = Math.min(v, neg); st.fronted[id] = v - take; neg -= take; }
+    });
     out[p.key] = st;
   });
   return out;
@@ -4221,6 +4250,11 @@ window.closeSponsor_ = key => {
     addTxQuick_({ date, type:'transfer', category:'轉帳', amount:R, accountId:w.id, toAccountId:sis.id, note:CLOSE_NOTE + p.name + '贊助剩餘放進妹妹共同' });
   } else {
     addTxQuick_({ date, type:'income', category:'額外收入', subcategory:p.name, amount:R, note:CLOSE_NOTE + p.name + '贊助剩餘歸自己' });
+    // 錢實際還放在贊助金帳戶裡，一併轉到「現金」，之後贊助金帳戶只剩真正代管的錢（【結清】備註不會被當成補回）
+    const w1 = sponsorWallets_(p)[0];
+    const cash = state.accounts.find(a => a.name === '現金') || state.accounts.find(a => a.type === '現金' && !String(a.name).includes(SPONSOR_CATEGORY_NAME) && !String(a.name).includes('妹妹'));
+    const mv = w1 ? Math.min(R, Math.max(0, Math.round((Number(w1.balance) || 0) * 100) / 100)) : 0;
+    if(w1 && cash && mv > 0.005) addTxQuick_({ date, type:'transfer', category:'轉帳', amount:mv, accountId:w1.id, toAccountId:cash.id, note:CLOSE_NOTE + p.name + '贊助剩餘歸自己（轉入' + cash.name + '）' });
   }
   addTxQuick_(closing);
   renderAll();
