@@ -4071,20 +4071,44 @@ function sisterRows_(){
 let sisterLedgerOpen_ = false;
 window.toggleSisterLedger_ = () => { sisterLedgerOpen_ = !sisterLedgerOpen_; renderSponsorOwed_($('#sponsorOwedModal')); };
 function arrow_(up, down){ return `本月 <span style="color:var(--green)">▲$${fmt(up)}</span> <span style="color:var(--red)">▼$${fmt(down)}</span>`; }
+// 沒標子類別、用「自己的帳戶」記的「還妹妹」：不用再逐筆標記，系統自動當成「先還了爸／媽那筆妹妹墊付」，
+// 依序（爸爸→媽媽）沖掉妹妹先付，並轉成「我先墊、要從贊助金拿回」。
+function sponsorStatsAll_(){
+  const allWallets = new Set();
+  SPONSOR_PEOPLE.forEach(p => sponsorWallets_(p).forEach(a => allWallets.add(a.id)));
+  const pool = state.transactions
+    .filter(t => t.type === 'expense' && t.category === SIS_REPAY_OUT && t.accountId && !allWallets.has(t.accountId) && !SPONSOR_PEOPLE.some(p => p.cat === t.subcategory))
+    .sort((a,b) => (a.date < b.date ? -1 : 1))
+    .map(t => ({ acc: t.accountId, amt: Number(t.amount) || 0 }));
+  const out = {};
+  SPONSOR_PEOPLE.forEach(p => {
+    const st = sponsorStats_(p);
+    for(const e of pool){
+      if(st.sister <= 0.005) break;
+      if(e.amt <= 0.005) continue;
+      const take = Math.min(st.sister, e.amt);
+      st.sister -= take; e.amt -= take;
+      st.fronted[e.acc] = (st.fronted[e.acc] || 0) + take;
+    }
+    out[p.key] = st;
+  });
+  return out;
+}
 function renderSponsorOwed_(container){
   const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
   const month = todayStr_().slice(0,7);
   let attention = 0;
   const cards = [];
+  const allStats = sponsorStatsAll_();
   SPONSOR_PEOPLE.forEach(p => {
-    const st = sponsorStats_(p);
+    const st = allStats[p.key];
     if(!st.inc && !st.spent) return;
     const lines = [];
     const line = (txt, btn) => lines.push(`<div class="item-note" style="margin-top:6px;display:flex;justify-content:space-between;gap:8px;align-items:center;"><span>${txt}</span>${btn || ''}</div>`);
     Object.entries(st.fronted).forEach(([id, v]) => {
-      if(v > 0.005 && byId[id]) line(`${escapeHtml(byId[id])} 先墊 $${fmt(v)}`, `<button class="small" onclick="reimburseSponsor_('${p.key}','${id}',${v})">用${p.name}的錢補回</button>`);
+      if(v > 0.005 && byId[id]) line(`${escapeHtml(byId[id])} 先墊了，要從${p.name}贊助金拿回 <b>$${fmt(v)}</b>`, `<button class="small" onclick="reimburseSponsor_('${p.key}','${id}',${v})">拿回 $${fmt(v)}</button>`);
     });
-    if(st.sister > 0.005) line(`妹妹先付 $${fmt(st.sister)}（還沒還她）`, `<span><button class="small" onclick="repaySisterFromSponsor_('${p.key}',${st.sister})">用${p.name}的錢還</button> <button class="small" onclick="repaySisterFromSponsor_('${p.key}',${st.sister},true)">我先墊錢還</button></span>`);
+    if(st.sister > 0.005) line(`妹妹先付 $${fmt(st.sister)}，還沒還她`, `<button class="small" onclick="repaySisterFromSponsor_('${p.key}',${st.sister})">記錄還妹妹</button>`);
     if(st.partner > 0.005) line(`另一半先付 $${fmt(st.partner)}（共同帳本結算時，用${p.name}的錢付）`);
     if(lines.length) attention++;
     const rem = st.remaining;
@@ -4147,18 +4171,17 @@ window.reimburseSponsor_ = (key, toId, amount) => {
   $('#trNote').value = `${p.name}贊助款補回`;
 };
 // 用贊助款還妹妹：開啟「還妹妹」支出表單，帳戶帶入該爸／媽的贊助金帳戶
-window.repaySisterFromSponsor_ = (key, amount, ownMoney) => {
+window.repaySisterFromSponsor_ = (key, amount) => {
   const p = SPONSOR_PEOPLE.find(x => x.key === key);
   const w = p && sponsorWallets_(p)[0];
   if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
   resetTransactionForm();
   $('#trDetails').open = true;
   setTrType('expense', SIS_REPAY_OUT, p.cat); // 子類別標記是還哪位的贊助款墊付
-  if(ownMoney){
-    $('#trAccount').value = ''; // 請自己選實際付錢的帳戶；儲存後這筆會變成「我先墊」，可再用贊助款補回
-  } else if(w){ ensureAccountOption_(w.id); $('#trAccount').value = w.id; }
+  // 預設帶贊助金帳戶；如果是你自己的銀行先轉給妹妹，直接改選那個帳戶即可，儲存後會自動變成「要從贊助金拿回」
+  if(w){ ensureAccountOption_(w.id); $('#trAccount').value = w.id; }
   $('#trAmount').value = Number(amount).toFixed(2).replace(/\.00$/, '');
-  $('#trNote').value = ownMoney ? `還妹妹（我先墊，${p.name}贊助款）` : `還妹妹（${p.name}贊助款）`;
+  $('#trNote').value = `還妹妹（${p.name}贊助款）`;
 };
 window.settleSister_ = net => {
   if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
