@@ -4038,8 +4038,15 @@ function sponsorStats_(p){
     if(t.type === 'transfer' && walletIds.has(t.accountId) && t.toAccountId && !walletIds.has(t.toAccountId) && !String(t.note || '').startsWith(CLOSE_NOTE)){
       st.fronted[t.toAccountId] = (st.fronted[t.toAccountId] || 0) - amt;
     }
-    // 用這位爸／媽的贊助金帳戶還妹妹＝已還
-    if(t.type === 'expense' && t.category === SIS_REPAY_OUT && walletIds.has(t.accountId)) st.sister -= amt;
+    // 還妹妹：子類別標了這位爸／媽（「還妹妹 › 爸爸贊助」）＝還的是這位的贊助款墊付；
+    //   用贊助金帳戶還 → 直接沖掉；用自己的帳戶還 → 沖掉妹妹先付，同時變成「我先墊」，等贊助款補回來。
+    // 舊紀錄沒標子類別：維持原本規則，只認贊助金帳戶。
+    if(t.type === 'expense' && t.category === SIS_REPAY_OUT){
+      if(t.subcategory === p.cat){
+        st.sister -= amt;
+        if(t.accountId && !walletIds.has(t.accountId)) st.fronted[t.accountId] = (st.fronted[t.accountId] || 0) + amt;
+      } else if(walletIds.has(t.accountId)) st.sister -= amt;
+    }
   });
   st.remaining = st.inc - st.spent;
   return st;
@@ -4077,7 +4084,7 @@ function renderSponsorOwed_(container){
     Object.entries(st.fronted).forEach(([id, v]) => {
       if(v > 0.005 && byId[id]) line(`${escapeHtml(byId[id])} 先墊 $${fmt(v)}`, `<button class="small" onclick="reimburseSponsor_('${p.key}','${id}',${v})">用${p.name}的錢補回</button>`);
     });
-    if(st.sister > 0.005) line(`妹妹先付 $${fmt(st.sister)}（還沒還她）`, `<button class="small" onclick="repaySisterFromSponsor_('${p.key}',${st.sister})">還妹妹</button>`);
+    if(st.sister > 0.005) line(`妹妹先付 $${fmt(st.sister)}（還沒還她）`, `<span><button class="small" onclick="repaySisterFromSponsor_('${p.key}',${st.sister})">用${p.name}的錢還</button> <button class="small" onclick="repaySisterFromSponsor_('${p.key}',${st.sister},true)">我先墊錢還</button></span>`);
     if(st.partner > 0.005) line(`另一半先付 $${fmt(st.partner)}（共同帳本結算時，用${p.name}的錢付）`);
     if(lines.length) attention++;
     const rem = st.remaining;
@@ -4140,16 +4147,18 @@ window.reimburseSponsor_ = (key, toId, amount) => {
   $('#trNote').value = `${p.name}贊助款補回`;
 };
 // 用贊助款還妹妹：開啟「還妹妹」支出表單，帳戶帶入該爸／媽的贊助金帳戶
-window.repaySisterFromSponsor_ = (key, amount) => {
+window.repaySisterFromSponsor_ = (key, amount, ownMoney) => {
   const p = SPONSOR_PEOPLE.find(x => x.key === key);
   const w = p && sponsorWallets_(p)[0];
   if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
   resetTransactionForm();
   $('#trDetails').open = true;
-  setTrType('expense', SIS_REPAY_OUT);
-  if(w){ ensureAccountOption_(w.id); $('#trAccount').value = w.id; }
+  setTrType('expense', SIS_REPAY_OUT, p.cat); // 子類別標記是還哪位的贊助款墊付
+  if(ownMoney){
+    $('#trAccount').value = ''; // 請自己選實際付錢的帳戶；儲存後這筆會變成「我先墊」，可再用贊助款補回
+  } else if(w){ ensureAccountOption_(w.id); $('#trAccount').value = w.id; }
   $('#trAmount').value = Number(amount).toFixed(2).replace(/\.00$/, '');
-  $('#trNote').value = `還妹妹（${p.name}贊助款）`;
+  $('#trNote').value = ownMoney ? `還妹妹（我先墊，${p.name}贊助款）` : `還妹妹（${p.name}贊助款）`;
 };
 window.settleSister_ = net => {
   if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
@@ -4195,7 +4204,7 @@ window.closeSponsor_ = key => {
 };
 
 // 贊助金類別：第一次連線後自動在「支出類別」建立主類別與預設子類別（只做一次；之後刪掉不會再自動長回來）
-const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v5';
+const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v6';
 async function ensureSponsorCategory_(){
   if(localStorage.getItem(SPONSOR_SEEDED_FLAG) || !state.dataLoaded_) return;
   try{
@@ -4204,7 +4213,7 @@ async function ensureSponsorCategory_(){
       { type:'expense', name:'媽媽贊助', subs:[] },
       { type:'income', name:'爸爸贊助', subs:[] },
       { type:'income', name:'媽媽贊助', subs:[] },
-      { type:'expense', name:SIS_REPAY_OUT, subs:[] },
+      { type:'expense', name:SIS_REPAY_OUT, subs:SPONSOR_PEOPLE.map(p => p.cat) },
       { type:'income', name:SIS_REPAY_IN, subs:[] },
       { type:'expense', name:'購物', subs:['防曬','保養品','化妝品'] },
       { type:'expense', name:SIS_CATEGORY_NAME, subs:[SIS_OUT] }
