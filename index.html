@@ -2754,7 +2754,14 @@ function renderTrAvailAndBudget_(){
 
   const monthSponsor = sponsorExpenseOf_(monthStr);
   const daySponsor = sponsorExpenseOf_(dayStr);
-  const sponsorCards = (monthSponsor || daySponsor) ? `
+  const monthSponsorIn = state.transactions
+    .filter(t => t.type === 'income' && t.category === SPONSOR_CATEGORY_NAME && (t.date || '').startsWith(monthStr))
+    .reduce((s,t) => s + (Number(t.amount) || 0), 0);
+  const sponsorCards = (monthSponsor || daySponsor || monthSponsorIn) ? (monthSponsorIn ? `
+    <div class="summary-card sponsor-card">
+      <div class="label">本月收到贊助金（不計收入）</div>
+      <div class="value" style="color:var(--sponsor)">+$${fmt(monthSponsorIn)}</div>
+    </div>` : '') + `
     <div class="summary-card sponsor-card">
       <div class="label">本月贊助金支出（不計預算）</div>
       <div class="value" style="color:var(--sponsor)">$${fmt(monthSponsor)}</div>
@@ -3248,7 +3255,7 @@ function renderTransactions(){
     //   我自己實際要負擔的那一份（myExpenseShare_），原始總金額改成小字附註，
     //   避免誤以為整筆都是自己花的。
     const isPureAdvance = isExpense && t.splitMode === 'advance' && t.payer !== 'partner';
-    const isSponsor = isExpense && t.category === SPONSOR_CATEGORY_NAME;
+    const isSponsor = t.category === SPONSOR_CATEGORY_NAME;
     const isSplitShare = isExpense && t.splitMode === 'split';
     const shareNote = isSplitShare
       ? `<div class="item-share-note">總金額 $${fmt(t.amount)}（平分）</div>`
@@ -3352,7 +3359,7 @@ function populateTrSubcategories(type, mainName, selectedSub){
 bindInlineCategoryCreation_($('#trCategory'), $('#trSubcategory'), () => $('#trType').value, populateTrCategories, populateTrSubcategories);
 // 主類別選「贊助金」時，帳戶自動帶入名稱含「贊助金」的專款帳戶（不在常用清單也會補進選項）
 $('#trCategory').addEventListener('change', () => {
-  if($('#trType').value !== 'expense' || $('#trCategory').value !== SPONSOR_CATEGORY_NAME) return;
+  if(!['expense','income'].includes($('#trType').value) || $('#trCategory').value !== SPONSOR_CATEGORY_NAME) return;
   const acc = state.accounts.find(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
   if(!acc) return;
   const sel = $('#trAccount');
@@ -3755,13 +3762,13 @@ function renderStats(){
   // 另外，共同分攤的支出（splitMode === 'split'）不管誰先付，「支出」統計都只算我自己
   // 該負擔的那一份，不是整筆金額，見 myExpenseShare_。
   const isRealExpense_ = t => t.type === 'expense' && !isOffBudgetCategory_(t.category);
-  const incomeTotal = rows.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const incomeTotal = rows.filter(t=>t.type==='income' && t.category !== SPONSOR_CATEGORY_NAME).reduce((s,t)=>s+(Number(t.amount)||0),0);
   const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+myExpenseShare_(t),0);
   // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
   // 沒有填帳戶的紀錄（多半是舊資料匯入，沒有對應到任何帳戶）只計入上面的收入／支出總額，
   // 單純知道花了多少、賺了多少，但不會影響結餘這個數字。
   const rowsWithAccount = rows.filter(t => t.accountId);
-  const incomeWithAccount = rowsWithAccount.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const incomeWithAccount = rowsWithAccount.filter(t=>t.type==='income' && t.category !== SPONSOR_CATEGORY_NAME).reduce((s,t)=>s+(Number(t.amount)||0),0);
   // 結餘算的是帳戶裡實際增減的錢，代墊款項雖然不算「支出」，但錢確實從帳戶流出了，
   // 所以這裡仍然要把它算進去，結餘才會跟帳戶餘額對得起來。
   const expenseWithAccount = rowsWithAccount.filter(t=>t.type==='expense' && t.category !== SPONSOR_CATEGORY_NAME).reduce((s,t)=>s+(Number(t.amount)||0),0);
@@ -3834,18 +3841,20 @@ function renderStats(){
   renderSponsorStats_($('#statsSponsor'), rows);
 
   // ⑤ 收入來源
-  const inc = breakdownByCategory(rows, 'income');
+  const inc = breakdownByCategory(rows.filter(t => !(t.type === 'income' && t.category === SPONSOR_CATEGORY_NAME)), 'income');
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
 }
 
 
 // ---------- 贊助金支出：獨立統計（總額、筆數、子類別分佈、專款帳戶餘額、明細） ----------
 function renderSponsorStats_(container, rows){
-  const sponsorRows = rows
-    .filter(t => t.type === 'expense' && t.category === SPONSOR_CATEGORY_NAME)
+  const sponsorAll = rows
+    .filter(t => (t.type === 'expense' || t.type === 'income') && t.category === SPONSOR_CATEGORY_NAME)
     .sort((a,b) => (a.date < b.date ? 1 : -1));
+  const sponsorRows = sponsorAll.filter(t => t.type === 'expense');
+  const sponsorIncomeTotal = sponsorAll.filter(t => t.type === 'income').reduce((s,t) => s + (Number(t.amount) || 0), 0);
   const sponsorAccounts = state.accounts.filter(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
-  if(!sponsorRows.length && !sponsorAccounts.length){
+  if(!sponsorAll.length && !sponsorAccounts.length){
     container.innerHTML = `<div class="empty">這段期間沒有贊助金支出。</div>`;
     return;
   }
@@ -3869,7 +3878,8 @@ function renderSponsorStats_(container, rows){
       <div class="stat-bar-value">$${fmt(val)} (${pct}%)</div>
     </div>`;
   }).join('');
-  const detailHtml = sponsorRows.map(t => {
+  const detailHtml = sponsorAll.map(t => {
+    const isIn = t.type === 'income';
     const label = t.note || t.subcategory || SPONSOR_CATEGORY_NAME;
     const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '未指定帳戶';
     return `<div class="acc-month-tx">
@@ -3877,21 +3887,22 @@ function renderSponsorStats_(container, rows){
         <div class="acc-month-tx-cat">${escapeHtml(label)}${t.subcategory && t.note ? '（' + escapeHtml(t.subcategory) + '）' : ''}</div>
         <div class="acc-month-tx-date">${escapeHtml(t.date)} · ${escapeHtml(acc)}</div>
       </div>
-      <div class="acc-month-tx-amt">$${fmt(t.amount)}</div>
+      <div class="acc-month-tx-amt" style="color:${isIn ? 'var(--green)' : 'var(--sponsor)'}">${isIn ? '+' : '-'}$${fmt(t.amount)}</div>
     </div>`;
   }).join('');
   container.innerHTML = `
     <div class="summary-grid">
+      <div class="summary-card"><div class="label">本期收到贊助金</div><div class="value" style="color:var(--green)">$${fmt(sponsorIncomeTotal)}</div></div>
       <div class="summary-card"><div class="label">本期贊助金支出</div><div class="value">$${fmt(total)}</div></div>
       <div class="summary-card"><div class="label">筆數</div><div class="value">${sponsorRows.length}</div></div>
       ${accHtml}
     </div>
     ${barsHtml}
-    ${sponsorRows.length ? `<div class="rank-sub-list" style="margin-top:10px;"><div class="acc-month-tx-list" style="max-height:260px;">${detailHtml}</div></div>` : ''}`;
+    ${sponsorAll.length ? `<div class="rank-sub-list" style="margin-top:10px;"><div class="acc-month-tx-list" style="max-height:260px;">${detailHtml}</div></div>` : ''}`;
 }
 
 // 贊助金類別：第一次連線後自動在「支出類別」建立主類別與預設子類別（只做一次；之後刪掉不會再自動長回來）
-const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v1';
+const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v2';
 async function ensureSponsorCategory_(){
   if(localStorage.getItem(SPONSOR_SEEDED_FLAG) || !state.dataLoaded_) return;
   try{
@@ -3902,6 +3913,9 @@ async function ensureSponsorCategory_(){
       if(!getSubcategories('expense', SPONSOR_CATEGORY_NAME).includes(sub)){
         await addSubCategory('expense', SPONSOR_CATEGORY_NAME, sub);
       }
+    }
+    if(!getCategoryNames('income').includes(SPONSOR_CATEGORY_NAME)){
+      await addMainCategory('income', SPONSOR_CATEGORY_NAME);
     }
     localStorage.setItem(SPONSOR_SEEDED_FLAG, '1');
     dirty.categories = true;
