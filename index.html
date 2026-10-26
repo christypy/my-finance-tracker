@@ -1054,6 +1054,12 @@
         <!-- 本月支出（跟著日曆瀏覽的月份切換）／當日支出（跟著日曆點選的日期切換） -->
         <div class="summary-grid" id="trStatsGrid"></div>
         <div class="tr-batch-bar" id="trBatchBar">
+          <div id="trKindFilter" style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="small primary" data-kind="all">全部</button>
+            <button type="button" class="small" data-kind="income">收入</button>
+            <button type="button" class="small" data-kind="expense">支出</button>
+            <button type="button" class="small" data-kind="sponsor">贊助金</button>
+          </div>
           <button type="button" class="small" id="trBatchToggleBtn">批次刪除</button>
           <div id="trBatchControls" style="display:none;">
             <button type="button" class="small" id="trBatchSelectAllBtn">全選本頁</button>
@@ -1063,6 +1069,7 @@
             <button type="button" class="small" id="trBatchCancelBtn">取消</button>
           </div>
         </div>
+        <div class="hint" id="trKindSummary" style="display:none;margin:0 2px 8px;"></div>
         <div class="item-list" id="transactionsList"></div>
       </div>
 
@@ -3170,6 +3177,15 @@ $('#trBatchDeleteBtn').addEventListener('click', async () => {
   }catch(err){ alert('批次刪除失敗：' + err.message); }
 });
 
+let trKindFilter = 'all';
+$('#trKindFilter').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-kind]');
+  if(!btn) return;
+  trKindFilter = btn.dataset.kind;
+  $$('#trKindFilter button').forEach(b => b.classList.toggle('primary', b === btn));
+  renderTransactions();
+});
+
 function renderTransactions(){
   renderTrAvailAndBudget_();
   renderOrders_();
@@ -3200,8 +3216,31 @@ function renderTransactions(){
   }
   rows = [...rows].sort((a,b) => (a.date < b.date ? 1 : -1));
 
+  // 分類檢視：收入／支出（都不含贊助金）／贊助金（收入＋支出）各自獨立，不混在一起
+  const isSponsorTx = t => t.category === SPONSOR_CATEGORY_NAME && (t.type === 'income' || t.type === 'expense');
+  if(trKindFilter === 'income') rows = rows.filter(t => t.type === 'income' && !isSponsorTx(t));
+  else if(trKindFilter === 'expense') rows = rows.filter(t => t.type === 'expense' && !isSponsorTx(t));
+  else if(trKindFilter === 'sponsor') rows = rows.filter(isSponsorTx);
+  const sumEl = $('#trKindSummary');
+  if(trKindFilter === 'all'){
+    sumEl.style.display = 'none';
+  } else {
+    const kindLabel = { income:'收入', expense:'支出', sponsor:'贊助金' }[trKindFilter];
+    let summary = `${kindLabel}：共 ${rows.length} 筆`;
+    if(trKindFilter === 'sponsor'){
+      const inc = rows.filter(t => t.type === 'income').reduce((s,t) => s + (Number(t.amount)||0), 0);
+      const exp = rows.filter(t => t.type === 'expense').reduce((s,t) => s + (Number(t.amount)||0), 0);
+      summary += `・收到 $${fmt(inc)}・花費 $${fmt(exp)}`;
+    } else {
+      const total = rows.reduce((s,t) => s + (trKindFilter === 'expense' ? myExpenseShare_(t) : (Number(t.amount)||0)), 0);
+      summary += `・合計 $${fmt(total)}`;
+    }
+    sumEl.textContent = summary;
+    sumEl.style.display = '';
+  }
+
   if(!rows.length){
-    list.innerHTML = `<div class="empty">${emptyMsg}</div>`;
+    list.innerHTML = `<div class="empty">${trKindFilter === 'all' ? emptyMsg : '這個範圍內沒有符合的記帳紀錄。'}</div>`;
     return;
   }
   list.innerHTML = rows.map(t => {
