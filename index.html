@@ -1013,6 +1013,10 @@
               <input type="checkbox" id="trSisterPaid">
               <label for="trSisterPaid" style="margin:0;">妹妹先幫我付（不用選帳戶、不扣我的錢，之後再還她）</label>
             </div>
+            <div class="full checkbox-row" id="trCashFundedRow" style="display:none;">
+              <input type="checkbox" id="trCashFunded">
+              <label for="trCashFunded" style="margin:0;">這筆是用<b id="trCashFundedWho">爸爸</b>已經現金給我的錢還的（不算我先墊、不算我的支出）</label>
+            </div>
             <div class="full checkbox-row" id="trSharedRow">
               <input type="checkbox" id="trShared">
               <label for="trShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
@@ -3477,6 +3481,7 @@ function sponsorPersonOf_(t){
   return hay.includes('爸') ? SPONSOR_PEOPLE[0] : SPONSOR_PEOPLE[1];
 }
 function isSisterPaid_(t){ return t.payer === 'sister'; }
+function isCashFunded_(t){ return !!t && (t.cashFunded === true || String(t.cashFunded) === 'true'); }
 // 贊助「收入」依「收到的帳戶」決定去哪裡（類別只決定是哪位爸／媽）：
 //   fund   ＝ 進爸爸／媽媽贊助金帳戶 → 代管款（不算收入、淨資產扣掉、可結清）
 //   shared ＝ 進妹妹共用錢包 → 直接算共同錢包的錢（不算我的收入、也不算代管款）
@@ -3562,7 +3567,21 @@ function setTrType(type, selectedCategory, selectedSub){
   if(type !== 'expense') $('#trRecurringId').value = ''; // 收入／轉帳不會是固定支出
   syncCatRowVisibility();
   syncTrPendingUI_();
+  syncCashFundedRow_();
 }
+// 「爸爸／媽媽已用現金給我」只在：支出＋主類別「還妹妹」＋子類別標了爸爸／媽媽贊助時出現。
+// 代表我用自己的銀行轉給妹妹，但這筆錢其實是爸／媽已經用現金給我的，
+// 所以不算「我先墊」、不會再被要求從贊助金拿回，也不算我的支出。
+function cashFundedPerson_(){
+  if($('#trType').value !== 'expense' || $('#trCategory').value !== SIS_REPAY_OUT) return null;
+  return SPONSOR_PEOPLE.find(p => p.cat === $('#trSubcategory').value) || null;
+}
+function syncCashFundedRow_(){
+  const p = cashFundedPerson_();
+  $('#trCashFundedRow').style.display = p ? '' : 'none';
+  if(p) $('#trCashFundedWho').textContent = p.name; else $('#trCashFunded').checked = false;
+}
+['#trCategory', '#trSubcategory'].forEach(sel => $(sel).addEventListener('change', syncCashFundedRow_));
 // 「還沒付款」只在「新增支出」時出現；勾選後不需要選帳戶（待付款不動帳戶餘額），名稱必填
 function syncTrPendingUI_(){
   const canPend = $('#trType').value === 'expense' && !$('#trId').value && !trQuickInterestMode;
@@ -4065,7 +4084,9 @@ function sponsorStats_(p){
     if(t.type === 'expense' && t.category === SIS_REPAY_OUT){
       if(t.subcategory === p.cat){
         st.sister -= amt;
-        if(t.accountId && !walletIds.has(t.accountId)) st.fronted[t.accountId] = (st.fronted[t.accountId] || 0) + amt;
+        if(isCashFunded_(t)){
+          st.inc += amt; // 用爸／媽已經現金給我的錢還：視為這筆贊助款已用掉，不算我先墊
+        } else if(t.accountId && !walletIds.has(t.accountId)) st.fronted[t.accountId] = (st.fronted[t.accountId] || 0) + amt;
       } else if(walletIds.has(t.accountId)) st.sister -= amt;
     }
   });
@@ -4842,6 +4863,99 @@ $('#trShared').addEventListener('change', () => {
 $('#trSplitMode').addEventListener('change', syncCatRowVisibility);
 $('#trPayer').addEventListener('change', syncCatRowVisibility);
 
+
+// ---------- 記帳儲存前的防呆檢查 ----------
+// 回傳 false＝擋下不存（已跳出說明）；true＝可以存。
+// 原則：會讓「款項、帳戶餘額、妹妹／爸媽往來」算錯的，一律擋下或要求再確認一次。
+function validateTxBeforeSave_(d, editId, quickMode){
+  if(d.type === 'transfer') return true; // 轉帳的必填已在前面檢查
+  const acc = state.accounts.find(a => a.id === d.accountId);
+  const isWallet = !!(acc && String(acc.name).includes(SPONSOR_CATEGORY_NAME));
+  const label = d.category + (d.subcategory ? '／' + d.subcategory : '');
+  const advance = d.splitMode === 'advance' && d.payer !== 'partner';
+
+  // 1. 類別
+  if(!advance && !quickMode && !d.category){ alert('請選擇主類別，不然統計和往來會算不到這筆。'); return false; }
+
+  // 2. 日期離今天太遠（常見是年份打錯）
+  const days = Math.abs((new Date(d.date) - new Date(todayStr_())) / 86400000);
+  if(days > 62 && !confirm(`日期是 ${d.date}，離今天超過兩個月。\n\n日期沒打錯嗎？`)) return false;
+
+  // 3. 金額特別大
+  if(d.amount >= 100000 && !confirm(`金額是 $${fmt(d.amount)}，確定沒多打一個 0 嗎？`)) return false;
+
+  // 「還沒付款」的待付款不動帳戶，不需要帳戶／付款人相關檢查
+  if(!editId && $('#trPending').checked) return true;
+  const oldTx = editId ? state.transactions.find(x => x.id === editId) : null;
+
+  // 4. 還妹妹：這是我實際付出去的錢，一定要知道從哪裡出
+  if(d.type === 'expense' && d.category === SIS_REPAY_OUT){
+    if(d.payer === 'sister' || d.payer === 'partner'){
+      alert('「還妹妹」是我自己付錢還她，不能同時勾「妹妹先付／對方先付」，請取消勾選。');
+      return false;
+    }
+    if(!d.accountId){
+      alert('「還妹妹」請選擇你用哪個帳戶付的（現金或銀行），不然帳戶餘額不會扣，錢會對不上。');
+      return false;
+    }
+    const who = SPONSOR_PEOPLE.find(p => p.cat === d.subcategory);
+    if(!d.subcategory){
+      if(!confirm('子類別沒選：系統會當成「用我自己的錢還妹妹」，並自動沖掉爸爸／媽媽那邊妹妹先付的款項。\n\n這樣可以嗎？\n（如果是還爸爸／媽媽的贊助款墊付，請按取消，子類別選「爸爸贊助／媽媽贊助」。）')) return false;
+    } else if(who && !isWallet && !isCashFunded_(d)){
+      if(!confirm(`這筆會變成「你先墊了 $${fmt(d.amount)}，要從${who.name}贊助金拿回」。\n\n如果${who.name}其實已經用現金給你了，請按「取消」，勾選「${who.name}已經現金給我」，這樣就不會算成你先墊或你的支出。\n\n確定要當成你先墊嗎？`)) return false;
+    }
+    if(isCashFunded_(d) && who){
+      if(isWallet){ alert(`你選的是「${who.name}贊助金」帳戶，這代表錢本來就是${who.name}的，不需要勾「已經現金給我」。請取消勾選，或改選你實際轉帳的銀行帳戶。`); return false; }
+      // 對帳：爸／媽有沒有真的記過「現金收入」，而且還沒被別筆用掉
+      const cashIn = state.transactions
+        .filter(t => t.type === 'income' && t.category === who.cat && sponsorIncomeKind_(t) === 'own')
+        .reduce((s, t) => s + (Number(t.amount) || 0), 0);
+      const used = state.transactions
+        .filter(t => t.id !== editId && t.type === 'expense' && t.category === SIS_REPAY_OUT && t.subcategory === who.cat && isCashFunded_(t))
+        .reduce((s, t) => s + (Number(t.amount) || 0), 0);
+      if(cashIn - used + 0.005 < d.amount){
+        if(!confirm(`找不到足夠的「${who.name}給的現金」收入紀錄（已記收入 $${fmt(cashIn)}，已被其他還款用掉 $${fmt(used)}）。\n\n請先記一筆：收入／${who.cat}／帳戶選「現金」，才會對得起來。\n\n還是要先存這筆嗎？`)) return false;
+      }
+    }
+  }
+
+  // 5. 妹妹還款（收入）：錢要進哪個帳戶
+  if(d.type === 'income' && d.category === SIS_REPAY_IN && !d.accountId){
+    alert('「妹妹還款」請選擇收到錢的帳戶，不然帳戶餘額不會增加。');
+    return false;
+  }
+
+  // 6. 贊助收入（新增時）：帳戶決定是代管款、共同錢包還是我自己的收入，不能不選
+  if(d.type === 'income' && isSponsorCat_(d.category) && !d.accountId && !editId){
+    alert(`「${d.category}」收入請選擇收到錢的帳戶：\n・進「贊助金」帳戶＝代管款（不算我的收入）\n・進現金／我的帳戶＝算我的收入\n・進妹妹共用錢包＝共同錢包\n\n沒選的話，系統無法判斷這筆錢算誰的。`);
+    return false;
+  }
+
+  // 7. 一般支出／收入沒選帳戶：不會動任何餘額
+  const noAccountOk = d.type === 'expense' && (d.payer === 'sister' || d.payer === 'partner');
+  if(!d.accountId && !noAccountOk && !quickMode && !(oldTx && !oldTx.accountId)){ // 編輯本來就沒帳戶的舊紀錄不重複提醒
+    const what = d.type === 'income' ? '收到的錢不會加到任何帳戶' : '不會從任何帳戶扣款';
+    if(!confirm(`「${label}」$${fmt(d.amount)} 沒有選帳戶，${what}，帳戶餘額會跟實際不一樣。\n\n確定不選帳戶就儲存嗎？\n（按取消可回去選帳戶）`)) return false;
+  }
+
+  // 8. 我幫妹妹買（我先墊，妹妹欠我）：要知道錢從哪裡付出去
+  if(d.type === 'expense' && d.category === SIS_CATEGORY_NAME && d.subcategory === SIS_OUT && !d.accountId){
+    if(!confirm('「我幫妹妹買」沒選帳戶：你付出去的錢不會從任何帳戶扣掉。\n\n確定嗎？')) return false;
+  }
+
+  // 9. 妹妹先付／另一半先付時，若還選了「我的帳戶」會被清掉，先提醒避免以為有扣
+  if(d.type === 'expense' && (d.payer === 'sister' || d.payer === 'partner') && !d.accountId && !editId){
+    const who = d.payer === 'sister' ? '妹妹' : '另一半';
+    if(!confirm(`這筆是${who}先付的，不會扣你的任何帳戶，之後要還給${who} $${fmt(d.amount)}。\n\n正確嗎？`)) return false;
+  }
+
+  // 10. 贊助／往來類別沒填名稱，之後很難對帳
+  if((isSponsorCat_(d.category) || d.category === SIS_REPAY_OUT || d.category === SIS_REPAY_IN || d.category === SIS_CATEGORY_NAME) && !String(d.note || '').trim()){
+    if(confirm('這是爸媽贊助／妹妹往來的紀錄，名稱沒填，之後對帳會很難找。\n\n要先回去補名稱嗎？\n（按「確定」＝回去補；按「取消」＝直接儲存）')) return false;
+  }
+  return true;
+}
+
 // 記帳新增/編輯/刪除都是「一次 exec 內同時處理記帳列 + 帳戶餘額」的複合動作（見 Code.gs 的
 // addTransactionTx / updateTransactionTx / deleteTransactionTx），比以前「新增記帳→更新帳戶
 // →重新整批下載」快非常多，也不用整批重抓資料。
@@ -4855,6 +4969,8 @@ $('#trForm').addEventListener('submit', async e => {
   const amount = parseFloat($('#trAmount').value) || 0;
   const accountId = $('#trAccount').value;
   let data;
+  if(!$('#trDate').value){ alert('請選擇日期。'); return; }
+  if(!(amount > 0)){ alert('請輸入大於 0 的金額。'); return; }
   if(type === 'transfer'){
     const toAccountId = $('#trToAccount').value;
     if(!accountId || !toAccountId){ alert('請選擇轉出與轉入帳戶。'); return; }
@@ -4900,9 +5016,12 @@ $('#trForm').addEventListener('submit', async e => {
       payer,
       splitMode,
       settled: false,
-      recurringId: $('#trRecurringId').value || ''
+      recurringId: $('#trRecurringId').value || '',
+      cashFunded: (type === 'expense' && category === SIS_REPAY_OUT && cashFundedPerson_() && $('#trCashFunded').checked) ? true : ''
     };
   }
+  // ===== 防呆檢查：少填或可能造成款項錯誤時，在儲存前擋下或提醒 =====
+  if(!validateTxBeforeSave_(data, id, trQuickInterestMode)) return;
   // 別人先付的錢（另一半／妹妹）不是從我的帳戶出的：帳戶一律清空，不扣我的餘額
   if(data.type === 'expense' && (data.payer === 'partner' || data.payer === 'sister' || isSisterPaid_(data))){
     data.accountId = '';
@@ -5042,6 +5161,7 @@ function resetTransactionForm(){
   $('#trNote').value = '';
   $('#trShared').checked = false;
   $('#trSisterPaid').checked = false;
+  $('#trCashFunded').checked = false;
   $('#trAccount').disabled = false;
   $('#trLedgerFields').style.display = 'none';
   $('#trPayer').value = 'partner'; // 新增記帳勾選共同帳本時，預設「對方先付」
@@ -5077,6 +5197,8 @@ window.editTransaction = id => {
     $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
     syncCatRowVisibility();
     syncPayerAccount_();
+    syncCashFundedRow_();
+    if(cashFundedPerson_()) $('#trCashFunded').checked = isCashFunded_(t);
   }
   $('#trNote').value = t.note || '';
   $('#trRecurringId').value = t.recurringId || ''; // 保留固定支出標記

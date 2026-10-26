@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-10-27-sister-v3';
+const BACKEND_VERSION_ = '2026-10-27-sister-v4-guard';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -16,7 +16,7 @@ const SHEET_HEADERS = {
   accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'note', 'updatedAt', 'favorite', 'interestCap', 'normalRate', 'interestFreqMonths'],
   liabilities: ['id', 'name', 'amount', 'dueDate', 'paid', 'note', 'updatedAt'],
   
-  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId', 'subcategory', 'toAccountId'],
+  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId', 'subcategory', 'toAccountId', 'cashFunded'],
   
   recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode', 'toAccountId'],
   
@@ -278,6 +278,23 @@ function normalizePayerAccount_(d) {
   return d;
 }
 
+// 後端最後一道防呆：就算前端漏擋，也不讓「沒日期／金額不是正數／轉帳帳戶有問題」的紀錄寫進試算表，
+// 避免帳戶餘額被算錯。只檢查絕對不合理的情況，不會擋正常（含舊資料）的操作。
+function validateTransactionData_(d) {
+  if (!d) throw new Error('沒有收到記帳資料');
+  if (['expense', 'income', 'transfer', 'settlement'].indexOf(d.type) === -1) throw new Error('記帳類型不正確: ' + d.type);
+  if (!String(normalizeCellValue_('date', d.date) || '').trim()) throw new Error('缺少日期，這筆沒有儲存');
+  const amt = Number(d.amount);
+  if (!isFinite(amt) || amt <= 0) throw new Error('金額必須大於 0，這筆沒有儲存');
+  if (d.type === 'transfer') {
+    if (!d.accountId || !d.toAccountId) throw new Error('轉帳必須同時有轉出與轉入帳戶，這筆沒有儲存');
+    if (String(d.accountId) === String(d.toAccountId)) throw new Error('轉出與轉入帳戶不能相同，這筆沒有儲存');
+  }
+  if (d.type === 'expense' && d.category === '還妹妹' && d.payer !== 'sister' && d.payer !== 'partner' && !d.accountId) {
+    throw new Error('「還妹妹」必須選擇付款帳戶，不然餘額會對不上，這筆沒有儲存');
+  }
+}
+
 function txDelta_(type, amount, payer) {
   const amt = Number(amount) || 0;
   if (type === 'expense') return -amt;
@@ -418,6 +435,7 @@ function addTransactionTx_(data) {
   delete data.force;
   delete data.retry;
   normalizePayerAccount_(data);
+  if (!(isRetry && data.id && findRowIndexById_('transactions', data.id) !== -1)) validateTransactionData_(data);
   // 前端是先在本機存好才背景送出，網路逾時後會「重送」同一筆（帶同一個 id）。
   // 重送時先確認這個 id 是否其實已經寫進去了，避免重複記帳／重複扣餘額。
   // 第一次送出（絕大多數情況）不做這個檢查，維持最快速度。
@@ -443,6 +461,7 @@ function updateTransactionTx_(data) {
   delete data.force;
   delete data.retry;
   normalizePayerAccount_(data);
+  if (!force) validateTransactionData_(data); // 遷移工具等內部呼叫帶 force，不受此限
   if (!force) {
     const dup = findDuplicateTransaction_(data, data.id);
     if (dup) return { duplicate: dup };
