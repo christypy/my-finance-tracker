@@ -811,6 +811,7 @@
         <div class="sub">
           <div>資產<b id="netHeroAssets">$0</b></div>
           <div>未繳負債<b id="netHeroDebt">$0</b></div>
+          <div>代管爸媽贊助款<b id="netHeroHeld">$0</b></div>
           <div>預估下期利息<b id="netHeroInterest">$0</b></div>
         </div>
       </div>
@@ -1007,6 +1008,10 @@
             <div class="full checkbox-row" id="trPendingRow" style="display:none;">
               <input type="checkbox" id="trPending">
               <label for="trPending" style="margin:0;">還沒付款（記成「待付款」：先計入該月預算，不動帳戶餘額）</label>
+            </div>
+            <div class="full checkbox-row" id="trSisterRow">
+              <input type="checkbox" id="trSisterPaid">
+              <label for="trSisterPaid" style="margin:0;">妹妹先付（她的信用卡／她的錢，不扣我的帳戶）</label>
             </div>
             <div class="full checkbox-row" id="trSharedRow">
               <input type="checkbox" id="trShared">
@@ -1546,7 +1551,7 @@ try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persis
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-10-12-recorder'; // 贊助金功能只改前端，後端版本號不變
+const FRONTEND_VERSION = '2026-10-27-people'; // 贊助金功能只改前端，後端版本號不變
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -2333,7 +2338,10 @@ function renderDashboard(){
   const totalDebt = state.liabilities
     .filter(l => String(l.paid) !== 'true')
     .reduce((s,l) => s + (Number(l.amount)||0), 0);
-  const net = totalAssets - totalDebt;
+  // 爸媽的贊助款還沒用完的部分不是我的錢，從淨資產扣掉（見 sponsorStats_）
+  let heldSponsor = 0;
+  try{ heldSponsor = SPONSOR_PEOPLE.reduce((sum, p) => sum + Math.max(0, sponsorStats_(p).remaining), 0); }catch(err){ heldSponsor = 0; } // 初次載入、常數尚未初始化時安全略過
+  const net = totalAssets - totalDebt - heldSponsor;
   // 加總所有有填年利率的帳戶，估算「下一期」全部帳戶合計會拿到的利息（單利、按月估算）
   const totalEstInterest = state.accounts.reduce((s,a) => s + estimateAccountNextInterest_(a), 0);
 
@@ -2341,6 +2349,7 @@ function renderDashboard(){
   $('#netHeroAssets').textContent = '$' + fmt(totalAssets);
   $('#netHeroDebt').textContent = '$' + fmt(totalDebt);
   $('#netHeroInterest').textContent = '$' + fmt(totalEstInterest);
+  $('#netHeroHeld').textContent = '$' + fmt(heldSponsor);
 
   // 如果目前篩選的類型已經沒有任何帳戶了（例如帳戶被刪除或改了類型），自動取消篩選
   if(dashboardFilterType && !byType.hasOwnProperty(dashboardFilterType)) dashboardFilterType = null;
@@ -2774,7 +2783,7 @@ function renderTrAvailAndBudget_(){
   const monthSponsor = sponsorExpenseOf_(monthStr);
   const daySponsor = sponsorExpenseOf_(dayStr);
   const monthSponsorIn = state.transactions
-    .filter(t => t.type === 'income' && t.category === SPONSOR_CATEGORY_NAME && (t.date || '').startsWith(monthStr))
+    .filter(t => t.type === 'income' && isSponsorCat_(t.category) && (t.date || '').startsWith(monthStr))
     .reduce((s,t) => s + (Number(t.amount) || 0), 0);
   const sponsorCards = (monthSponsor || daySponsor || monthSponsorIn) ? (monthSponsorIn ? `
     <div class="summary-card sponsor-card-in">
@@ -2804,7 +2813,7 @@ function renderTrAvailAndBudget_(){
 // 贊助金支出合計（period 可以是 YYYY-MM 或 YYYY-MM-DD，用日期開頭比對）
 function sponsorExpenseOf_(period){
   return state.transactions
-    .filter(t => t.type === 'expense' && t.category === SPONSOR_CATEGORY_NAME && (t.date || '').startsWith(period))
+    .filter(t => t.type === 'expense' && isSponsorCat_(t.category) && (t.date || '').startsWith(period))
     .reduce((s,t) => s + (Number(t.amount) || 0), 0);
 }
 
@@ -3092,7 +3101,8 @@ $('#payOrderForm').addEventListener('submit', e => {
   const amount = parseFloat($('#payAmount').value) || 0;
   if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
   const sharedOrd = o.splitMode === 'split' || o.splitMode === 'advance';
-  const payer = sharedOrd ? $('#payPayer').value : 'me';
+  const sisOrd = o.payer === 'sister' || (o.category === SIS_CATEGORY_NAME && o.subcategory === SIS_IN);
+  const payer = sharedOrd ? $('#payPayer').value : (sisOrd ? 'sister' : 'me');
   const splitMode = sharedOrd ? o.splitMode : 'personal';
   // 跟共同帳本記帳規則一致：「我先付、全額代墊」整筆是對方的花費，統一存成「代墊」類別
   const isAdvance = splitMode === 'advance' && payer !== 'partner';
@@ -3103,7 +3113,7 @@ $('#payOrderForm').addEventListener('submit', e => {
     category: isAdvance ? ADVANCE_CATEGORY_NAME : (o.category || '其他'),
     subcategory: isAdvance ? '' : (o.subcategory || ''),
     amount,
-    accountId: $('#payAccount').value,
+    accountId: (payer === 'partner' || payer === 'sister') ? '' : $('#payAccount').value, // 別人先付，不扣我的帳戶
     note: o.note ? `${o.name}（${o.note}）` : o.name,
     payer,
     splitMode,
@@ -3222,7 +3232,7 @@ function renderTransactions(){
   rows = [...rows].sort((a,b) => (a.date < b.date ? 1 : -1));
 
   // 分類檢視：收入／支出（都不含贊助金）／贊助金（收入＋支出）各自獨立，不混在一起
-  const isSponsorTx = t => t.category === SPONSOR_CATEGORY_NAME && (t.type === 'income' || t.type === 'expense');
+  const isSponsorTx = t => isSponsorCat_(t.category) && (t.type === 'income' || t.type === 'expense');
   if(trKindFilter === 'income') rows = rows.filter(t => t.type === 'income' && !isSponsorTx(t));
   else if(trKindFilter === 'expense') rows = rows.filter(t => t.type === 'expense' && !isSponsorTx(t));
   else if(trKindFilter === 'sponsor') rows = rows.filter(isSponsorTx);
@@ -3308,7 +3318,7 @@ function renderTransactions(){
     //   我自己實際要負擔的那一份（myExpenseShare_），原始總金額改成小字附註，
     //   避免誤以為整筆都是自己花的。
     const isPureAdvance = isExpense && t.splitMode === 'advance' && t.payer !== 'partner';
-    const isSponsor = t.category === SPONSOR_CATEGORY_NAME;
+    const isSponsor = isSponsorCat_(t.category);
     const isSis = isExpense && t.category === SIS_CATEGORY_NAME;
     const isSplitShare = isExpense && t.splitMode === 'split';
     const shareNote = isSplitShare
@@ -3321,7 +3331,7 @@ function renderTransactions(){
       ${trBatchCheckboxHtml_(t.id)}
       <div class="item-top">
         <div>
-          <div class="item-name">${isSponsor ? (t.type === 'income' ? '<span class="badge sponsor-in">贊助金收入</span> ' : '<span class="badge sponsor">贊助金支出</span> ') : isSis ? `<span class="badge sis">${escapeHtml(t.subcategory || '代購')}</span> ` : ''}${primary}</div>
+          <div class="item-name">${isSponsor ? (t.type === 'income' ? `<span class="badge sponsor-in">${(sponsorPersonOf_(t) || {name:''}).name}贊助收入</span> ` : `<span class="badge sponsor">${(sponsorPersonOf_(t) || {name:''}).name}贊助支出</span> `) : isSis ? `<span class="badge sis">${escapeHtml(t.subcategory || '代購')}</span> ` : ''}${primary}</div>
           <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
           ${shareNote}
         </div>
@@ -3411,17 +3421,23 @@ function populateTrSubcategories(type, mainName, selectedSub){
   populateSubcategorySelect_($('#trSubcategory'), getSubcategories(type, mainName), selectedSub);
 }
 bindInlineCategoryCreation_($('#trCategory'), $('#trSubcategory'), () => $('#trType').value, populateTrCategories, populateTrSubcategories);
-// 主類別選「贊助金」時，帳戶自動帶入名稱含「贊助金」的專款帳戶（不在常用清單也會補進選項）
-$('#trCategory').addEventListener('change', () => {
-  if(!['expense','income'].includes($('#trType').value) || $('#trCategory').value !== SPONSOR_CATEGORY_NAME) return;
-  const acc = state.accounts.find(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
-  if(!acc) return;
-  const sel = $('#trAccount');
-  if(![...sel.options].some(o => o.value === acc.id)){
-    sel.insertAdjacentHTML('beforeend', `<option value="${acc.id}">${escapeHtml(acc.name)}（${escapeHtml(acc.type)}）</option>`);
+// 付款人規則：「另一半先付」「妹妹先付」「妹妹幫我買」這類錢不是從我的帳戶出的，
+// 帳戶欄一律停用並清空，避免像 9/12 抹布那樣明明是別人付的卻扣了我的現金。
+// （贊助金不再自動換帳戶：帳戶＝錢實際從哪裡付，誰的錢由主類別決定。）
+function syncPayerAccount_(){
+  const isExp = $('#trType').value === 'expense';
+  const sisSub = isExp && $('#trCategory').value === SIS_CATEGORY_NAME && $('#trSubcategory').value === SIS_IN;
+  if(sisSub && !$('#trShared').checked) $('#trSisterPaid').checked = true;
+  if(isExp && $('#trSisterPaid').checked && $('#trShared').checked){
+    $('#trShared').checked = false;
+    $('#trLedgerFields').style.display = 'none';
   }
-  sel.value = acc.id;
-});
+  const partner = isExp && $('#trShared').checked && $('#trPayer').value === 'partner';
+  const lock = isExp && ($('#trSisterPaid').checked || partner || sisSub);
+  $('#trAccount').disabled = lock;
+  if(lock) $('#trAccount').value = '';
+}
+['#trSisterPaid','#trShared','#trPayer','#trCategory','#trSubcategory'].forEach(sel => $(sel).addEventListener('change', syncPayerAccount_));
 // 金額直接輸入，不需要 +50/+100 之類的快速加值按鈕；
 // 另外數字輸入框在滑鼠停留時用滾輪很容易不小心改動金額，這裡讓輸入框
 // 在滾輪事件時直接失焦，避免滾動網頁時誤觸改變數字。
@@ -3444,9 +3460,27 @@ const SIS_CATEGORY_NAME = '代購';
 const SIS_OUT = '我幫妹妹買';
 const SIS_IN = '妹妹幫我買';
 const SIS_SETTLE_NOTE = '代購結清';
+// 爸爸／媽媽贊助：主類別直接分人、不設子類別。舊的「贊助金」類別仍相容（用子類別／帳戶／備註判斷是誰的）。
+const SPONSOR_PEOPLE = [
+  { key:'dad', name:'爸爸', cat:'爸爸贊助' },
+  { key:'mom', name:'媽媽', cat:'媽媽贊助' }
+];
+const SIS_REPAY_OUT = '還妹妹';   // 支出：我還妹妹錢
+const SIS_REPAY_IN = '妹妹還款';  // 收入：妹妹還我錢
+const CLOSE_NOTE = '【結清】';     // 結清贊助剩餘時自動產生的沖銷紀錄備註
+function isSponsorCat_(c){ return c === SPONSOR_CATEGORY_NAME || SPONSOR_PEOPLE.some(p => p.cat === c); }
+function sponsorPersonOf_(t){
+  const hit = SPONSOR_PEOPLE.find(p => p.cat === t.category);
+  if(hit) return hit;
+  if(t.category !== SPONSOR_CATEGORY_NAME) return null;
+  const acc = state.accounts.find(a => a.id === t.accountId);
+  const hay = [t.subcategory, acc && acc.name, t.note].map(x => String(x || '')).join('|');
+  return hay.includes('爸') ? SPONSOR_PEOPLE[0] : SPONSOR_PEOPLE[1];
+}
+function isSisterPaid_(t){ return t.payer === 'sister' || (t.category === SIS_CATEGORY_NAME && t.subcategory === SIS_IN); }
 function isOffBudgetTx_(t){
   const c = t.category;
-  if(c === ADVANCE_CATEGORY_NAME || c === SPONSOR_CATEGORY_NAME) return true;
+  if(c === ADVANCE_CATEGORY_NAME || isSponsorCat_(c) || c === SIS_REPAY_OUT || c === SIS_REPAY_IN) return true;
   return c === SIS_CATEGORY_NAME && t.subcategory === SIS_OUT;
 }
 // 共同帳本的支出，不管誰付款，統計「我的花費」時都只該算我實際要負擔的那一份：
@@ -3484,6 +3518,10 @@ function setTrType(type, selectedCategory, selectedSub){
   const isTransfer = type === 'transfer';
   $('#trCatRow').style.display = isTransfer ? 'none' : '';
   $('#trSharedRow').style.display = isTransfer ? 'none' : '';
+  if($('#trSisterRow')){
+    $('#trSisterRow').style.display = type === 'expense' ? '' : 'none';
+    if(type !== 'expense'){ $('#trSisterPaid').checked = false; $('#trAccount').disabled = false; }
+  }
   $('#trTransferToWrap').style.display = isTransfer ? '' : 'none';
   $('#trAccountLabel').textContent = isTransfer ? '從（轉出帳戶）' : '帳戶（選填，會自動增減餘額）';
   $('#trAccount').required = isTransfer;
@@ -3826,16 +3864,16 @@ function renderStats(){
   // 另外，共同分攤的支出（splitMode === 'split'）不管誰先付，「支出」統計都只算我自己
   // 該負擔的那一份，不是整筆金額，見 myExpenseShare_。
   const isRealExpense_ = t => t.type === 'expense' && !isOffBudgetTx_(t);
-  const incomeTotal = rows.filter(t=>t.type==='income' && t.category !== SPONSOR_CATEGORY_NAME).reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const incomeTotal = rows.filter(t=>t.type==='income' && !isSponsorCat_(t.category) && t.category !== SIS_REPAY_IN).reduce((s,t)=>s+(Number(t.amount)||0),0);
   const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+myExpenseShare_(t),0);
   // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
   // 沒有填帳戶的紀錄（多半是舊資料匯入，沒有對應到任何帳戶）只計入上面的收入／支出總額，
   // 單純知道花了多少、賺了多少，但不會影響結餘這個數字。
   const rowsWithAccount = rows.filter(t => t.accountId);
-  const incomeWithAccount = rowsWithAccount.filter(t=>t.type==='income' && t.category !== SPONSOR_CATEGORY_NAME).reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const incomeWithAccount = rowsWithAccount.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
   // 結餘算的是帳戶裡實際增減的錢，代墊款項雖然不算「支出」，但錢確實從帳戶流出了，
   // 所以這裡仍然要把它算進去，結餘才會跟帳戶餘額對得起來。
-  const expenseWithAccount = rowsWithAccount.filter(t=>t.type==='expense' && t.category !== SPONSOR_CATEGORY_NAME).reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const expenseWithAccount = rowsWithAccount.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const net = incomeWithAccount - expenseWithAccount;
 
   // ① 本期關鍵指標：收支結餘之外，加上儲蓄率、日均花費、（未過完的期間）預估總支出
@@ -3905,7 +3943,7 @@ function renderStats(){
   renderSponsorStats_($('#statsSponsor'), rows);
 
   // ⑤ 收入來源
-  const inc = breakdownByCategory(rows.filter(t => !(t.type === 'income' && t.category === SPONSOR_CATEGORY_NAME)), 'income');
+  const inc = breakdownByCategory(rows.filter(t => !(t.type === 'income' && (isSponsorCat_(t.category) || t.category === SIS_REPAY_IN))), 'income');
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
 }
 
@@ -3913,7 +3951,7 @@ function renderStats(){
 // ---------- 贊助金支出：獨立統計（總額、筆數、子類別分佈、專款帳戶餘額、明細） ----------
 function renderSponsorStats_(container, rows){
   const sponsorAll = rows
-    .filter(t => (t.type === 'expense' || t.type === 'income') && t.category === SPONSOR_CATEGORY_NAME)
+    .filter(t => (t.type === 'expense' || t.type === 'income') && isSponsorCat_(t.category))
     .sort((a,b) => (a.date < b.date ? 1 : -1));
   const sponsorRows = sponsorAll.filter(t => t.type === 'expense');
   const sponsorIncomeTotal = sponsorAll.filter(t => t.type === 'income').reduce((s,t) => s + (Number(t.amount) || 0), 0);
@@ -3966,99 +4004,61 @@ function renderSponsorStats_(container, rows){
 }
 
 
-// ---------- 贊助金「各帳戶待補款」：誰先墊了贊助金花費、還沒從贊助金帳戶補回去多少 ----------
-// 待補 = 該帳戶（非贊助金帳戶）付出的贊助金支出總額 − 已經從贊助金帳戶轉給它的金額（累計，不分期間）
-function sponsorOwedByAccount_(){
-  const sponsorIds = new Set(state.accounts.filter(a => String(a.name).includes(SPONSOR_CATEGORY_NAME)).map(a => a.id));
-  const owed = {};
+// ---------- 往來總覽：爸爸／媽媽贊助款剩餘、妹妹、另一半（全部由記帳紀錄自動算，不用手動維護）----------
+// 爸媽：剩餘 ＝ 收到的贊助收入 − 我實際負擔的贊助支出（不管是從哪個帳戶付、誰先墊）
+// 妹妹：正數＝妹妹欠我、負數＝我欠妹妹　　另一半：沿用共同帳本
+function sponsorWallets_(p){
+  return state.accounts.filter(a => String(a.name).includes(SPONSOR_CATEGORY_NAME) && String(a.name).includes(p.name));
+}
+function ensureAccountOption_(id){
+  const acc = state.accounts.find(a => a.id === id);
+  const sel = $('#trAccount');
+  if(acc && ![...sel.options].some(o => o.value === id)){
+    sel.insertAdjacentHTML('beforeend', `<option value="${acc.id}">${escapeHtml(acc.name)}（${escapeHtml(acc.type)}）</option>`);
+  }
+}
+function sponsorStats_(p){
+  const walletIds = new Set(sponsorWallets_(p).map(a => a.id));
+  const month = todayStr_().slice(0,7);
+  const st = { inc:0, spent:0, mIn:0, mOut:0, fronted:{}, sister:0, partner:0 };
   state.transactions.forEach(t => {
     const amt = Number(t.amount) || 0;
-    if(t.type === 'expense' && t.category === SPONSOR_CATEGORY_NAME && t.accountId && !sponsorIds.has(t.accountId)){
-      owed[t.accountId] = (owed[t.accountId] || 0) + amt;
-    } else if(t.type === 'transfer' && sponsorIds.has(t.accountId) && t.toAccountId && !sponsorIds.has(t.toAccountId)){
-      owed[t.toAccountId] = (owed[t.toAccountId] || 0) - amt;
+    const who = sponsorPersonOf_(t);
+    if(who && who.key === p.key){
+      const inMonth = String(t.date || '').startsWith(month);
+      if(t.type === 'income'){ st.inc += amt; if(inMonth) st.mIn += amt; }
+      else if(t.type === 'expense'){
+        const share = myExpenseShare_(t);
+        st.spent += share; if(inMonth) st.mOut += share;
+        if(t.payer === 'sister') st.sister += share;
+        else if(t.payer === 'partner'){ if(String(t.settled) !== 'true') st.partner += share; }
+        else if(t.accountId && !walletIds.has(t.accountId)) st.fronted[t.accountId] = (st.fronted[t.accountId] || 0) + share;
+      }
     }
+    // 從這位爸／媽的贊助金帳戶轉給先墊的帳戶＝已補回
+    if(t.type === 'transfer' && walletIds.has(t.accountId) && t.toAccountId && !walletIds.has(t.toAccountId) && !String(t.note || '').startsWith(CLOSE_NOTE)){
+      st.fronted[t.toAccountId] = (st.fronted[t.toAccountId] || 0) - amt;
+    }
+    // 用這位爸／媽的贊助金帳戶還妹妹＝已還
+    if(t.type === 'expense' && t.category === SIS_REPAY_OUT && walletIds.has(t.accountId)) st.sister -= amt;
   });
-  return owed;
+  st.remaining = st.inc - st.spent;
+  return st;
 }
-let expandedSponsorOwed_ = null;
-window.toggleSponsorOwed_ = id => {
-  expandedSponsorOwed_ = (expandedSponsorOwed_ === id) ? null : id;
-  renderSponsorOwed_($('#sponsorOwedModal'));
-};
-// 某個帳戶的待補款明細：先墊的贊助金支出（+），以及已經從贊助金帳戶補給它的轉帳（−）
-function sponsorOwedDetailHtml_(accId){
-  const sponsorIds = new Set(state.accounts.filter(a => String(a.name).includes(SPONSOR_CATEGORY_NAME)).map(a => a.id));
-  const rows = state.transactions.filter(t =>
-    (t.type === 'expense' && t.category === SPONSOR_CATEGORY_NAME && t.accountId === accId) ||
-    (t.type === 'transfer' && sponsorIds.has(t.accountId) && t.toAccountId === accId)
-  ).sort((a,b) => (a.date < b.date ? 1 : -1));
-  if(!rows.length) return '<div class="acc-month-tx-empty">沒有明細。</div>';
-  return `<div class="acc-month-tx-list" style="max-height:240px;">${rows.map(t => {
-    const isPay = t.type === 'expense';
-    const label = t.note || t.subcategory || (isPay ? SPONSOR_CATEGORY_NAME : '贊助金補款');
-    const sub = isPay && t.subcategory && t.note ? `（${escapeHtml(t.subcategory)}）` : '';
-    return `<div class="acc-month-tx">
-      <div class="acc-month-tx-main">
-        <div class="acc-month-tx-cat">${escapeHtml(label)}${sub}</div>
-        <div class="acc-month-tx-date">${escapeHtml(t.date)} · ${isPay ? '先墊' : '已補款'}</div>
-      </div>
-      <div class="acc-month-tx-amt" style="color:${isPay ? 'var(--sponsor)' : 'var(--green)'}">${isPay ? '+' : '-'}$${fmt(t.amount)}</div>
-    </div>`;
-  }).join('')}</div>`;
-}
-function renderSponsorOwed_(container){
-  const sponsorAcc = state.accounts.find(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
-  const owed = sponsorOwedByAccount_();
-  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
-  const items = Object.entries(owed).filter(([id, v]) => byId[id] && Math.abs(v) >= 0.005);
-  if(!items.length){ container.innerHTML = ''; return 0; }
-  const rows = items.map(([id, v]) => {
-    const need = v > 0;
-    const open = expandedSponsorOwed_ === id;
-    return `<div class="item-card sponsor-item" style="margin-bottom:8px; cursor:pointer;" onclick="toggleSponsorOwed_('${id}')">
-      <div class="item-top">
-        <div>
-          <div class="item-name">${escapeHtml(byId[id])} <span style="font-size:11px;color:var(--ink-soft);">${open ? '▼ 收合明細' : '▶ 點擊看明細'}</span></div>
-          <div class="item-note">${need ? '先墊了贊助金花費，贊助金還沒補回來' : '已經多補了'}</div>
-        </div>
-        <div class="item-value">${need ? '待補 ' : '多補 '}$${fmt(Math.abs(v))}</div>
-      </div>
-      ${open ? `<div class="rank-sub-list" style="margin-top:8px;" onclick="event.stopPropagation()">${sponsorOwedDetailHtml_(id)}</div>` : ''}
-      ${need && sponsorAcc ? `<div class="item-actions"><button class="small" onclick="event.stopPropagation(); reimburseSponsor_('${id}', ${v})">轉帳補款</button></div>` : ''}
-    </div>`;
-  }).join('');
-  container.innerHTML = `<div class="orders-head"><span style="color:var(--sponsor);">贊助金待補款</span><small>累計，已扣掉補過的轉帳</small></div>${rows}`;
-  return items.filter(([,v]) => v > 0).length;
-}
-// 點「轉帳補款」：開啟記帳表單，自動填好「贊助金帳戶 → 墊款帳戶」與金額，確認後儲存即可
-window.reimburseSponsor_ = (toId, amount) => {
-  const sponsorAcc = state.accounts.find(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
-  if(!sponsorAcc) return;
-  if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
-  resetTransactionForm();
-  $('#trDetails').open = true;
-  setTrType('transfer');
-  $('#trAccount').value = sponsorAcc.id;
-  $('#trToAccount').value = toId;
-  $('#trAmount').value = Number(amount).toFixed(2).replace(/\.00$/, '');
-  $('#trNote').value = '贊助金補款';
-};
-
-// ---------- 妹妹往來：代購互相墊款的淨額（正數＝妹妹欠我、負數＝我欠妹妹） ----------
-// 我幫妹妹買（支出／代購／我幫妹妹買）：我先付 → 妹妹欠我 +
-// 妹妹幫我買（支出／代購／妹妹幫我買）：妹妹先付 → 我欠妹妹 −
-// 結清轉帳（備註以「代購結清」開頭）：妹妹錢包→其他帳戶＝她還我（−）；其他帳戶→妹妹錢包＝我還她（+）
 function sisterAccount_(){ return state.accounts.find(a => String(a.name).includes('妹妹')); }
+// 妹妹往來每一筆：＋妹妹欠我、－我欠妹妹
 function sisterRows_(){
   const w = sisterAccount_();
   const rows = [];
   state.transactions.forEach(t => {
     const amt = Number(t.amount) || 0;
-    if(t.type === 'expense' && t.category === SIS_CATEGORY_NAME){
-      if(t.subcategory === SIS_OUT) rows.push({ t, delta: amt, label: '我幫妹妹買' });
-      else if(t.subcategory === SIS_IN) rows.push({ t, delta: -amt, label: '妹妹幫我買' });
-    } else if(t.type === 'transfer' && w && String(t.note || '').indexOf(SIS_SETTLE_NOTE) === 0){
+    if(t.type === 'expense'){
+      if(t.category === SIS_CATEGORY_NAME && t.subcategory === SIS_OUT) rows.push({ t, delta: amt, label: '我幫妹妹買' });
+      else if(isSisterPaid_(t)) rows.push({ t, delta: -amt, label: '妹妹先付' });
+      else if(t.category === SIS_REPAY_OUT) rows.push({ t, delta: amt, label: '我已還妹妹' });
+    } else if(t.type === 'income' && t.category === SIS_REPAY_IN){
+      rows.push({ t, delta: -amt, label: '妹妹已還我' });
+    } else if(t.type === 'transfer' && w && String(t.note || '').indexOf(SIS_SETTLE_NOTE) === 0){ // 舊版「代購結清」轉帳
       if(t.accountId === w.id && t.toAccountId !== w.id) rows.push({ t, delta: -amt, label: '妹妹已還我' });
       else if(t.toAccountId === w.id && t.accountId !== w.id) rows.push({ t, delta: amt, label: '我已還妹妹' });
     }
@@ -4066,73 +4066,150 @@ function sisterRows_(){
   return rows.sort((a,b) => (a.t.date < b.t.date ? 1 : -1));
 }
 let sisterLedgerOpen_ = false;
-window.toggleSisterLedger_ = () => { sisterLedgerOpen_ = !sisterLedgerOpen_; renderSisterLedger_($('#sisterLedgerModal')); };
-function renderSisterLedger_(container){
-  const rows = sisterRows_();
-  const net = rows.reduce((s,r) => s + r.delta, 0);
-  if(!rows.length){ container.innerHTML = ''; return 0; }
-  const settled = Math.abs(net) < 0.005;
-  const w = sisterAccount_();
-  const detail = sisterLedgerOpen_ ? `<div class="rank-sub-list" style="margin-top:8px;" onclick="event.stopPropagation()"><div class="acc-month-tx-list" style="max-height:260px;">${rows.map(r => {
-    const t = r.t;
-    const plus = r.delta > 0;
-    return `<div class="acc-month-tx">
-      <div class="acc-month-tx-main">
-        <div class="acc-month-tx-cat">${escapeHtml(t.note || r.label)}</div>
-        <div class="acc-month-tx-date">${escapeHtml(t.date)} · ${r.label}</div>
-      </div>
-      <div class="acc-month-tx-amt" style="color:${plus ? 'var(--sis)' : 'var(--green)'}">${plus ? '+' : '-'}$${fmt(Math.abs(r.delta))}</div>
-    </div>`;
-  }).join('')}</div><div class="item-note" style="margin-top:6px;">＋＝妹妹欠我，－＝我欠妹妹（或對方已還）</div></div>` : '';
-  container.innerHTML = `<div class="orders-head"><span style="color:var(--sis);">妹妹往來</span><small>代購互相墊款，自動抵銷</small></div>
-    <div class="item-card sis-item" style="margin-bottom:8px;cursor:pointer;" onclick="toggleSisterLedger_()">
-      <div class="item-top">
-        <div>
-          <div class="item-name">${settled ? '已結清' : (net > 0 ? '妹妹欠你' : '你欠妹妹')} <span style="font-size:11px;color:var(--ink-soft);">${sisterLedgerOpen_ ? '▼ 收合明細' : '▶ 點擊看明細'}</span></div>
-          <div class="item-note">${settled ? '目前沒有待結清的代購款項' : (net > 0 ? '我先墊的代購款，妹妹還沒還' : '妹妹先墊的代購款，我還沒還')}</div>
-        </div>
-        <div class="item-value">${settled ? '$0' : '$' + fmt(Math.abs(net))}</div>
-      </div>
-      ${detail}
-      ${!settled && w ? `<div class="item-actions"><button class="small" onclick="event.stopPropagation(); settleSister_(${net})">${net > 0 ? '妹妹還我（記帳）' : '我還妹妹（記帳）'}</button></div>` : ''}
-      ${!settled && !w ? '<div class="item-note">要先有名稱含「妹妹」的帳戶（例如妹妹共同錢包），才能記結清。</div>' : ''}
-    </div>`;
-  return settled ? 0 : 1;
+window.toggleSisterLedger_ = () => { sisterLedgerOpen_ = !sisterLedgerOpen_; renderSponsorOwed_($('#sponsorOwedModal')); };
+function arrow_(up, down){ return `本月 <span style="color:var(--green)">▲$${fmt(up)}</span> <span style="color:var(--red)">▼$${fmt(down)}</span>`; }
+function renderSponsorOwed_(container){
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  const month = todayStr_().slice(0,7);
+  let attention = 0;
+  const cards = [];
+  SPONSOR_PEOPLE.forEach(p => {
+    const st = sponsorStats_(p);
+    if(!st.inc && !st.spent) return;
+    const lines = [];
+    const line = (txt, btn) => lines.push(`<div class="item-note" style="margin-top:6px;display:flex;justify-content:space-between;gap:8px;align-items:center;"><span>${txt}</span>${btn || ''}</div>`);
+    Object.entries(st.fronted).forEach(([id, v]) => {
+      if(v > 0.005 && byId[id]) line(`${escapeHtml(byId[id])} 先墊 $${fmt(v)}`, `<button class="small" onclick="reimburseSponsor_('${p.key}','${id}',${v})">用${p.name}的錢補回</button>`);
+    });
+    if(st.sister > 0.005) line(`妹妹先付 $${fmt(st.sister)}（還沒還她）`, `<button class="small" onclick="repaySisterFromSponsor_('${p.key}',${st.sister})">還妹妹</button>`);
+    if(st.partner > 0.005) line(`另一半先付 $${fmt(st.partner)}（共同帳本結算時，用${p.name}的錢付）`);
+    if(lines.length) attention++;
+    const rem = st.remaining;
+    if(rem < -0.005){ line(`已超支 $${fmt(-rem)}：你先墊了自己的錢，等${p.name}補給你（再記一筆「${p.cat}」收入就會自動抵掉）`); attention++; }
+    if(rem > 0.005) line(`剩餘 $${fmt(rem)} 要不要結清？`, `<button class="small" onclick="closeSponsor_('${p.key}')">結清剩餘</button>`);
+    cards.push(`<div class="item-card sponsor-item" style="margin-bottom:8px;">
+      <div class="item-top"><div>
+        <div class="item-name">${p.name}贊助款 <span style="font-size:11px;color:var(--ink-soft);">${rem < -0.005 ? '你先墊' : '剩餘'}</span></div>
+        <div class="item-note">${arrow_(st.mIn, st.mOut)}</div>
+      </div><div class="item-value">$${fmt(Math.abs(rem))}</div></div>${lines.join('')}</div>`);
+  });
+  // 妹妹
+  const sRows = sisterRows_();
+  if(sRows.length){
+    const net = sRows.reduce((s,r) => s + r.delta, 0);
+    const settled = Math.abs(net) < 0.005;
+    const up = sRows.filter(r => r.delta > 0 && String(r.t.date || '').startsWith(month)).reduce((s,r) => s + r.delta, 0);
+    const down = sRows.filter(r => r.delta < 0 && String(r.t.date || '').startsWith(month)).reduce((s,r) => s - r.delta, 0);
+    const detail = sisterLedgerOpen_ ? `<div class="rank-sub-list" style="margin-top:8px;" onclick="event.stopPropagation()"><div class="acc-month-tx-list" style="max-height:260px;">${sRows.map(r => `<div class="acc-month-tx">
+      <div class="acc-month-tx-main"><div class="acc-month-tx-cat">${escapeHtml(r.t.note || r.label)}</div><div class="acc-month-tx-date">${escapeHtml(r.t.date)} · ${r.label}</div></div>
+      <div class="acc-month-tx-amt" style="color:${r.delta > 0 ? 'var(--sis)' : 'var(--green)'}">${r.delta > 0 ? '+' : '-'}$${fmt(Math.abs(r.delta))}</div></div>`).join('')}</div><div class="item-note" style="margin-top:6px;">＋＝妹妹欠我，－＝我欠妹妹（或已還）</div></div>` : '';
+    if(!settled) attention++;
+    cards.push(`<div class="item-card sis-item" style="margin-bottom:8px;cursor:pointer;" onclick="toggleSisterLedger_()">
+      <div class="item-top"><div>
+        <div class="item-name">${settled ? '妹妹：已結清' : (net > 0 ? '妹妹欠你' : '你欠妹妹')} <span style="font-size:11px;color:var(--ink-soft);">${sisterLedgerOpen_ ? '▼ 收合明細' : '▶ 點擊看明細'}</span></div>
+        <div class="item-note">${arrow_(up, down)}（▲妹妹欠我增加　▼我欠她增加／已還）</div>
+      </div><div class="item-value">$${fmt(Math.abs(net))}</div></div>${detail}
+      ${settled ? '' : `<div class="item-actions"><button class="small" onclick="event.stopPropagation(); settleSister_(${net})">${net > 0 ? '妹妹還我（記帳）' : '我還妹妹（記帳）'}</button></div>`}
+    </div>`);
+  }
+  // 另一半（共同帳本）
+  const pItems = ledgerUnsettledItems();
+  if(pItems.length){
+    const pNet = ledgerBalance(pItems);
+    if(Math.abs(pNet) >= 0.005){ attention++; }
+    cards.push(`<div class="item-card" style="margin-bottom:8px;">
+      <div class="item-top"><div>
+        <div class="item-name">${Math.abs(pNet) < 0.005 ? '另一半：打平' : (pNet > 0 ? '另一半欠你' : '你欠另一半')}</div>
+        <div class="item-note">共 ${pItems.length} 筆未結算，到「記帳 › 共同帳本」結算</div>
+      </div><div class="item-value">$${fmt(Math.abs(pNet))}</div></div></div>`);
+  }
+  if(!cards.length){ container.innerHTML = ''; return 0; }
+  container.innerHTML = `<div class="orders-head"><span style="color:var(--sponsor);">往來總覽</span><small>爸媽贊助款剩餘・妹妹・另一半</small></div>${cards.join('')}`;
+  return attention;
 }
-// 結清：自動開啟轉帳表單，備註帶「代購結清」，金額＝目前淨額；帳戶可以改成實際收付款的帳戶
-window.settleSister_ = net => {
-  const w = sisterAccount_();
-  if(!w) return;
+function renderSisterLedger_(container){ if(container) container.innerHTML = ''; return 0; } // 已併入 renderSponsorOwed_ 的往來總覽
+
+// 補回先墊的錢：開啟轉帳表單，「這位爸／媽的贊助金帳戶 → 先墊的帳戶」，確認後儲存
+window.reimburseSponsor_ = (key, toId, amount) => {
+  const p = SPONSOR_PEOPLE.find(x => x.key === key);
+  const w = p && sponsorWallets_(p)[0];
+  if(!w){ alert(`找不到名稱含「${p ? p.name : ''}」與「贊助金」的帳戶，請先到帳戶管理建立（例如「${p ? p.name : ''}贊助金」）。`); return; }
   if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
   resetTransactionForm();
   $('#trDetails').open = true;
   setTrType('transfer');
-  const myAccId = defaultCashAccountId() || (state.accounts.find(a => a.id !== w.id) || {}).id || '';
-  if(net > 0){ $('#trAccount').value = w.id; $('#trToAccount').value = myAccId; }   // 她還我：妹妹錢包 → 我的帳戶
-  else { $('#trAccount').value = myAccId; $('#trToAccount').value = w.id; }          // 我還她：我的帳戶 → 妹妹錢包
-  $('#trAmount').value = Math.abs(net).toFixed(2).replace(/\.00$/, '');
-  $('#trNote').value = SIS_SETTLE_NOTE;
+  $('#trAccount').value = w.id;
+  $('#trToAccount').value = toId;
+  $('#trAmount').value = Number(amount).toFixed(2).replace(/\.00$/, '');
+  $('#trNote').value = `${p.name}贊助款補回`;
 };
-// 子類別選「妹妹幫我買」：付款帳戶自動帶入妹妹錢包（她先付）
-$('#trSubcategory').addEventListener('change', () => {
-  if($('#trType').value !== 'expense' || $('#trCategory').value !== SIS_CATEGORY_NAME || $('#trSubcategory').value !== SIS_IN) return;
-  const w = sisterAccount_();
-  if(!w) return;
-  const sel = $('#trAccount');
-  if(![...sel.options].some(o => o.value === w.id)){
-    sel.insertAdjacentHTML('beforeend', `<option value="${w.id}">${escapeHtml(w.name)}（${escapeHtml(w.type)}）</option>`);
+// 用贊助款還妹妹：開啟「還妹妹」支出表單，帳戶帶入該爸／媽的贊助金帳戶
+window.repaySisterFromSponsor_ = (key, amount) => {
+  const p = SPONSOR_PEOPLE.find(x => x.key === key);
+  const w = p && sponsorWallets_(p)[0];
+  if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
+  resetTransactionForm();
+  $('#trDetails').open = true;
+  setTrType('expense', SIS_REPAY_OUT);
+  if(w){ ensureAccountOption_(w.id); $('#trAccount').value = w.id; }
+  $('#trAmount').value = Number(amount).toFixed(2).replace(/\.00$/, '');
+  $('#trNote').value = `還妹妹（${p.name}贊助款）`;
+};
+window.settleSister_ = net => {
+  if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
+  resetTransactionForm();
+  $('#trDetails').open = true;
+  if(net > 0) setTrType('income', SIS_REPAY_IN); else setTrType('expense', SIS_REPAY_OUT);
+  $('#trAmount').value = Math.abs(net).toFixed(2).replace(/\.00$/, '');
+  $('#trNote').value = net > 0 ? '妹妹還款' : '還妹妹';
+};
+// 直接新增一筆記帳（本機立即更新＋背景同步），結清用
+function addTxQuick_(data){
+  const tx = Object.assign({ subcategory:'', accountId:'', toAccountId:'', payer:'me', splitMode:'personal', settled:false, recurringId:'' }, data, { id: newClientId_(), updatedAt: new Date().toISOString() });
+  const deltas = {};
+  accumulateLocalDelta_(tx, 1, deltas);
+  upsertLocal('transactions', tx);
+  applyLocalDeltas_(deltas);
+  enqueueOp_('addTransactionTx', Object.assign({ force:true }, tx));
+  return tx;
+}
+// 結清剩餘：三選一，產生的「【結清】」紀錄都不影響收入／支出以外的統計
+//   1 歸自己：贊助支出沖銷（不填帳戶）＋ 額外收入（不填帳戶，錢本來就在你的帳戶裡）
+//   2 放進妹妹共同：贊助金帳戶 → 妹妹共用錢包 轉帳，並沖銷贊助餘額
+//   3 保留：什麼都不做，下次繼續用
+window.closeSponsor_ = key => {
+  const p = SPONSOR_PEOPLE.find(x => x.key === key);
+  if(!p) return;
+  const R = Math.round(sponsorStats_(p).remaining * 100) / 100;
+  if(R <= 0.005) return;
+  const ans = prompt(`${p.name}贊助款剩餘 $${fmt(R)}，要怎麼處理？\n\n1 = 歸自己（轉成額外收入）\n2 = 放進妹妹共同\n3 = 保留不動，下次繼續用`, '3');
+  if(ans !== '1' && ans !== '2') return;
+  const date = todayStr_();
+  const closing = { date, type:'expense', category:p.cat, amount:R, note:CLOSE_NOTE + (ans === '1' ? '剩餘歸自己' : '剩餘放進妹妹共同') };
+  if(ans === '2'){
+    const sis = sisterAccount_();
+    const w = sponsorWallets_(p)[0];
+    if(!sis || !w){ alert('需要有「妹妹共用錢包」與「' + p.name + '贊助金」兩個帳戶才能轉入，請先建立，或改選「歸自己」。'); return; }
+    addTxQuick_({ date, type:'transfer', category:'轉帳', amount:R, accountId:w.id, toAccountId:sis.id, note:CLOSE_NOTE + p.name + '贊助剩餘放進妹妹共同' });
+  } else {
+    addTxQuick_({ date, type:'income', category:'額外收入', subcategory:p.name, amount:R, note:CLOSE_NOTE + p.name + '贊助剩餘歸自己' });
   }
-  sel.value = w.id;
-});
+  addTxQuick_(closing);
+  renderAll();
+};
 
 // 贊助金類別：第一次連線後自動在「支出類別」建立主類別與預設子類別（只做一次；之後刪掉不會再自動長回來）
-const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v3';
+const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v4';
 async function ensureSponsorCategory_(){
   if(localStorage.getItem(SPONSOR_SEEDED_FLAG) || !state.dataLoaded_) return;
   try{
     const seeds = [
-      { type:'expense', name:SPONSOR_CATEGORY_NAME, subs:SPONSOR_DEFAULT_SUBS },
-      { type:'income', name:SPONSOR_CATEGORY_NAME, subs:[] },
+      { type:'expense', name:'爸爸贊助', subs:[] },
+      { type:'expense', name:'媽媽贊助', subs:[] },
+      { type:'income', name:'爸爸贊助', subs:[] },
+      { type:'income', name:'媽媽贊助', subs:[] },
+      { type:'expense', name:SIS_REPAY_OUT, subs:[] },
+      { type:'income', name:SIS_REPAY_IN, subs:[] },
       { type:'expense', name:SIS_CATEGORY_NAME, subs:[SIS_OUT, SIS_IN] }
     ];
     for(const seed of seeds){
@@ -4736,8 +4813,9 @@ $('#trForm').addEventListener('submit', async e => {
     };
   } else {
     const shared = $('#trShared').checked;
+    const sisterPaid = type === 'expense' && !shared && $('#trSisterPaid').checked;
     const splitMode = shared ? $('#trSplitMode').value : 'personal';
-    const payer = shared ? $('#trPayer').value : 'me';
+    const payer = shared ? $('#trPayer').value : (sisterPaid ? 'sister' : 'me');
     // 全額代墊只有在「我先付」時才代表整筆是對方的花費，才統一存成「代墊」；
     // 「對方先付」代表整筆其實是我的花費，要保留使用者自己選的類別。
     const isAdvance = splitMode === 'advance' && payer !== 'partner';
@@ -4761,6 +4839,11 @@ $('#trForm').addEventListener('submit', async e => {
       settled: false,
       recurringId: $('#trRecurringId').value || ''
     };
+  }
+  // 別人先付的錢（另一半／妹妹）不是從我的帳戶出的：帳戶一律清空，不扣我的餘額
+  if(data.type === 'expense' && (data.payer === 'partner' || data.payer === 'sister' || isSisterPaid_(data))){
+    data.accountId = '';
+    if(data.payer === 'me') data.payer = 'sister';
   }
   // 編輯既有記帳時保留原本的「已結算」狀態，不能因為改名稱／金額就又變成未結算、重新出現在共同款項
   if(id){
@@ -4895,6 +4978,8 @@ function resetTransactionForm(){
   $('#trToAccount').value = '';
   $('#trNote').value = '';
   $('#trShared').checked = false;
+  $('#trSisterPaid').checked = false;
+  $('#trAccount').disabled = false;
   $('#trLedgerFields').style.display = 'none';
   $('#trPayer').value = 'partner'; // 新增記帳勾選共同帳本時，預設「對方先付」
   $('#trSplitMode').value = 'split';
@@ -4922,11 +5007,13 @@ window.editTransaction = id => {
     setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
     $('#trAccount').value = t.accountId || '';
     const shared = t.splitMode && t.splitMode !== 'personal';
+    $('#trSisterPaid').checked = t.payer === 'sister';
     $('#trShared').checked = shared;
     $('#trLedgerFields').style.display = shared ? '' : 'none';
     $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
     $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
     syncCatRowVisibility();
+    syncPayerAccount_();
   }
   $('#trNote').value = t.note || '';
   $('#trRecurringId').value = t.recurringId || ''; // 保留固定支出標記

@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-10-12-recorder';
+const BACKEND_VERSION_ = '2026-10-27-people';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -268,6 +268,18 @@ function deleteRow_(key, id) {
 
 
 
+// 另一半／妹妹先付的支出，錢不是從我的帳戶出的：帳戶一律清空，避免扣到我的餘額。
+// 「代購／妹妹幫我買」也一律視為妹妹先付。只影響之後新增／編輯的紀錄；
+// 編輯舊紀錄時，舊的扣款仍會用原本的帳戶正確還原。
+function normalizePayerAccount_(d) {
+  if (d && d.type === 'expense' &&
+      (d.payer === 'partner' || d.payer === 'sister' ||
+       (d.category === '代購' && d.subcategory === '妹妹幫我買'))) {
+    d.accountId = '';
+  }
+  return d;
+}
+
 function txDelta_(type, amount, payer) {
   const amt = Number(amount) || 0;
   if (type === 'expense') return -amt;
@@ -407,6 +419,7 @@ function addTransactionTx_(data) {
   const isRetry = !!data.retry;
   delete data.force;
   delete data.retry;
+  normalizePayerAccount_(data);
   // 前端是先在本機存好才背景送出，網路逾時後會「重送」同一筆（帶同一個 id）。
   // 重送時先確認這個 id 是否其實已經寫進去了，避免重複記帳／重複扣餘額。
   // 第一次送出（絕大多數情況）不做這個檢查，維持最快速度。
@@ -431,6 +444,7 @@ function updateTransactionTx_(data) {
   const force = !!data.force;
   delete data.force;
   delete data.retry;
+  normalizePayerAccount_(data);
   if (!force) {
     const dup = findDuplicateTransaction_(data, data.id);
     if (dup) return { duplicate: dup };
@@ -458,6 +472,7 @@ function payOrderTx_(data) {
   delete data.orderId;
   delete data.force;
   delete data.retry;
+  normalizePayerAccount_(data);
   const orderRow = orderId ? findRowIndexById_('orders', orderId) : -1;
   if (data.id && findRowIndexById_('transactions', data.id) !== -1) {
     if (orderRow !== -1) getSheet_('orders').deleteRow(orderRow);
@@ -628,6 +643,7 @@ function batchAdd_(key, rows) {
       seenKeys[k] = true;
     }
     const data = Object.assign({}, r);
+    if (isTx) normalizePayerAccount_(data);
     data.id = Utilities.getUuid();
     data.updatedAt = now;
     matrix.push(buildRowArray_(key, data)); // 依實際欄位順序組列，不假設固定順序
@@ -1256,3 +1272,76 @@ function doPost(e) {
 }
 
 
+
+
+// ============================================================
+// 一次性遷移（在 Apps Script 編輯器手動執行一次即可，可重複執行不會重複改）：
+//  1. 建立類別：支出「爸爸贊助／媽媽贊助／還妹妹」、收入「爸爸贊助／媽媽贊助／妹妹還款」
+//  2. 舊「贊助金」紀錄 → 依子類別／帳戶／備註歸到爸爸贊助或媽媽贊助（子類別清空）
+//  3. 爸爸贊助、但是從「妹妹」帳戶付的 → 改成「妹妹先付」、帳戶清空（妹妹用信用卡先付）
+//  4. 2026-09-12 抹布 120（另一半先付）清掉誤填的現金帳戶
+//  5. 租屋車站 140 改成「我用現金先付」（原本誤標成另一半先付）
+//  全部走 updateTransactionTx_，帳戶餘額會自動還原再重算。
+// 完成後會移除沒有紀錄在用的舊「贊助金」主類別。
+// ============================================================
+function migrateSponsorV2() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return '系統忙碌中，請稍後再執行一次。';
+  const log = [];
+  try {
+    [['expense', '爸爸贊助'], ['expense', '媽媽贊助'], ['expense', '還妹妹'],
+     ['income', '爸爸贊助'], ['income', '媽媽贊助'], ['income', '妹妹還款']].forEach(function (c) {
+      try { addMainCategory_(c[0], c[1]); log.push('新增類別 ' + c[0] + '／' + c[1]); } catch (e) { /* 已存在 */ }
+    });
+
+    const accounts = readAll_('accounts');
+    const nameOf = {};
+    accounts.forEach(function (a) { nameOf[a.id] = String(a.name || ''); });
+    const cash = accounts.filter(function (a) { return String(a.name) === '現金'; })[0];
+    const sisters = accounts.filter(function (a) { return String(a.name).indexOf('妹妹') !== -1; }).map(function (a) { return a.id; });
+
+    const txs = readTransactionsSince_('').rows;
+    let changed = 0;
+    txs.forEach(function (t) {
+      const patch = {};
+      if (t.category === '贊助金' && (t.type === 'expense' || t.type === 'income')) {
+        const hay = [t.subcategory, nameOf[t.accountId], t.note].map(function (x) { return String(x || ''); }).join('|');
+        const isDad = String(t.subcategory || '').indexOf('爸') !== -1 ||
+          (String(t.subcategory || '').indexOf('媽') === -1 && hay.indexOf('爸') !== -1);
+        patch.category = isDad ? '爸爸贊助' : '媽媽贊助';
+        patch.subcategory = '';
+      }
+      const cat = patch.category || t.category;
+      if (t.type === 'expense' && cat === '爸爸贊助' && sisters.indexOf(t.accountId) !== -1) {
+        patch.payer = 'sister';
+        patch.splitMode = 'personal';
+        patch.accountId = '';
+      }
+      if (t.type === 'expense' && String(t.note) === '妹妹抹布12條' && t.date === '2026-09-12' && t.payer === 'partner' && t.accountId) {
+        patch.accountId = '';
+      }
+      if (t.type === 'expense' && String(t.note) === '租屋車站' && t.payer === 'partner' && !t.accountId && cash) {
+        patch.payer = 'me';
+        patch.splitMode = 'personal';
+        patch.accountId = cash.id;
+      }
+      if (!Object.keys(patch).length) return;
+      updateTransactionTx_(Object.assign({}, t, patch, { force: true }));
+      changed++;
+      log.push('更新 ' + t.date + ' ' + (t.note || t.category) + ' ' + JSON.stringify(patch));
+    });
+
+    // 舊的「贊助金」主類別已沒有紀錄在用，就從類別表移除
+    const stillUsed = readTransactionsSince_('').rows.some(function (t) { return t.category === '贊助金'; });
+    if (!stillUsed) {
+      ['expense', 'income'].forEach(function (type) { removeMainCategory_(type, '贊助金'); });
+      log.push('已移除舊的「贊助金」主類別');
+    }
+    log.unshift('完成：共更新 ' + changed + ' 筆紀錄。');
+  } finally {
+    lock.releaseLock();
+  }
+  const report = log.join('\n');
+  Logger.log(report);
+  return report;
+}
