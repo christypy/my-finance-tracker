@@ -1196,6 +1196,13 @@
           <div id="statsFixedVsFlex"></div>
         </div>
 
+        <!-- ④-2 贊助金支出（專款，不計入自己的花費與預算） -->
+        <div class="stat-section" id="statsSponsorSection">
+          <h3>贊助金支出（專款，不計入預算）</h3>
+          <p class="hint" style="margin-bottom:10px;">主類別「贊助金」的支出會獨立顯示在這裡，不會算進上面的支出、月預算與排行榜。記帳時帳戶選「贊助金」專款帳戶，就能看出有沒有超支動用到自己的錢。</p>
+          <div id="statsSponsor"></div>
+        </div>
+
         <!-- ⑤ 收入來源 -->
         <div class="stat-section">
           <h3>收入品項分佈</h3>
@@ -1514,7 +1521,7 @@ try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persis
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-10-12-recorder';
+const FRONTEND_VERSION = '2026-10-12-recorder'; // 贊助金功能只改前端，後端版本號不變
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -1888,7 +1895,7 @@ async function loadAll(){
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
     generateRecurringOrdersNow_();
-    migrateLocalCategoriesIfNeeded_().then(() => {
+    migrateLocalCategoriesIfNeeded_().then(() => ensureSponsorCategory_()).then(() => {
       if(dirty) dirty.categories = true;
       renderVisibleSection();
     });
@@ -2703,7 +2710,7 @@ function trExpenseOfDate_(dateStr){
   // 跟月/年統計一致：不含轉帳、結算，也不含「代墊」（代墊是幫對方先出的錢，
   // 不算自己真正的花費）；共同分攤的支出只算我自己該負擔的份額，不是全額。
   return state.transactions
-    .filter(t => t.date === dateStr && t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME)
+    .filter(t => t.date === dateStr && t.type === 'expense' && !isOffBudgetCategory_(t.category))
     .reduce((s,t) => s + myExpenseShare_(t), 0);
 }
 function renderTrAvailAndBudget_(){
@@ -3330,6 +3337,11 @@ $('#tplAmount').addEventListener('wheel', () => { $('#tplAmount').blur(); }, { p
 // 只是對方先幫我出錢而已——這筆錢本來就要記在我自己的類別下（餐飲/交通...），
 // 所以這種情況不應該強制歸類成「代墊」，要讓使用者自己選類別。
 const ADVANCE_CATEGORY_NAME = '代墊';
+// 贊助金（爸媽給的專款、幫忙花費用）：跟「代墊」一樣不算進月預算與支出統計，
+// 但獨立成自己的主類別，在統計分析有專屬區塊，不跟共同帳本的代墊混在一起。
+const SPONSOR_CATEGORY_NAME = '贊助金';
+const SPONSOR_DEFAULT_SUBS = ['計程車','停車費','餐費','手機','其他'];
+function isOffBudgetCategory_(c){ return c === ADVANCE_CATEGORY_NAME || c === SPONSOR_CATEGORY_NAME; }
 // 共同帳本的支出，不管誰付款，統計「我的花費」時都只該算我實際要負擔的那一份：
 //   personal 個人：全額都是我的
 //   split    平分：不管誰先付，我只要負擔一半
@@ -3478,7 +3490,7 @@ function previousPeriodStr(period, mode){
 function expenseTotalOf(period){
   // 共同分攤的支出只算我自己該負擔的份額（平分算一半、全額代墊看誰先付），不是整筆金額。
   return transactionsInPeriod(period)
-    .filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME)
+    .filter(t => t.type === 'expense' && !isOffBudgetCategory_(t.category))
     .reduce((s,t) => s + myExpenseShare_(t), 0);
 }
 // 效能：以前「跟平均比」每次都是「列出全部有資料的期間 → 對每個期間各自重新掃一次
@@ -3487,7 +3499,7 @@ function expenseTotalOf(period){
 function expenseTotalsByPeriod_(mode){
   const map = {};
   state.transactions.forEach(t => {
-    if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+    if(t.type !== 'expense' || isOffBudgetCategory_(t.category)) return;
     const d = t.date || '';
     if(!d) return;
     const key = mode === 'month' ? d.slice(0,7) : d.slice(0,4);
@@ -3534,7 +3546,7 @@ function categoryStatsFor(rows, type){
   let total = 0;
   rows
     // 全額代墊給對方的款項不算「支出」，排行榜／圓餅圖裡不會出現這個類別
-    .filter(t => t.type === type && !(type === 'expense' && t.category === ADVANCE_CATEGORY_NAME))
+    .filter(t => t.type === type && !(type === 'expense' && isOffBudgetCategory_(t.category)))
     .forEach(t => {
       const cat = t.category || '其他';
       // 共同分攤的支出只算我自己該負擔的份額，不是整筆金額
@@ -3630,7 +3642,7 @@ function isFixedExpense_(t){
   });
 }
 function renderFixedVsFlexible(container, rows){
-  const expenseRows = rows.filter(t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME);
+  const expenseRows = rows.filter(t => t.type === 'expense' && !isOffBudgetCategory_(t.category));
   const total = expenseRows.reduce((s,t) => s + myExpenseShare_(t), 0);
   if(!total){
     container.innerHTML = `<div class="empty">這段期間沒有支出資料。</div>`;
@@ -3706,7 +3718,7 @@ function renderStats(){
   // 自己的花費，只是先幫對方付、之後會透過共同帳本結算拿回來，所以不算進「支出」統計。
   // 另外，共同分攤的支出（splitMode === 'split'）不管誰先付，「支出」統計都只算我自己
   // 該負擔的那一份，不是整筆金額，見 myExpenseShare_。
-  const isRealExpense_ = t => t.type === 'expense' && t.category !== ADVANCE_CATEGORY_NAME;
+  const isRealExpense_ = t => t.type === 'expense' && !isOffBudgetCategory_(t.category);
   const incomeTotal = rows.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+myExpenseShare_(t),0);
   // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
@@ -3716,7 +3728,7 @@ function renderStats(){
   const incomeWithAccount = rowsWithAccount.filter(t=>t.type==='income').reduce((s,t)=>s+(Number(t.amount)||0),0);
   // 結餘算的是帳戶裡實際增減的錢，代墊款項雖然不算「支出」，但錢確實從帳戶流出了，
   // 所以這裡仍然要把它算進去，結餘才會跟帳戶餘額對得起來。
-  const expenseWithAccount = rowsWithAccount.filter(t=>t.type==='expense').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const expenseWithAccount = rowsWithAccount.filter(t=>t.type==='expense' && t.category !== SPONSOR_CATEGORY_NAME).reduce((s,t)=>s+(Number(t.amount)||0),0);
   const net = incomeWithAccount - expenseWithAccount;
 
   // ① 本期關鍵指標：收支結餘之外，加上儲蓄率、日均花費、（未過完的期間）預估總支出
@@ -3755,7 +3767,7 @@ function renderStats(){
     $('#statsTrendHint').textContent = '看這個年度 12 個月各花了多少，最高的月份會特別標出金額，今年目前的月份則會用金色標出。';
     const monthlyExpense = Array(12).fill(0);
     state.transactions.forEach(t => {
-      if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+      if(t.type !== 'expense' || isOffBudgetCategory_(t.category)) return;
       const d = t.date || '';
       if(!d.startsWith(period)) return;
       const m = parseInt(d.slice(5,7), 10) - 1;
@@ -3782,9 +3794,86 @@ function renderStats(){
   // ④ 固定 vs 彈性支出
   renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
 
+  // ④-2 贊助金支出
+  renderSponsorStats_($('#statsSponsor'), rows);
+
   // ⑤ 收入來源
   const inc = breakdownByCategory(rows, 'income');
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
+}
+
+
+// ---------- 贊助金支出：獨立統計（總額、筆數、子類別分佈、專款帳戶餘額、明細） ----------
+function renderSponsorStats_(container, rows){
+  const sponsorRows = rows
+    .filter(t => t.type === 'expense' && t.category === SPONSOR_CATEGORY_NAME)
+    .sort((a,b) => (a.date < b.date ? 1 : -1));
+  const sponsorAccounts = state.accounts.filter(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
+  if(!sponsorRows.length && !sponsorAccounts.length){
+    container.innerHTML = `<div class="empty">這段期間沒有贊助金支出。</div>`;
+    return;
+  }
+  const total = sponsorRows.reduce((s,t) => s + (Number(t.amount) || 0), 0);
+  const subMap = {};
+  sponsorRows.forEach(t => {
+    const sub = (t.subcategory || '').trim() || '未分類';
+    subMap[sub] = (subMap[sub] || 0) + (Number(t.amount) || 0);
+  });
+  const subItems = Object.entries(subMap).sort((a,b) => b[1] - a[1]);
+  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
+  const accHtml = sponsorAccounts.map(a => {
+    const bal = Number(a.balance) || 0;
+    return `<div class="summary-card"><div class="label">${escapeHtml(a.name)} 餘額</div><div class="value" style="color:${bal < 0 ? 'var(--red)' : 'var(--green)'}">$${fmt(bal)}</div>${bal < 0 ? '<div style="font-size:10px;color:var(--red);margin-top:3px;">已超支，動用到自己的錢</div>' : ''}</div>`;
+  }).join('');
+  const barsHtml = subItems.map(([label, val]) => {
+    const pct = total ? Math.round(val / total * 100) : 0;
+    return `<div class="stat-bar-row">
+      <div class="stat-bar-label">${escapeHtml(label)}</div>
+      <div class="stat-bar-track"><div class="stat-bar-fill flexible" style="width:${pct}%"></div></div>
+      <div class="stat-bar-value">$${fmt(val)} (${pct}%)</div>
+    </div>`;
+  }).join('');
+  const detailHtml = sponsorRows.map(t => {
+    const label = t.note || t.subcategory || SPONSOR_CATEGORY_NAME;
+    const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '未指定帳戶';
+    return `<div class="acc-month-tx">
+      <div class="acc-month-tx-main">
+        <div class="acc-month-tx-cat">${escapeHtml(label)}${t.subcategory && t.note ? '（' + escapeHtml(t.subcategory) + '）' : ''}</div>
+        <div class="acc-month-tx-date">${escapeHtml(t.date)} · ${escapeHtml(acc)}</div>
+      </div>
+      <div class="acc-month-tx-amt">$${fmt(t.amount)}</div>
+    </div>`;
+  }).join('');
+  container.innerHTML = `
+    <div class="summary-grid">
+      <div class="summary-card"><div class="label">本期贊助金支出</div><div class="value">$${fmt(total)}</div></div>
+      <div class="summary-card"><div class="label">筆數</div><div class="value">${sponsorRows.length}</div></div>
+      ${accHtml}
+    </div>
+    ${barsHtml}
+    ${sponsorRows.length ? `<div class="rank-sub-list" style="margin-top:10px;"><div class="acc-month-tx-list" style="max-height:260px;">${detailHtml}</div></div>` : ''}`;
+}
+
+// 贊助金類別：第一次連線後自動在「支出類別」建立主類別與預設子類別（只做一次；之後刪掉不會再自動長回來）
+const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v1';
+async function ensureSponsorCategory_(){
+  if(localStorage.getItem(SPONSOR_SEEDED_FLAG) || !state.dataLoaded_) return;
+  try{
+    if(!getCategoryNames('expense').includes(SPONSOR_CATEGORY_NAME)){
+      await addMainCategory('expense', SPONSOR_CATEGORY_NAME);
+    }
+    for(const sub of SPONSOR_DEFAULT_SUBS){
+      if(!getSubcategories('expense', SPONSOR_CATEGORY_NAME).includes(sub)){
+        await addSubCategory('expense', SPONSOR_CATEGORY_NAME, sub);
+      }
+    }
+    localStorage.setItem(SPONSOR_SEEDED_FLAG, '1');
+    dirty.categories = true;
+    refreshCategoryDependents();
+    renderVisibleSection();
+  }catch(err){
+    console.warn('自動建立「贊助金」類別失敗，可到「類別設定」手動新增：', err);
+  }
 }
 
 // 這個月每一天的支出金額陣列（index 0 = 1 號），全額代墊款項不算支出，
@@ -3792,7 +3881,7 @@ function renderStats(){
 function dailyExpenseArray(period, nDays){
   const arr = Array(nDays).fill(0);
   state.transactions.forEach(t => {
-    if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+    if(t.type !== 'expense' || isOffBudgetCategory_(t.category)) return;
     const d = t.date || '';
     if(!d.startsWith(period)) return;
     const day = parseInt(d.slice(8, 10), 10) - 1;
@@ -3920,7 +4009,7 @@ function hexToRgb_(hex){
 function renderCategoryMonthCharts(year){
   const catMap = {}; // { 主類別: { arr:[12個月金額], monthSubs:[12個{子類別:金額}], count } }
   state.transactions.forEach(t => {
-    if(t.type !== 'expense' || t.category === ADVANCE_CATEGORY_NAME) return;
+    if(t.type !== 'expense' || isOffBudgetCategory_(t.category)) return;
     const d = t.date || '';
     if(!d.startsWith(year)) return;
     const m = parseInt(d.slice(5,7), 10) - 1;
