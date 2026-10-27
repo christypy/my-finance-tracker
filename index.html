@@ -1073,8 +1073,12 @@
             <button type="button" class="small primary" data-kind="all">全部</button>
             <button type="button" class="small" data-kind="income">收入</button>
             <button type="button" class="small" data-kind="expense">支出</button>
+            <button type="button" class="small" data-kind="project">專案</button>
           </div>
-          <button type="button" class="small" id="trBatchToggleBtn">批次刪除</button>
+          <div id="trBatchEntry" style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="small primary-outline" id="trBatchStartMoveBtn">批次轉入專案</button>
+            <button type="button" class="small danger" id="trBatchStartDeleteBtn">批次刪除</button>
+          </div>
           <div id="trBatchControls" style="display:none;">
             <button type="button" class="small" id="trBatchSelectAllBtn">全選本頁</button>
             <button type="button" class="small" id="trBatchClearBtn">取消全選</button>
@@ -3110,20 +3114,47 @@ $('#payOrderForm').addEventListener('submit', e => {
 // 開啟批次模式後，每筆記帳前面會出現勾選框；勾好之後按「刪除已選」一次刪掉，
 // 帳戶餘額會透過後端 batchDeleteTransactionsTx（內部逐筆呼叫跟單筆刪除一樣的
 // 還原邏輯）自動還原，不用自己重新調整帳戶。
+// trBatchMode：false＝一般、'move'＝批次轉入專案、'delete'＝批次刪除。
+// 兩種模式只會在「可以做這個動作」的記帳前面顯示勾選框。
 let trBatchMode = false;
 let trBatchSelected = new Set();
+function trBatchEligible_(t, mode){
+  if(!t) return false;
+  if(mode === 'move') return t.type === 'expense' && !t.projectId;
+  if(mode === 'delete') return !(t.projectId || t.type === 'project');
+  return false;
+}
 function trBatchCheckboxHtml_(id){
+  if(!trBatchMode) return '';
+  const t = state.transactions.find(x => x.id === id);
+  if(!trBatchEligible_(t, trBatchMode)) return '';
   const checked = trBatchSelected.has(id) ? 'checked' : '';
   return `<label class="tr-batch-check-wrap"><input type="checkbox" class="tr-batch-check" data-id="${id}" ${checked}></label>`;
 }
+// 只取「目前畫面上看得到、而且已勾選」的項目，避免換了篩選／日期後誤動到看不見的紀錄
+function trBatchVisibleSelected_(){
+  return $$('#transactionsList .tr-batch-check').map(cb => cb.dataset.id).filter(id => trBatchSelected.has(id));
+}
 function updateTrBatchBarUI_(){
-  $('#transactionsList').classList.toggle('batch-mode', trBatchMode);
-  $('#trBatchToggleBtn').style.display = trBatchMode ? 'none' : '';
+  $('#transactionsList').classList.toggle('batch-mode', !!trBatchMode);
+  $('#trBatchEntry').style.display = trBatchMode ? 'none' : 'flex';
   $('#trBatchControls').style.display = trBatchMode ? '' : 'none';
+  $('#trBatchMoveBtn').style.display = trBatchMode === 'move' ? '' : 'none';
+  $('#trBatchDeleteBtn').style.display = trBatchMode === 'delete' ? '' : 'none';
   $('#trBatchCount').textContent = `已選 ${trBatchSelected.size} 筆`;
 }
-$('#trBatchToggleBtn').addEventListener('click', () => {
-  trBatchMode = true;
+$('#trBatchStartDeleteBtn').addEventListener('click', () => {
+  trBatchMode = 'delete';
+  trBatchSelected.clear();
+  updateTrBatchBarUI_();
+  renderTransactions();
+});
+$('#trBatchStartMoveBtn').addEventListener('click', () => {
+  if(!(state.projects || []).some(p => p.status !== 'closed')){
+    alert('目前沒有進行中的專案，請先到「專案」頁新增一個。');
+    return;
+  }
+  trBatchMode = 'move';
   trBatchSelected.clear();
   updateTrBatchBarUI_();
   renderTransactions();
@@ -3150,7 +3181,7 @@ $('#transactionsList').addEventListener('change', e => {
   updateTrBatchBarUI_();
 });
 $('#trBatchDeleteBtn').addEventListener('click', async () => {
-  const ids = Array.from(trBatchSelected).filter(id => { const t = state.transactions.find(x => x.id === id); return !(t && (t.projectId || t.type === 'project')); });
+  const ids = trBatchVisibleSelected_().filter(id => trBatchEligible_(state.transactions.find(x => x.id === id), 'delete'));
   if(!ids.length){ alert('請先勾選要刪除的記帳。'); return; }
   if(!confirm(`確定刪除這 ${ids.length} 筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。`)) return;
   try{
@@ -3172,6 +3203,8 @@ $('#trKindFilter').addEventListener('click', e => {
   if(!btn) return;
   trKindFilter = btn.dataset.kind;
   $$('#trKindFilter button').forEach(b => b.classList.toggle('primary', b === btn));
+  trBatchSelected.clear();
+  updateTrBatchBarUI_();
   renderTransactions();
 });
 
@@ -3207,9 +3240,13 @@ function renderTransactions(){
 
   if(trKindFilter === 'income') rows = rows.filter(t => t.type === 'income');
   else if(trKindFilter === 'expense') rows = rows.filter(t => t.type === 'expense');
+  else if(trKindFilter === 'project') rows = rows.filter(t => t.projectId || t.type === 'project');
   const sumEl = $('#trKindSummary');
   if(trKindFilter === 'all'){
     sumEl.style.display = 'none';
+  } else if(trKindFilter === 'project'){
+    sumEl.textContent = `專案：共 ${rows.length} 筆（專案結案時整合進記帳的紀錄；進行中的專案支出請到「專案」頁查看）`;
+    sumEl.style.display = '';
   } else {
     const kindLabel = { income:'收入', expense:'支出' }[trKindFilter];
     const total = rows.reduce((s,t) => s + (trKindFilter === 'expense' ? myExpenseShare_(t) : (Number(t.amount)||0)), 0);
@@ -3218,7 +3255,7 @@ function renderTransactions(){
   }
 
   if(!rows.length){
-    list.innerHTML = `<div class="empty">${trKindFilter === 'all' ? emptyMsg : '這個範圍內沒有符合的記帳紀錄。'}</div>`;
+    list.innerHTML = `<div class="empty">${trKindFilter === 'all' ? emptyMsg : (trKindFilter === 'project' ? '這個範圍內沒有專案結案產生的記帳紀錄。' : '這個範圍內沒有符合的記帳紀錄。')}</div>`;
     return;
   }
   list.innerHTML = rows.map(t => {
@@ -4249,8 +4286,8 @@ window.moveTxToProject_ = ids => {
   };
 };
 $('#trBatchMoveBtn').addEventListener('click', () => {
-  const ids = Array.from(trBatchSelected);
-  if(!ids.length){ alert('請先勾選要移到專案的記帳。'); return; }
+  const ids = trBatchVisibleSelected_();
+  if(!ids.length){ alert('請先勾選要轉入專案的記帳。'); return; }
   moveTxToProject_(ids);
 });
 
