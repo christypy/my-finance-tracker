@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-10-27-projects-v1';
+const BACKEND_VERSION_ = '2026-10-27-projects-v2';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -1343,6 +1343,48 @@ function deleteProjectTx_(id) {
   return { id: id, removedIds: removed.ids || [], accounts: removed.accounts || [] };
 }
 
+
+// 把已經記好的「支出」搬進專案，不用重新輸入：同一個呼叫內新增專案支出明細、
+// 刪除原本的記帳並還原帳戶餘額（之後專案結案時才會重新整合進帳戶）。
+// payer 對應：另一半先付→partner、妹妹先付→sister、有帳戶→me（用該帳戶付）、沒帳戶→fund。
+function moveTxToProjectTx_(data) {
+  const pIndex = findRowIndexById_('projects', data.projectId);
+  if (pIndex === -1) throw new Error('找不到這個專案');
+  const project = readRowObj_('projects', pIndex);
+  if (project.status === 'closed') throw new Error('這個專案已經結案，請先取消結案再搬入');
+  const idSet = {};
+  (data.ids || []).forEach(id => { idSet[String(id)] = true; });
+  const sheet = getSheet_('transactions');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { items: [], ids: [], accounts: [], skipped: (data.ids || []).length };
+  const headerRow = getActualHeaderRow_('transactions');
+  const idIdx = headerRow.indexOf('id');
+  const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const deltas = {};
+  const items = [], movedIds = [], rowsToDelete = [];
+  let skipped = 0;
+  for (let i = 0; i < values.length; i++) {
+    const rid = values[i][idIdx];
+    if (rid === '' || !idSet[String(rid)]) continue;
+    const obj = {};
+    headerRow.forEach((h, hi) => { if (h) obj[h] = normalizeCellValue_(h, values[i][hi]); });
+    if (obj.type !== 'expense' || obj.projectId) { skipped++; continue; }
+    const payer = obj.payer === 'partner' ? 'partner' : obj.payer === 'sister' ? 'sister' : (obj.accountId ? 'me' : 'fund');
+    const item = addRow_('projectItems', {
+      projectId: project.id, date: obj.date, name: obj.note || obj.category || '',
+      amount: Number(obj.amount) || 0, category: obj.category || '其他', payer: payer,
+      accountId: payer === 'me' ? obj.accountId : '', note: obj.subcategory ? String(obj.subcategory) : ''
+    });
+    items.push(item);
+    accumulateBalanceDelta_(obj, -1, deltas);
+    movedIds.push(rid);
+    rowsToDelete.push(i + 2);
+  }
+  const accounts = applyBalanceDeltas_(deltas);
+  rowsToDelete.sort((a, b) => b - a).forEach(r => sheet.deleteRow(r));
+  return { items: items, ids: movedIds, accounts: accounts, skipped: skipped };
+}
+
 function jsonOut_(obj) {
   obj.version = BACKEND_VERSION_;
   return ContentService.createTextOutput(JSON.stringify(obj))
@@ -1417,6 +1459,7 @@ function doPost(e) {
       if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });
       if (action === 'batchDeleteTransactionsTx') return jsonOut_({ ok: true, data: batchDeleteTransactionsTx_((body.data && body.data.ids) || []) });
       if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
+      if (action === 'moveTxToProjectTx') return jsonOut_({ ok: true, data: moveTxToProjectTx_(body.data) });
       if (action === 'closeProjectTx') return jsonOut_({ ok: true, data: closeProjectTx_(body.data) });
       if (action === 'reopenProjectTx') return jsonOut_({ ok: true, data: reopenProjectTx_(body.data && body.data.id) });
       if (action === 'deleteProjectTx') return jsonOut_({ ok: true, data: deleteProjectTx_(body.data && body.data.id) });

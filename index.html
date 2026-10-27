@@ -1079,6 +1079,7 @@
             <button type="button" class="small" id="trBatchSelectAllBtn">全選本頁</button>
             <button type="button" class="small" id="trBatchClearBtn">取消全選</button>
             <span class="hint" id="trBatchCount" style="margin:0 4px;">已選 0 筆</span>
+            <button type="button" class="small primary-outline" id="trBatchMoveBtn">移到專案</button>
             <button type="button" class="small danger" id="trBatchDeleteBtn">刪除已選</button>
             <button type="button" class="small" id="trBatchCancelBtn">取消</button>
           </div>
@@ -1549,7 +1550,7 @@ try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persis
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-10-27-projects-v1';
+const FRONTEND_VERSION = '2026-10-27-projects-v2';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -3319,6 +3320,7 @@ function renderTransactions(){
       </div>
       <div class="item-actions">
         <button class="small" onclick="editTransaction('${t.id}')">編輯</button>
+        ${isExpense ? `<button class="small" onclick="moveTxToProject_(['${t.id}'])">移到專案</button>` : ''}
         <button class="small danger" onclick="deleteTransaction('${t.id}')">刪除</button>
       </div>
     </div>`;
@@ -4211,6 +4213,48 @@ window.deleteProject_ = async id => {
     }, '刪除中…');
   }catch(err){ alert('刪除失敗：' + err.message); }
 };
+
+// ----- 把已記好的支出搬進專案（不用重新輸入）-----
+window.moveTxToProject_ = ids => {
+  ids = (ids || []).filter(id => {
+    const t = state.transactions.find(x => x.id === id);
+    return t && t.type === 'expense' && !t.projectId;
+  });
+  if(!ids.length){ alert('只有一般「支出」可以移到專案（收入、轉帳和專案結案產生的紀錄不行）。'); return; }
+  if(ids.some(id => syncQueue_.some(o => o.data && o.data.id === id))){ alert('有記帳還在同步到試算表，請等右上角同步完成後再試一次。'); return; }
+  const open = (state.projects || []).filter(p => p.status !== 'closed');
+  if(!open.length){ alert('目前沒有進行中的專案，請先到「專案」頁新增一個。'); return; }
+  const total = ids.reduce((s,id) => s + (Number((state.transactions.find(x => x.id === id) || {}).amount) || 0), 0);
+  projOpenModal_(`<h3>移到專案</h3>
+    <p class="pay-sub">共 ${ids.length} 筆、$${fmt(total)}。移過去後這些記帳會從記帳清單移除、帳戶餘額自動還原；專案結案時才會重新整合進帳戶。有帳戶的算「我先付」，沒帳戶的算「專款直接付」，另一半先付的維持原樣。</p>
+    <form class="entry" id="mvForm">
+      <label class="full">移到哪個專案<select id="mvProject">${open.map(p => `<option value="${p.id}">${escapeHtml(p.name)}（${escapeHtml(p.source || '')} $${fmt(p.fundAmount)}）</option>`).join('')}</select></label>
+      <div class="form-actions"><button type="submit" class="primary">確認移動</button><button type="button" id="mvCancel">取消</button></div>
+    </form>`);
+  $('#mvCancel').onclick = projCloseModal_;
+  $('#mvForm').onsubmit = async e => {
+    e.preventDefault();
+    const projectId = $('#mvProject').value;
+    try{
+      await runBusy(async () => {
+        const result = await apiPost('moveTxToProjectTx','transactions',{ ids, projectId });
+        (result.ids || []).forEach(id => removeLocal('transactions', id));
+        (result.items || []).forEach(i => upsertLocal('projectItems', i));
+        (result.accounts || []).forEach(a => upsertLocal('accounts', a));
+        projOpen_.add(projectId);
+        trBatchMode = false; trBatchSelected.clear(); updateTrBatchBarUI_();
+        projCloseModal_();
+        renderAll();
+        if(result.skipped) alert(`有 ${result.skipped} 筆不是一般支出，已略過。`);
+      }, '移動中…');
+    }catch(err){ alert('移動失敗：' + err.message + '\n（請確認 Apps Script 已更新並重新部署新版本。）'); }
+  };
+};
+$('#trBatchMoveBtn').addEventListener('click', () => {
+  const ids = Array.from(trBatchSelected);
+  if(!ids.length){ alert('請先勾選要移到專案的記帳。'); return; }
+  moveTxToProject_(ids);
+});
 
 // 這個月每一天的支出金額陣列（index 0 = 1 號），全額代墊款項不算支出，
 // 共同分攤的支出只算自己該負擔的份額，邏輯跟其他統計數字一致。
