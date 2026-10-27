@@ -3975,8 +3975,8 @@ function renderProjects_(){
     }
     const itemsHtml = expanded ? `<div class="proj-items">${
       items.length ? items.map(i => `<div class="proj-item-row">
-        <div><div>${escapeHtml(i.name || i.category || '')}</div>
-        <div class="sub">${escapeHtml(i.date || '')} · ${escapeHtml(i.category || '其他')} · ${PROJ_PAYER_SHORT[i.payer] || '專款直接付'}${i.payer === 'me' && i.accountId ? '（' + escapeHtml(projAccName_(i.accountId)) + '）' : ''}${i.note ? ' · ' + escapeHtml(i.note) : ''}</div></div>
+        <div><div>${escapeHtml(i.name || '')}</div>
+        <div class="sub">${escapeHtml(i.date || '')} · ${PROJ_PAYER_SHORT[i.payer] || '專款直接付'}${i.payer === 'me' && i.accountId ? '（' + escapeHtml(projAccName_(i.accountId)) + '）' : ''}${i.note ? ' · ' + escapeHtml(i.note) : ''}</div></div>
         <div style="text-align:right;white-space:nowrap;"><b>$${fmt(i.amount)}</b>
         ${isClosed ? '' : `<div><button class="small" onclick="openProjectItemForm_('${p.id}','${i.id}')">編輯</button> <button class="small danger" onclick="deleteProjectItem_('${i.id}')">刪除</button></div>`}</div>
       </div>`).join('') : `<div class="empty" style="padding:8px 0;">還沒有支出明細。</div>`
@@ -4063,8 +4063,6 @@ window.openProjectForm_ = id => {
 // ----- 新增／編輯支出明細 -----
 window.openProjectItemForm_ = (projectId, itemId) => {
   const it = itemId ? (state.projectItems || []).find(x => x.id === itemId) : null;
-  const cats = getCategoryNames('expense');
-  const curCat = it ? it.category : (cats.includes('其他') ? '其他' : (cats[0] || ''));
   const payer = it ? it.payer : 'fund';
   projOpenModal_(`<h3>${it ? '編輯支出' : '記一筆專案支出'}</h3>
     <p class="pay-sub">${escapeHtml((state.projects.find(x => x.id === projectId) || {}).name || '')}（不會動到帳戶餘額）</p>
@@ -4072,8 +4070,7 @@ window.openProjectItemForm_ = (projectId, itemId) => {
       <label class="full">名稱<input type="text" id="piName" required placeholder="例如：手機、午餐、計程車" value="${it ? escapeHtml(it.name || '') : ''}"></label>
       <label>金額<input type="number" id="piAmount" step="0.01" min="0" required value="${it ? it.amount : ''}"></label>
       <label>日期<input type="date" id="piDate" required value="${it ? it.date : todayStr_()}"></label>
-      <label>類別<select id="piCat">${cats.map(c => `<option value="${escapeHtml(c)}" ${c === curCat ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select></label>
-      <label>誰付的<select id="piPayer">${Object.keys(PROJ_PAYERS).map(k => `<option value="${k}" ${k === payer ? 'selected' : ''}>${PROJ_PAYERS[k]}</option>`).join('')}</select></label>
+      <label class="full">誰付的<select id="piPayer">${Object.keys(PROJ_PAYERS).map(k => `<option value="${k}" ${k === payer ? 'selected' : ''}>${PROJ_PAYERS[k]}</option>`).join('')}</select></label>
       <label class="full" id="piAccWrap" style="display:${payer === 'me' ? '' : 'none'};">用哪個自己的帳戶付的<select id="piAcc">${projAccOptions_(it ? it.accountId : '', '請選擇')}</select></label>
       <label class="full">備註<input type="text" id="piNote" placeholder="選填" value="${it ? escapeHtml(it.note || '') : ''}"></label>
       <div class="form-actions"><button type="submit" class="primary">儲存</button><button type="button" id="piSaveNext" style="display:${it ? 'none' : ''};">儲存並記下一筆</button><button type="button" id="piCancel">取消</button></div>
@@ -4088,7 +4085,7 @@ window.openProjectItemForm_ = (projectId, itemId) => {
     if(pay === 'me' && !$('#piAcc').value){ alert('請選擇你用哪個帳戶付的。'); return; }
     const data = Object.assign({}, it || {}, {
       projectId, name: $('#piName').value.trim(), amount, date: $('#piDate').value,
-      category: $('#piCat').value || '其他', payer: pay, accountId: pay === 'me' ? $('#piAcc').value : '',
+      payer: pay, accountId: pay === 'me' ? $('#piAcc').value : '',
       note: $('#piNote').value.trim()
     });
     try{
