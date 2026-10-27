@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-10-27-sister-v4-guard';
+const BACKEND_VERSION_ = '2026-10-27-projects-v1';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -8,7 +8,9 @@ const SHEET_NAMES = {
   transactions: 'Transactions',
   recurring: 'RecurringTemplates',
   categories: 'Categories',
-  orders: 'Orders'
+  orders: 'Orders',
+  projects: 'Projects',
+  projectItems: 'ProjectItems'
 };
 
 const SHEET_HEADERS = {
@@ -16,14 +18,18 @@ const SHEET_HEADERS = {
   accounts: ['id', 'name', 'type', 'balance', 'interestRate', 'note', 'updatedAt', 'favorite', 'interestCap', 'normalRate', 'interestFreqMonths'],
   liabilities: ['id', 'name', 'amount', 'dueDate', 'paid', 'note', 'updatedAt'],
   
-  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId', 'subcategory', 'toAccountId', 'cashFunded'],
+  transactions: ['id', 'date', 'type', 'category', 'amount', 'accountId', 'note', 'updatedAt', 'payer', 'splitMode', 'settled', 'recurringId', 'subcategory', 'toAccountId', 'cashFunded', 'projectId'],
   
   recurring: ['id', 'name', 'type', 'category', 'amount', 'accountId', 'dayOfMonth', 'note', 'active', 'updatedAt', 'subcategory', 'payer', 'splitMode', 'toAccountId'],
   
   categories: ['id', 'type', 'mainName', 'subName', 'updatedAt'],
   // 待付款、尚未付款的項目：先計入月預算，但不影響帳戶餘額、也不算進記帳支出。
   // 付款確認後會轉成一筆正式支出（Transactions）並從這張表移除；取消訂單則直接刪除這列。
-  orders: ['id', 'name', 'amount', 'category', 'subcategory', 'orderDate', 'note', 'updatedAt', 'payer', 'splitMode', 'recurringId']
+  orders: ['id', 'name', 'amount', 'category', 'subcategory', 'orderDate', 'note', 'updatedAt', 'payer', 'splitMode', 'recurringId'],
+  // 專案（爸爸／媽媽給的專款）：專案進行中完全獨立，不碰 Transactions、不動帳戶餘額，
+  // 只有「結案」時才會一次整合進記帳（見 closeProjectTx_），「取消結案」可完整還原。
+  projects: ['id', 'name', 'source', 'fundAmount', 'fundAccountId', 'startDate', 'status', 'closedAt', 'leftoverMode', 'leftoverAccountId', 'reimburse', 'result', 'note', 'updatedAt'],
+  projectItems: ['id', 'projectId', 'date', 'name', 'amount', 'category', 'payer', 'accountId', 'note', 'updatedAt']
 };
 
 
@@ -183,7 +189,7 @@ function checkToken_(token) {
 }
 
 
-const DATE_ONLY_FIELDS_ = ['date', 'dueDate', 'orderDate'];
+const DATE_ONLY_FIELDS_ = ['date', 'dueDate', 'orderDate', 'startDate', 'closedAt'];
 function normalizeCellValue_(header, value) {
   if (value instanceof Date) {
     const tz = getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone();
@@ -282,16 +288,13 @@ function normalizePayerAccount_(d) {
 // 避免帳戶餘額被算錯。只檢查絕對不合理的情況，不會擋正常（含舊資料）的操作。
 function validateTransactionData_(d) {
   if (!d) throw new Error('沒有收到記帳資料');
-  if (['expense', 'income', 'transfer', 'settlement'].indexOf(d.type) === -1) throw new Error('記帳類型不正確: ' + d.type);
+  if (['expense', 'income', 'transfer', 'settlement', 'project'].indexOf(d.type) === -1) throw new Error('記帳類型不正確: ' + d.type);
   if (!String(normalizeCellValue_('date', d.date) || '').trim()) throw new Error('缺少日期，這筆沒有儲存');
   const amt = Number(d.amount);
   if (!isFinite(amt) || amt <= 0) throw new Error('金額必須大於 0，這筆沒有儲存');
   if (d.type === 'transfer') {
     if (!d.accountId || !d.toAccountId) throw new Error('轉帳必須同時有轉出與轉入帳戶，這筆沒有儲存');
     if (String(d.accountId) === String(d.toAccountId)) throw new Error('轉出與轉入帳戶不能相同，這筆沒有儲存');
-  }
-  if (d.type === 'expense' && d.category === '還妹妹' && d.payer !== 'sister' && d.payer !== 'partner' && !d.accountId) {
-    throw new Error('「還妹妹」必須選擇付款帳戶，不然餘額會對不上，這筆沒有儲存');
   }
 }
 
@@ -300,6 +303,7 @@ function txDelta_(type, amount, payer) {
   if (type === 'expense') return -amt;
   if (type === 'income') return amt;
   if (type === 'settlement') return payer === 'partner' ? amt : -amt;
+  if (type === 'project') return payer === 'in' ? amt : -amt; // 專案結案產生的帳戶增減，不計入收支統計
   return 0;
 }
 
@@ -373,7 +377,7 @@ function txDupKey_(data) {
 
 
 function findDuplicateTransaction_(data, excludeId) {
-  if (data.type === 'transfer' || data.type === 'settlement') return null;
+  if (data.type === 'transfer' || data.type === 'settlement' || data.type === 'project' || data.projectId) return null;
   const sheet = getSheet_('transactions');
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
@@ -654,7 +658,7 @@ function batchAdd_(key, rows) {
   let skipped = 0;
   const matrix = [];
   (rows || []).forEach(r => {
-    if (isTx && r.type !== 'transfer' && r.type !== 'settlement') {
+    if (isTx && r.type !== 'transfer' && r.type !== 'settlement' && r.type !== 'project') {
       const k = txDupKey_(r);
       if (existingKeys[k] || seenKeys[k]) { skipped++; return; }
       seenKeys[k] = true;
@@ -1183,6 +1187,162 @@ function rebuildAllTransactionValidations() {
   }
 }
 
+
+// ============================================================
+// 專案（爸爸／媽媽給的專款）
+// 進行中：Projects / ProjectItems 兩張表自成一格，完全不碰 Transactions、不動帳戶餘額。
+// 結案：後端重新讀專案與支出明細自己算（不信任前端數字），一次整合進記帳＋帳戶餘額：
+//   ‧ 帳戶增減：同一帳戶淨額合併成一筆 type:'project'（不算收入／支出）
+//   ‧ 剩餘歸自己 → 一筆收入「專案結餘」（不指定帳戶，只供統計，帳戶增減已含在上面）
+//   ‧ 超支要自己補 → 一筆支出「專案補貼」（同上）
+//   ‧ 剩餘放進共同錢包 → 該錢包帳戶 +剩餘，沒有收入／支出
+// 所有寫進去的列都帶 projectId，「取消結案」會整批移除並還原餘額。
+//
+// 支出明細的 payer：
+//   fund    直接用收到的錢付（從收款帳戶扣）
+//   me      我先用自己的帳戶付（accountId；錢由專款補回，所以我保留收款帳戶裡的錢）
+//   partner 另一半先付 → 結案時用專款還他（從 reimburse.partner 帳戶出）
+//   sister  妹妹先付   → 結案時用專款還她（從 reimburse.sister 帳戶出）
+// ============================================================
+function round2_(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+function readProjectRowsByProject_(key, projectId) {
+  return readAll_(key).filter(r => String(r.projectId) === String(projectId));
+}
+
+function computeProjectClose_(project, items, opts) {
+  const F = round2_(project.fundAmount);
+  const byAcc = {};   // accountId -> 淨增減
+  const add = (accId, delta) => { if (!accId || !delta) return; byAcc[accId] = round2_((byAcc[accId] || 0) + delta); };
+  const owed = { partner: 0, sister: 0 };
+  let spent = 0;
+  const fundAcc = project.fundAccountId;
+  add(fundAcc, F);
+  items.forEach(it => {
+    const amt = round2_(it.amount);
+    spent += amt;
+    if (it.payer === 'me') add(it.accountId || fundAcc, -amt);
+    else if (it.payer === 'partner') owed.partner += amt;
+    else if (it.payer === 'sister') owed.sister += amt;
+    else add(fundAcc, -amt); // fund
+  });
+  const rb = opts.reimburse || {};
+  ['partner', 'sister'].forEach(k => { if (owed[k] > 0) add(rb[k] || fundAcc, -owed[k]); });
+  spent = round2_(spent);
+  const remaining = round2_(F - spent);
+  const mode = opts.leftoverMode;
+  let incomeRow = null, expenseRow = null;
+  if (remaining > 0.005) {
+    if (mode === 'shared') {
+      if (!opts.leftoverAccountId) throw new Error('剩餘要放進共同錢包，請選擇錢包帳戶');
+      add(fundAcc, -remaining);
+      add(opts.leftoverAccountId, remaining);
+    } else { // pocket：錢留在自己手上，記一筆收入供統計
+      incomeRow = remaining;
+    }
+  } else if (remaining < -0.005) {
+    expenseRow = -remaining; // 超支，已由上面的實際付款流程自己出了這筆錢
+  }
+  return { F: F, spent: spent, remaining: remaining, byAcc: byAcc, owed: owed, incomeRow: incomeRow, expenseRow: expenseRow };
+}
+
+function closeProjectTx_(data) {
+  const rowIndex = findRowIndexById_('projects', data.id);
+  if (rowIndex === -1) throw new Error('找不到這個專案');
+  const project = readRowObj_('projects', rowIndex);
+  if (project.status === 'closed') return { project: project, rows: [], accounts: [], replayed: true };
+  const items = readProjectRowsByProject_('projectItems', data.id);
+  const opts = {
+    leftoverMode: data.leftoverMode === 'shared' ? 'shared' : 'pocket',
+    leftoverAccountId: data.leftoverAccountId || '',
+    reimburse: data.reimburse || {}
+  };
+  if (!project.fundAccountId) throw new Error('專案沒有設定收款帳戶，請先編輯專案');
+  const calc = computeProjectClose_(project, items, opts);
+  const closedAt = String(normalizeCellValue_('date', data.closedAt) || '').trim() ||
+    Utilities.formatDate(new Date(), getSpreadsheet_().getSpreadsheetTimeZone() || Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  const rows = [];
+  const makeTx = t => addRow_('transactions', Object.assign({
+    date: closedAt, subcategory: '', toAccountId: '', payer: 'me', splitMode: 'personal',
+    settled: true, recurringId: '', projectId: project.id
+  }, t));
+  Object.keys(calc.byAcc).forEach(accId => {
+    const d = calc.byAcc[accId];
+    if (!d) return;
+    rows.push(makeTx({ type: 'project', category: '專案', amount: Math.abs(d), accountId: accId, payer: d > 0 ? 'in' : 'out', note: '專案「' + project.name + '」結案' }));
+  });
+  if (calc.incomeRow) rows.push(makeTx({ type: 'income', category: '專案結餘', amount: calc.incomeRow, accountId: '', note: '專案「' + project.name + '」剩餘歸自己' }));
+  if (calc.expenseRow) rows.push(makeTx({ type: 'expense', category: '專案補貼', amount: calc.expenseRow, accountId: '', note: '專案「' + project.name + '」超支自己補貼' }));
+
+  const deltas = {};
+  rows.forEach(r => accumulateBalanceDelta_(r, 1, deltas));
+  const accounts = applyBalanceDeltas_(deltas);
+
+  project.status = 'closed';
+  project.closedAt = closedAt;
+  project.leftoverMode = opts.leftoverMode;
+  project.leftoverAccountId = opts.leftoverAccountId;
+  project.reimburse = JSON.stringify(opts.reimburse);
+  project.result = JSON.stringify({ spent: calc.spent, remaining: calc.remaining, owed: calc.owed });
+  const saved = updateRow_('projects', project, rowIndex);
+  return { project: saved, rows: rows, accounts: accounts };
+}
+
+function removeProjectTransactions_(projectId) {
+  const sheet = getSheet_('transactions');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const headerRow = getActualHeaderRow_('transactions');
+  const idIdx = headerRow.indexOf('id');
+  const pIdx = headerRow.indexOf('projectId');
+  if (pIdx === -1) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const deltas = {};
+  const rowsToDelete = [];
+  const ids = [];
+  for (let i = 0; i < values.length; i++) {
+    if (values[i][idIdx] === '' || String(values[i][pIdx]) !== String(projectId)) continue;
+    const obj = {};
+    headerRow.forEach((h, hi) => { if (h) obj[h] = normalizeCellValue_(h, values[i][hi]); });
+    accumulateBalanceDelta_(obj, -1, deltas);
+    rowsToDelete.push(i + 2);
+    ids.push(values[i][idIdx]);
+  }
+  const accounts = applyBalanceDeltas_(deltas);
+  rowsToDelete.sort((a, b) => b - a).forEach(r => sheet.deleteRow(r));
+  return { ids: ids, accounts: accounts };
+}
+
+function reopenProjectTx_(id) {
+  const rowIndex = findRowIndexById_('projects', id);
+  if (rowIndex === -1) throw new Error('找不到這個專案');
+  const project = readRowObj_('projects', rowIndex);
+  const removed = removeProjectTransactions_(id);
+  project.status = 'open';
+  project.closedAt = '';
+  project.result = '';
+  const saved = updateRow_('projects', project, rowIndex);
+  return { project: saved, removedIds: removed.ids || [], accounts: removed.accounts || [] };
+}
+
+function deleteProjectTx_(id) {
+  const rowIndex = findRowIndexById_('projects', id);
+  if (rowIndex === -1) return { id: id, removedIds: [], accounts: [] };
+  const removed = removeProjectTransactions_(id);
+  const sheet = getSheet_('projectItems');
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const pCol = colIndex_('projectItems', 'projectId');
+    const vals = sheet.getRange(2, pCol, lastRow - 1, 1).getValues();
+    for (let i = vals.length - 1; i >= 0; i--) {
+      if (String(vals[i][0]) === String(id)) sheet.deleteRow(i + 2);
+    }
+  }
+  getSheet_('projects').deleteRow(findRowIndexById_('projects', id));
+  return { id: id, removedIds: removed.ids || [], accounts: removed.accounts || [] };
+}
+
 function jsonOut_(obj) {
   obj.version = BACKEND_VERSION_;
   return ContentService.createTextOutput(JSON.stringify(obj))
@@ -1216,6 +1376,8 @@ function doGet(e) {
           transactions: txResult.rows,
           recurring: readAll_('recurring'),
           orders: readAll_('orders'),
+          projects: readAll_('projects'),
+          projectItems: readAll_('projectItems'),
           categories: getCategoryTreeData_(),
           transactionsTruncated: truncated,
           transactionsSince: since
@@ -1255,6 +1417,9 @@ function doPost(e) {
       if (action === 'deleteTransactionTx') return jsonOut_({ ok: true, data: deleteTransactionTx_(body.data.id) });
       if (action === 'batchDeleteTransactionsTx') return jsonOut_({ ok: true, data: batchDeleteTransactionsTx_((body.data && body.data.ids) || []) });
       if (action === 'batchAddTransactions') return jsonOut_({ ok: true, data: batchAdd_('transactions', (body.data && body.data.rows) || []) });
+      if (action === 'closeProjectTx') return jsonOut_({ ok: true, data: closeProjectTx_(body.data) });
+      if (action === 'reopenProjectTx') return jsonOut_({ ok: true, data: reopenProjectTx_(body.data && body.data.id) });
+      if (action === 'deleteProjectTx') return jsonOut_({ ok: true, data: deleteProjectTx_(body.data && body.data.id) });
       if (action === 'settleLedger') return jsonOut_({ ok: true, data: settleLedger_((body.data && body.data.ids) || [], body.data && body.data.settlement) });
 
       if (action === 'addMainCategory') return jsonOut_({ ok: true, data: addMainCategory_(body.data.type, body.data.name) });
@@ -1286,132 +1451,4 @@ function doPost(e) {
   } catch (err) {
     return jsonOut_({ ok: false, error: String(err) });
   }
-}
-
-
-
-
-// ============================================================
-// 一次性遷移（在 Apps Script 編輯器手動執行一次即可，可重複執行不會重複改）：
-//  1. 建立類別：支出「爸爸贊助／媽媽贊助／還妹妹」、收入「爸爸贊助／媽媽贊助／妹妹還款」
-//  2. 舊「贊助金」紀錄 → 依子類別／帳戶／備註歸到爸爸贊助或媽媽贊助（子類別清空）
-//  3. 爸爸贊助、但是從「妹妹」帳戶付的 → 改成「妹妹先付」、帳戶清空（妹妹用信用卡先付）
-//  4. 2026-09-12 抹布 120（另一半先付）清掉誤填的現金帳戶
-//  5. 租屋車站 140 改成「我用現金先付」（原本誤標成另一半先付）
-//  全部走 updateTransactionTx_，帳戶餘額會自動還原再重算。
-// 完成後會移除沒有紀錄在用的舊「贊助金」主類別。
-// ============================================================
-function migrateSponsorV2() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) return '系統忙碌中，請稍後再執行一次。';
-  const log = [];
-  try {
-    [['expense', '爸爸贊助'], ['expense', '媽媽贊助'], ['expense', '還妹妹'],
-     ['income', '爸爸贊助'], ['income', '媽媽贊助'], ['income', '妹妹還款']].forEach(function (c) {
-      try { addMainCategory_(c[0], c[1]); log.push('新增類別 ' + c[0] + '／' + c[1]); } catch (e) { /* 已存在 */ }
-    });
-
-    const accounts = readAll_('accounts');
-    const nameOf = {};
-    accounts.forEach(function (a) { nameOf[a.id] = String(a.name || ''); });
-    const cash = accounts.filter(function (a) { return String(a.name) === '現金'; })[0];
-    const sisters = accounts.filter(function (a) { return String(a.name).indexOf('妹妹') !== -1; }).map(function (a) { return a.id; });
-
-    const txs = readTransactionsSince_('').rows;
-    let changed = 0;
-    txs.forEach(function (t) {
-      const patch = {};
-      if (t.category === '贊助金' && (t.type === 'expense' || t.type === 'income')) {
-        const hay = [t.subcategory, nameOf[t.accountId], t.note].map(function (x) { return String(x || ''); }).join('|');
-        const isDad = String(t.subcategory || '').indexOf('爸') !== -1 ||
-          (String(t.subcategory || '').indexOf('媽') === -1 && hay.indexOf('爸') !== -1);
-        patch.category = isDad ? '爸爸贊助' : '媽媽贊助';
-        patch.subcategory = '';
-      }
-      const cat = patch.category || t.category;
-      if (t.type === 'expense' && cat === '爸爸贊助' && sisters.indexOf(t.accountId) !== -1) {
-        patch.payer = 'sister';
-        patch.splitMode = 'personal';
-        patch.accountId = '';
-      }
-      if (t.type === 'expense' && String(t.note) === '妹妹抹布12條' && t.date === '2026-09-12' && t.payer === 'partner' && t.accountId) {
-        patch.accountId = '';
-      }
-      if (t.type === 'expense' && String(t.note) === '租屋車站' && t.payer === 'partner' && !t.accountId && cash) {
-        patch.payer = 'me';
-        patch.splitMode = 'personal';
-        patch.accountId = cash.id;
-      }
-      if (!Object.keys(patch).length) return;
-      updateTransactionTx_(Object.assign({}, t, patch, { force: true }));
-      changed++;
-      log.push('更新 ' + t.date + ' ' + (t.note || t.category) + ' ' + JSON.stringify(patch));
-    });
-
-    // 舊的「贊助金」主類別已沒有紀錄在用，就從類別表移除
-    const stillUsed = readTransactionsSince_('').rows.some(function (t) { return t.category === '贊助金'; });
-    if (!stillUsed) {
-      ['expense', 'income'].forEach(function (type) { removeMainCategory_(type, '贊助金'); });
-      log.push('已移除舊的「贊助金」主類別');
-    }
-    log.unshift('完成：共更新 ' + changed + ' 筆紀錄。');
-  } finally {
-    lock.releaseLock();
-  }
-  const report = log.join('\n');
-  Logger.log(report);
-  return report;
-}
-
-
-// ============================================================
-// 一次性遷移（在 Apps Script 編輯器手動執行一次即可，可重複執行不會重複改）：
-//  妹妹往來改版：不再有「代購 › 妹妹幫我買」，改成「真正的類別＋勾選妹妹先付」。
-//  1. 確保「購物」底下有 防曬／保養品／化妝品
-//  2. 舊的「代購 › 妹妹幫我買」記帳／待付款 → 類別改「購物」（子類別清空，可自己再改成化妝品等）、
-//     付款人改妹妹先付、帳戶清空（走 updateTransactionTx_，帳戶餘額會自動還原再重算）
-//  3. 移除「代購 › 妹妹幫我買」子類別，只留「我幫妹妹買」
-//  4. 回報有幾筆舊的「代購結清」轉帳（以前會動到妹妹共用錢包，現在往來已不看轉帳，需要的話請手動處理）
-// ============================================================
-function migrateSisterV3() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) return '系統忙碌中，請稍後再執行一次。';
-  const log = [];
-  try {
-    ['防曬', '保養品', '化妝品'].forEach(function (s) {
-      try { addSubCategory_('expense', '購物', s); log.push('購物 新增子類別 ' + s); } catch (e) { /* 已存在 */ }
-    });
-
-    let txChanged = 0;
-    readTransactionsSince_('').rows.forEach(function (t) {
-      if (t.type === 'expense' && t.category === '代購' && t.subcategory === '妹妹幫我買') {
-        updateTransactionTx_(Object.assign({}, t, { category: '購物', subcategory: '', payer: 'sister', splitMode: 'personal', accountId: '', force: true }));
-        txChanged++;
-        log.push('記帳 ' + t.date + ' ' + (t.note || '') + ' → 購物／妹妹先付');
-      }
-    });
-
-    let orderChanged = 0;
-    readAll_('orders').forEach(function (o) {
-      if (o.category === '代購' && o.subcategory === '妹妹幫我買') {
-        updateRow_('orders', Object.assign({}, o, { category: '購物', subcategory: '', payer: 'sister', splitMode: 'personal' }));
-        orderChanged++;
-      }
-    });
-
-    const removed = removeSubCategory_('expense', '代購', '妹妹幫我買').removed;
-    if (removed) log.push('已移除子類別「代購 › 妹妹幫我買」');
-
-    const oldSettle = readTransactionsSince_('').rows.filter(function (t) {
-      return t.type === 'transfer' && String(t.note || '').indexOf('代購結清') === 0;
-    }).length;
-    if (oldSettle) log.push('注意：還有 ' + oldSettle + ' 筆舊的「代購結清」轉帳，不會再計入妹妹往來，請自行確認。');
-
-    log.unshift('完成：記帳 ' + txChanged + ' 筆、待付款 ' + orderChanged + ' 筆已轉換。');
-  } finally {
-    lock.releaseLock();
-  }
-  const report = log.join('\n');
-  Logger.log(report);
-  return report;
 }

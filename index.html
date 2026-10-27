@@ -473,22 +473,6 @@
   .item-value.expense{ color:var(--red); }
 
   /* ---- 共同帳本：純代墊（不是自己的花費）整筆灰階顯示；平分項目額外顯示自己的份額 ---- */
-  :root{ --sponsor:#2f7f86; --sponsor-bg:#e1f0f0; }
-  .item-card.sponsor-item{ border-left:4px solid var(--sponsor); background:var(--sponsor-bg); }
-  .item-card.sponsor-item .item-value{ color:var(--sponsor); }
-  .badge.sponsor{ background:var(--sponsor); color:#fff; }
-  .summary-card.sponsor-card{ border-color:var(--sponsor); background:var(--sponsor-bg); }
-  .summary-card.sponsor-card .label{ color:var(--sponsor); }
-  :root{ --sponsor-in:#7a5aa6; --sponsor-in-bg:#ece4f5; }
-  .item-card.sponsor-income{ border-left:4px solid var(--sponsor-in); background:var(--sponsor-in-bg); }
-  .item-card.sponsor-income .item-value{ color:var(--sponsor-in); }
-  .badge.sponsor-in{ background:var(--sponsor-in); color:#fff; }
-  .summary-card.sponsor-card-in{ border-color:var(--sponsor-in); background:var(--sponsor-in-bg); }
-  .summary-card.sponsor-card-in .label{ color:var(--sponsor-in); }
-  :root{ --sis:#b5651d; --sis-bg:#f7e9dc; }
-  .item-card.sis-item{ border-left:4px solid var(--sis); background:var(--sis-bg); }
-  .item-card.sis-item .item-value{ color:var(--sis); }
-  .badge.sis{ background:var(--sis); color:#fff; }
   .item-card.advance-item{ opacity:.6; }
   .item-card.advance-item .item-value{ color:var(--ink-soft); }
   .item-share-note{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
@@ -766,6 +750,20 @@
     .page{ padding:16px 13px 22px; }
     .net-hero .value{ font-size:27px; }
   }
+  /* ---- 專案 ---- */
+  .badge.project{ background:#2f7f86; color:#fff; }
+  .item-card.project-item{ border-left:4px solid #2f7f86; background:#e8f3f3; }
+  .proj-card{ margin-bottom:2px; }
+  .proj-bar{ height:10px; border-radius:999px; background:var(--paper); border:1px solid var(--paper-line); overflow:hidden; margin-top:8px; }
+  .proj-bar > div{ height:100%; background:var(--gold); }
+  .proj-bar > div.over{ background:var(--red); }
+  .proj-items{ margin-top:10px; padding:8px 10px; background:var(--paper); border:1px solid var(--paper-line); border-radius:var(--radius-sm); }
+  .proj-item-row{ display:flex; justify-content:space-between; gap:8px; align-items:flex-start; font-size:13px; padding:6px 0; }
+  .proj-item-row:not(:last-child){ border-bottom:1px dashed var(--paper-line); }
+  .proj-item-row .sub{ font-size:11.5px; color:var(--ink-soft); }
+  .proj-preview{ background:var(--paper); border:1px solid var(--paper-line); border-radius:var(--radius-sm); padding:10px 12px; font-size:13px; line-height:1.8; }
+  .proj-preview b{ font-family:'Roboto Slab', serif; }
+  .pay-modal form.entry{ margin-top:6px; }
   /* ---- 待付款（未付款）----- */
   .orders-head{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin:4px 2px 8px; font-size:14px; font-weight:700; color:var(--ink); }
   .orders-head small{ font-weight:500; color:var(--ink-soft); font-size:12px; }
@@ -811,7 +809,6 @@
         <div class="sub">
           <div>資產<b id="netHeroAssets">$0</b></div>
           <div>未繳負債<b id="netHeroDebt">$0</b></div>
-          <div>代管爸媽贊助款<b id="netHeroHeld">$0</b></div>
           <div>預估下期利息<b id="netHeroInterest">$0</b></div>
         </div>
       </div>
@@ -890,6 +887,19 @@
       </div>
       <div class="item-list" id="dashboardAccountsList"></div>
     </div>
+
+    <!-- 專案（爸媽給的專款） -->
+    <div class="view" id="view-projects">
+      <h2>專案</h2>
+      <p class="hint">爸爸或媽媽給一筆錢要辦一件事，就開一個專案：只記「花了多少、誰先付」，進行中完全不會動到你的帳戶和記帳統計。花完後按「結案」，系統算出剩餘多少，再決定要轉進自己零用金、放進跟妹妹共用的錢包，或超支要自己補貼，結案時才一次整合進記帳；整合錯了可以「取消結案」完整還原。</p>
+      <div class="form-actions" style="margin-bottom:12px;">
+        <button type="button" class="primary" id="projAddBtn">＋ 新增專案</button>
+        <button type="button" id="projToggleClosed">顯示已結案</button>
+      </div>
+      <div class="summary-grid" id="projSummary"></div>
+      <div class="item-list" id="projList"></div>
+    </div>
+    <div class="pay-backdrop" id="projModalBackdrop"><div class="pay-modal" id="projModal"></div></div>
 
     <!-- 負債 -->
     <div class="view" id="view-liabilities">
@@ -1009,14 +1019,6 @@
               <input type="checkbox" id="trPending">
               <label for="trPending" style="margin:0;">還沒付款（記成「待付款」：先計入該月預算，不動帳戶餘額）</label>
             </div>
-            <div class="full checkbox-row" id="trSisterRow">
-              <input type="checkbox" id="trSisterPaid">
-              <label for="trSisterPaid" style="margin:0;">妹妹先幫我付（不用選帳戶、不扣我的錢，之後再還她）</label>
-            </div>
-            <div class="full checkbox-row" id="trCashFundedRow" style="display:none;">
-              <input type="checkbox" id="trCashFunded">
-              <label for="trCashFunded" style="margin:0;">這筆是用<b id="trCashFundedWho">爸爸</b>已經現金給我的錢還的（不算我先墊、不算我的支出）</label>
-            </div>
             <div class="full checkbox-row" id="trSharedRow">
               <input type="checkbox" id="trShared">
               <label for="trShared" style="margin:0;">這是跟另一半的共同帳本項目（需要分攤或代墊）</label>
@@ -1071,7 +1073,6 @@
             <button type="button" class="small primary" data-kind="all">全部</button>
             <button type="button" class="small" data-kind="income">收入</button>
             <button type="button" class="small" data-kind="expense">支出</button>
-            <button type="button" class="small" data-kind="sponsor">贊助金</button>
           </div>
           <button type="button" class="small" id="trBatchToggleBtn">批次刪除</button>
           <div id="trBatchControls" style="display:none;">
@@ -1226,13 +1227,6 @@
           <h3>固定支出 vs 彈性支出</h3>
           <p class="hint" style="margin-bottom:10px;">固定支出＝由「模板」自動加入的紀錄（房租、訂閱費等）；其餘算彈性花費，是比較能省的部分。</p>
           <div id="statsFixedVsFlex"></div>
-        </div>
-
-        <!-- ④-2 贊助金支出（專款，不計入自己的花費與預算） -->
-        <div class="stat-section" id="statsSponsorSection">
-          <h3>贊助金支出（專款，不計入預算）</h3>
-          <p class="hint" style="margin-bottom:10px;">主類別「贊助金」的支出會獨立顯示在這裡，不會算進上面的支出、月預算與排行榜。記帳時帳戶選「贊助金」專款帳戶，就能看出有沒有超支動用到自己的錢。</p>
-          <div id="statsSponsor"></div>
         </div>
 
         <!-- ⑤ 收入來源 -->
@@ -1411,8 +1405,6 @@
               </div>
             </form>
           </details>
-    <div id="sisterLedgerModal" style="margin-bottom:14px;"></div>
-    <div id="sponsorOwedModal" style="margin-bottom:14px;"></div>
     <div id="ordersSection">
       <div class="orders-head"><span>待付款清單</span><small id="ordersSummary"></small></div>
       <div class="item-list" id="ordersList"></div>
@@ -1489,12 +1481,14 @@ async function runBusy(fn, text){
 const ICONS = {
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>',
   accounts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M16 14h2"/></svg>',
+  projects: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   liabilities: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>',
   transactions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h4"/><path d="M8 4v3M16 4v3"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>'
 };
 const TAB_DEFS = [
   { view:'transactions', label:'記帳' },
+  { view:'projects', label:'專案' },
   { view:'dashboard', label:'總覽' },
   { view:'liabilities', label:'負債' },
   { view:'settings', label:'設定' }
@@ -1555,7 +1549,7 @@ try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persis
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-10-27-people-v2'; // 贊助金功能只改前端，後端版本號不變
+const FRONTEND_VERSION = '2026-10-27-projects-v1';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -1572,7 +1566,7 @@ function reportBackendVersion_(version){
   }
 }
 
-let state = { accounts: [], liabilities: [], transactions: [], recurring: [], orders: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null };
+let state = { accounts: [], liabilities: [], transactions: [], recurring: [], orders: [], projects: [], projectItems: [], categories: { expense: [], income: [] }, transactionsFullyLoaded: false, transactionsSince: null };
 // 記帳品項（主類別 + 子類別，依收入/支出分開）。
 // 這份清單現在存在後端試算表的「Categories」表（跟 Accounts/Transactions 一樣），
 // 換裝置、清瀏覽器快取都不會不見，也可以直接在試算表上看到。前端只在「一開始
@@ -1806,6 +1800,8 @@ function saveStateCache_(){
       transactions: state.transactions,
       recurring: state.recurring,
       orders: state.orders,
+      projects: state.projects,
+      projectItems: state.projectItems,
       categories: state.categories,
       transactionsFullyLoaded: state.transactionsFullyLoaded,
       transactionsSince: state.transactionsSince,
@@ -1838,6 +1834,8 @@ function applyStateCache_(cached){
   state.transactions = cached.transactions || [];
   state.recurring = cached.recurring || [];
   state.orders = cached.orders || [];
+  state.projects = cached.projects || [];
+  state.projectItems = cached.projectItems || [];
   state.categories = cached.categories || { expense: [], income: [] };
   state.transactionsFullyLoaded = !!cached.transactionsFullyLoaded;
   state.transactionsSince = cached.transactionsSince || null;
@@ -1891,6 +1889,8 @@ async function loadAll(){
     // 已付款但還在背景同步的待付款，不要被剛抓回來的舊資料「復活」
     const paidPending_ = new Set(syncQueue_.filter(o => o.action === 'payOrderTx').map(o => o.data && o.data.orderId));
     state.orders = (all.orders || []).filter(o => !paidPending_.has(o.id));
+    state.projects = all.projects || [];
+    state.projectItems = all.projectItems || [];
     state.categories = all.categories || { expense: [], income: [] };
     state.dataLoaded_ = true;
     // 帳戶餘額：期間有本機記帳就先保留本機算好的（後端回應會逐筆校正）；沒有就直接用後端的
@@ -1929,7 +1929,7 @@ async function loadAll(){
     $('#cfgStatus').textContent = '已連線成功。';
     $('#cfgStatus').className = 'status ok';
     generateRecurringOrdersNow_();
-    migrateLocalCategoriesIfNeeded_().then(() => ensureSponsorCategory_()).then(() => {
+    migrateLocalCategoriesIfNeeded_().then(() => {
       if(dirty) dirty.categories = true;
       renderVisibleSection();
     });
@@ -2229,11 +2229,12 @@ function removeLocal(key, id){
 // （dirty），實際重畫延後到「使用者真的切過去那個分頁」的當下才做；
 // 分頁本身也記住「目前顯示哪個」，切分頁時只補畫剛好變成需要的那一塊。
 // 這樣「存一筆記帳」只要重畫記帳清單本身，不用連統計圖表、共同帳本都算一次。
-const dirty = { dashboard:true, liabilities:true, transactions:true, ledger:true, templates:true, stats:true, categories:true };
+const dirty = { projects:true, dashboard:true, liabilities:true, transactions:true, ledger:true, templates:true, stats:true, categories:true };
 function markAllDirty(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
 let currentView = 'transactions';
 let currentTrSub = 'records';
 const SECTION_RENDERERS = {
+  projects: () => renderProjects_(),
   dashboard: renderDashboardSection_,
   liabilities: renderLiabilitiesSection_,
   transactions: renderTransactionsSection_,
@@ -2342,10 +2343,7 @@ function renderDashboard(){
   const totalDebt = state.liabilities
     .filter(l => String(l.paid) !== 'true')
     .reduce((s,l) => s + (Number(l.amount)||0), 0);
-  // 爸媽的贊助款還沒用完的部分不是我的錢，從淨資產扣掉（見 sponsorStats_）
-  let heldSponsor = 0;
-  try{ heldSponsor = SPONSOR_PEOPLE.reduce((sum, p) => sum + Math.max(0, sponsorStats_(p).remaining), 0); }catch(err){ heldSponsor = 0; } // 初次載入、常數尚未初始化時安全略過
-  const net = totalAssets - totalDebt - heldSponsor;
+  const net = totalAssets - totalDebt;
   // 加總所有有填年利率的帳戶，估算「下一期」全部帳戶合計會拿到的利息（單利、按月估算）
   const totalEstInterest = state.accounts.reduce((s,a) => s + estimateAccountNextInterest_(a), 0);
 
@@ -2353,7 +2351,6 @@ function renderDashboard(){
   $('#netHeroAssets').textContent = '$' + fmt(totalAssets);
   $('#netHeroDebt').textContent = '$' + fmt(totalDebt);
   $('#netHeroInterest').textContent = '$' + fmt(totalEstInterest);
-  $('#netHeroHeld').textContent = '$' + fmt(heldSponsor);
 
   // 如果目前篩選的類型已經沒有任何帳戶了（例如帳戶被刪除或改了類型），自動取消篩選
   if(dashboardFilterType && !byType.hasOwnProperty(dashboardFilterType)) dashboardFilterType = null;
@@ -2400,9 +2397,9 @@ function renderAccMonthTxHtml_(a){
   return `<div class="acc-month-tx-list">${txs.map(t => {
     // 一般收支：accountId 就是這個帳戶。轉帳／結算會同時牽涉轉出（accountId）
     // 跟轉入（toAccountId）兩個帳戶，用哪個欄位等於這張卡片的帳戶來判斷方向。
-    const isOut = t.type === 'expense' || ((t.type === 'transfer' || t.type === 'settlement') && t.accountId === a.id);
+    const isOut = t.type === 'expense' || (t.type === 'project' && t.payer === 'out') || ((t.type === 'transfer' || t.type === 'settlement') && t.accountId === a.id);
     const sign = isOut ? '-' : '+';
-    const typeLabel = t.type === 'transfer' ? '轉帳' : t.type === 'settlement' ? '結算' : '';
+    const typeLabel = t.type === 'transfer' ? '轉帳' : t.type === 'settlement' ? '結算' : t.type === 'project' ? '專案' : '';
     const label = t.note || t.category || typeLabel || '記帳';
     return `<div class="acc-month-tx">
       <div class="acc-month-tx-main">
@@ -2784,24 +2781,6 @@ function renderTrAvailAndBudget_(){
   const dayExpense = trExpenseOfDate_(dayStr);
   const dayLabel = calSelectedDate ? `${calSelectedDate} 支出` : '今天支出';
 
-  const monthSponsor = sponsorExpenseOf_(monthStr);
-  const daySponsor = sponsorExpenseOf_(dayStr);
-  const monthSponsorIn = state.transactions
-    .filter(t => isSponsorFundIncome_(t) && (t.date || '').startsWith(monthStr))
-    .reduce((s,t) => s + (Number(t.amount) || 0), 0);
-  const sponsorCards = (monthSponsor || daySponsor || monthSponsorIn) ? (monthSponsorIn ? `
-    <div class="summary-card sponsor-card-in">
-      <div class="label">本月收到贊助金（不計收入）</div>
-      <div class="value" style="color:var(--sponsor-in)">+$${fmt(monthSponsorIn)}</div>
-    </div>` : '') + `
-    <div class="summary-card sponsor-card">
-      <div class="label">本月贊助金支出（不計預算）</div>
-      <div class="value" style="color:var(--sponsor)">$${fmt(monthSponsor)}</div>
-    </div>
-    <div class="summary-card sponsor-card">
-      <div class="label">${calSelectedDate ? calSelectedDate : '今天'} 贊助金支出</div>
-      <div class="value" style="color:var(--sponsor)">$${fmt(daySponsor)}</div>
-    </div>` : '';
   $('#trStatsGrid').innerHTML = `
     <div class="summary-card">
       <div class="label">本月支出（${calYear} 年 ${calMonth+1} 月）</div>
@@ -2811,16 +2790,8 @@ function renderTrAvailAndBudget_(){
       <div class="label">${dayLabel}</div>
       <div class="value" style="color:var(--red)">$${fmt(dayExpense)}</div>
     </div>
-    ${sponsorCards}
   `;
 }
-// 贊助金支出合計（period 可以是 YYYY-MM 或 YYYY-MM-DD，用日期開頭比對）
-function sponsorExpenseOf_(period){
-  return state.transactions
-    .filter(t => t.type === 'expense' && isSponsorCat_(t.category) && (t.date || '').startsWith(period))
-    .reduce((s,t) => s + (Number(t.amount) || 0), 0);
-}
-
 // ---------- 待付款（未付款）----------
 // 流程：下單時先記一筆「待付款」→ 金額立刻從當月預算扣掉（不動帳戶餘額、不算進支出統計）
 //   → 付款後按「已付款」，填付款日期＋付款帳戶，才正式轉成一筆支出記帳（並從帳戶扣款）
@@ -2925,8 +2896,7 @@ function renderOrders_(){
   const sec = $('#ordersSection');
   if(!sec) return;
   const orders = [...(state.orders || [])].sort((a,b) => ((a.orderDate || '') < (b.orderDate || '') ? 1 : -1));
-  // 贊助金待補款也放在這個視窗裡；徽章數字＝待付款筆數＋有待補款的帳戶數
-  const owedCount = renderSponsorOwed_($('#sponsorOwedModal')) + renderSisterLedger_($('#sisterLedgerModal'));
+  const owedCount = 0;
   const badge = $('#orderFabBadge');
   badge.textContent = orders.length + owedCount;
   badge.style.display = (orders.length + owedCount) ? '' : 'none';
@@ -3105,8 +3075,7 @@ $('#payOrderForm').addEventListener('submit', e => {
   const amount = parseFloat($('#payAmount').value) || 0;
   if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
   const sharedOrd = o.splitMode === 'split' || o.splitMode === 'advance';
-  const sisOrd = o.payer === 'sister';
-  const payer = sharedOrd ? $('#payPayer').value : (sisOrd ? 'sister' : 'me');
+  const payer = sharedOrd ? $('#payPayer').value : 'me';
   const splitMode = sharedOrd ? o.splitMode : 'personal';
   // 跟共同帳本記帳規則一致：「我先付、全額代墊」整筆是對方的花費，統一存成「代墊」類別
   const isAdvance = splitMode === 'advance' && payer !== 'partner';
@@ -3117,7 +3086,7 @@ $('#payOrderForm').addEventListener('submit', e => {
     category: isAdvance ? ADVANCE_CATEGORY_NAME : (o.category || '其他'),
     subcategory: isAdvance ? '' : (o.subcategory || ''),
     amount,
-    accountId: (payer === 'partner' || payer === 'sister') ? '' : $('#payAccount').value, // 別人先付，不扣我的帳戶
+    accountId: payer === 'partner' ? '' : $('#payAccount').value, // 別人先付，不扣我的帳戶
     note: o.note ? `${o.name}（${o.note}）` : o.name,
     payer,
     splitMode,
@@ -3180,7 +3149,7 @@ $('#transactionsList').addEventListener('change', e => {
   updateTrBatchBarUI_();
 });
 $('#trBatchDeleteBtn').addEventListener('click', async () => {
-  const ids = Array.from(trBatchSelected);
+  const ids = Array.from(trBatchSelected).filter(id => { const t = state.transactions.find(x => x.id === id); return !(t && (t.projectId || t.type === 'project')); });
   if(!ids.length){ alert('請先勾選要刪除的記帳。'); return; }
   if(!confirm(`確定刪除這 ${ids.length} 筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。`)) return;
   try{
@@ -3235,26 +3204,15 @@ function renderTransactions(){
   }
   rows = [...rows].sort((a,b) => (a.date < b.date ? 1 : -1));
 
-  // 分類檢視：收入／支出（都不含贊助金）／贊助金（收入＋支出）各自獨立，不混在一起
-  const isSponsorTx = t => isSponsorFlow_(t);
-  if(trKindFilter === 'income') rows = rows.filter(t => t.type === 'income' && !isSponsorTx(t));
-  else if(trKindFilter === 'expense') rows = rows.filter(t => t.type === 'expense' && !isSponsorTx(t));
-  else if(trKindFilter === 'sponsor') rows = rows.filter(isSponsorTx);
+  if(trKindFilter === 'income') rows = rows.filter(t => t.type === 'income');
+  else if(trKindFilter === 'expense') rows = rows.filter(t => t.type === 'expense');
   const sumEl = $('#trKindSummary');
   if(trKindFilter === 'all'){
     sumEl.style.display = 'none';
   } else {
-    const kindLabel = { income:'收入', expense:'支出', sponsor:'贊助金' }[trKindFilter];
-    let summary = `${kindLabel}：共 ${rows.length} 筆`;
-    if(trKindFilter === 'sponsor'){
-      const inc = rows.filter(t => t.type === 'income').reduce((s,t) => s + (Number(t.amount)||0), 0);
-      const exp = rows.filter(t => t.type === 'expense').reduce((s,t) => s + (Number(t.amount)||0), 0);
-      summary += `・收到 $${fmt(inc)}・花費 $${fmt(exp)}`;
-    } else {
-      const total = rows.reduce((s,t) => s + (trKindFilter === 'expense' ? myExpenseShare_(t) : (Number(t.amount)||0)), 0);
-      summary += `・合計 $${fmt(total)}`;
-    }
-    sumEl.textContent = summary;
+    const kindLabel = { income:'收入', expense:'支出' }[trKindFilter];
+    const total = rows.reduce((s,t) => s + (trKindFilter === 'expense' ? myExpenseShare_(t) : (Number(t.amount)||0)), 0);
+    sumEl.textContent = `${kindLabel}：共 ${rows.length} 筆・合計 $${fmt(total)}`;
     sumEl.style.display = '';
   }
 
@@ -3309,6 +3267,26 @@ function renderTransactions(){
         </div>
       </div>`;
     }
+    if(t.projectId || t.type === 'project'){
+      // 專案結案自動產生的紀錄：唯讀，要修改請到「專案」頁取消結案
+      const proj = (state.projects || []).find(p => p.id === t.projectId);
+      const pName = proj ? proj.name : '已刪除的專案';
+      const isProjAcc = t.type === 'project';
+      const isIn = isProjAcc ? t.payer === 'in' : t.type === 'income';
+      const accN = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '';
+      const kindText = isProjAcc ? '帳戶增減（不計收支）' : (t.type === 'income' ? '計入收入' : '計入支出');
+      return `<div class="item-card project-item">
+        ${trBatchCheckboxHtml_(t.id)}
+        <div class="item-top">
+          <div>
+            <div class="item-name"><span class="badge project">專案</span> ${escapeHtml(pName)}・${escapeHtml(t.category || '')}</div>
+            <div class="item-note">${[t.date, accN, kindText].filter(Boolean).join(' · ')}</div>
+            <div class="item-note">要修改請到「專案」頁按「取消結案」</div>
+          </div>
+          <div class="item-value ${isIn ? 'income' : 'expense'}">${isIn ? '+' : '-'}$${fmt(t.amount)}</div>
+        </div>
+      </div>`;
+    }
     const isExpense = t.type === 'expense';
     const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '';
     const primary = t.note ? t.note : catLabel;
@@ -3322,8 +3300,6 @@ function renderTransactions(){
     //   我自己實際要負擔的那一份（myExpenseShare_），原始總金額改成小字附註，
     //   避免誤以為整筆都是自己花的。
     const isPureAdvance = isExpense && t.splitMode === 'advance' && t.payer !== 'partner';
-    const isSponsor = isSponsorFlow_(t);
-    const isSis = isExpense && (t.category === SIS_CATEGORY_NAME || t.payer === 'sister');
     const isSplitShare = isExpense && t.splitMode === 'split';
     const shareNote = isSplitShare
       ? `<div class="item-share-note">總金額 $${fmt(t.amount)}（平分）</div>`
@@ -3331,11 +3307,11 @@ function renderTransactions(){
     const valueClass = isPureAdvance ? '' : (isExpense ? 'expense' : 'income');
     const sign = isPureAdvance ? '' : (isExpense ? '-' : '+');
     const mainAmount = isSplitShare ? myExpenseShare_(t) : t.amount;
-    return `<div class="item-card ${isPureAdvance ? 'advance-item' : ''} ${isSponsor ? (t.type === 'income' ? 'sponsor-income' : 'sponsor-item') : isSis ? 'sis-item' : ''}" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
+    return `<div class="item-card ${isPureAdvance ? 'advance-item' : ''}" ondblclick="if(!event.target.closest('.item-actions') && !event.target.closest('.tr-batch-check-wrap')) editTransaction('${t.id}')">
       ${trBatchCheckboxHtml_(t.id)}
       <div class="item-top">
         <div>
-          <div class="item-name">${isSponsor ? (t.type === 'income' ? `<span class="badge sponsor-in">${(sponsorPersonOf_(t) || {name:''}).name}贊助收入</span> ` : `<span class="badge sponsor">${(sponsorPersonOf_(t) || {name:''}).name}贊助支出</span> `) : isSis ? `<span class="badge sis">${escapeHtml(t.subcategory || '代購')}</span> ` : ''}${primary}</div>
+          <div class="item-name">${primary}</div>
           <div class="item-note">${metaParts.filter(Boolean).join(' · ')}</div>
           ${shareNote}
         </div>
@@ -3425,21 +3401,15 @@ function populateTrSubcategories(type, mainName, selectedSub){
   populateSubcategorySelect_($('#trSubcategory'), getSubcategories(type, mainName), selectedSub);
 }
 bindInlineCategoryCreation_($('#trCategory'), $('#trSubcategory'), () => $('#trType').value, populateTrCategories, populateTrSubcategories);
-// 付款人規則：「另一半先付」「妹妹先付」這類錢不是從我的帳戶出的，
+// 付款人規則：「另一半先付」這類錢不是從我的帳戶出的，
 // 帳戶欄一律停用並清空，避免像 9/12 抹布那樣明明是別人付的卻扣了我的現金。
-// （贊助金不再自動換帳戶：帳戶＝錢實際從哪裡付，誰的錢由主類別決定。）
 function syncPayerAccount_(){
   const isExp = $('#trType').value === 'expense';
-  if(isExp && $('#trSisterPaid').checked && $('#trShared').checked){
-    $('#trShared').checked = false;
-    $('#trLedgerFields').style.display = 'none';
-  }
   const partner = isExp && $('#trShared').checked && $('#trPayer').value === 'partner';
-  const lock = isExp && ($('#trSisterPaid').checked || partner);
-  $('#trAccount').disabled = lock;
-  if(lock) $('#trAccount').value = '';
+  $('#trAccount').disabled = partner;
+  if(partner) $('#trAccount').value = '';
 }
-['#trSisterPaid','#trShared','#trPayer'].forEach(sel => $(sel).addEventListener('change', syncPayerAccount_));
+['#trShared','#trPayer'].forEach(sel => $(sel).addEventListener('change', syncPayerAccount_));
 // 金額直接輸入，不需要 +50/+100 之類的快速加值按鈕；
 // 另外數字輸入框在滑鼠停留時用滾輪很容易不小心改動金額，這裡讓輸入框
 // 在滾輪事件時直接失焦，避免滾動網頁時誤觸改變數字。
@@ -3452,61 +3422,13 @@ $('#tplAmount').addEventListener('wheel', () => { $('#tplAmount').blur(); }, { p
 // 只是對方先幫我出錢而已——這筆錢本來就要記在我自己的類別下（餐飲/交通...），
 // 所以這種情況不應該強制歸類成「代墊」，要讓使用者自己選類別。
 const ADVANCE_CATEGORY_NAME = '代墊';
-// 贊助金（爸媽給的專款、幫忙花費用）：跟「代墊」一樣不算進月預算與支出統計，
-// 但獨立成自己的主類別，在統計分析有專屬區塊，不跟共同帳本的代墊混在一起。
-const SPONSOR_CATEGORY_NAME = '贊助金';
-const SPONSOR_DEFAULT_SUBS = ['計程車','停車費','餐費','手機','其他'];
-// 妹妹往來規則：
-//  ‧ 妹妹幫我買東西：照實填類別（購物 › 化妝品…），勾「妹妹先幫我付」＝ payer:'sister'，
-//    不選帳戶、不扣我的錢，仍計入我的預算與統計；之後我欠妹妹。
-//  ‧ 我先墊錢幫妹妹買：主類別「代購」＋子類別「我幫妹妹買」，不是我的花費，之後妹妹欠我。
-//  ‧ 往來只用「類別＋付款人」計算，完全不碰「妹妹共用錢包」；共用錢包只收贊助金剩餘的轉入。
-const SIS_CATEGORY_NAME = '代購';
-const SIS_OUT = '我幫妹妹買';
-// 爸爸／媽媽贊助：主類別直接分人、不設子類別。舊的「贊助金」類別仍相容（用子類別／帳戶／備註判斷是誰的）。
-const SPONSOR_PEOPLE = [
-  { key:'dad', name:'爸爸', cat:'爸爸贊助' },
-  { key:'mom', name:'媽媽', cat:'媽媽贊助' }
-];
-const SIS_REPAY_OUT = '還妹妹';   // 支出：我還妹妹錢
-const SIS_REPAY_IN = '妹妹還款';  // 收入：妹妹還我錢
-const CLOSE_NOTE = '【結清】';     // 結清贊助剩餘時自動產生的沖銷紀錄備註
-function isSponsorCat_(c){ return c === SPONSOR_CATEGORY_NAME || SPONSOR_PEOPLE.some(p => p.cat === c); }
-function sponsorPersonOf_(t){
-  const hit = SPONSOR_PEOPLE.find(p => p.cat === t.category);
-  if(hit) return hit;
-  if(t.category !== SPONSOR_CATEGORY_NAME) return null;
-  const acc = state.accounts.find(a => a.id === t.accountId);
-  const hay = [t.subcategory, acc && acc.name, t.note].map(x => String(x || '')).join('|');
-  return hay.includes('爸') ? SPONSOR_PEOPLE[0] : SPONSOR_PEOPLE[1];
-}
-function isSisterPaid_(t){ return t.payer === 'sister'; }
-function isCashFunded_(t){ return !!t && (t.cashFunded === true || String(t.cashFunded) === 'true'); }
-// 贊助「收入」依「收到的帳戶」決定去哪裡（類別只決定是哪位爸／媽）：
-//   fund   ＝ 進爸爸／媽媽贊助金帳戶 → 代管款（不算收入、淨資產扣掉、可結清）
-//   shared ＝ 進妹妹共用錢包 → 直接算共同錢包的錢（不算我的收入、也不算代管款）
-//   own    ＝ 進現金或其他自己的帳戶 → 當自己的收入，照一般收入統計
-//   沒填帳戶（舊資料）維持 fund，相容舊紀錄
-function sponsorIncomeKind_(t){
-  if(!t || t.type !== 'income' || !isSponsorCat_(t.category)) return null;
-  if(!t.accountId) return 'fund';
-  const acc = state.accounts.find(a => a.id === t.accountId);
-  const name = String(acc && acc.name || '');
-  if(name.includes(SPONSOR_CATEGORY_NAME)) return 'fund';
-  if(name.includes('妹妹')) return 'shared';
-  return 'own';
-}
-function isSponsorFundIncome_(t){ return sponsorIncomeKind_(t) === 'fund'; }
-// 贊助相關的流水（贊助支出＋進贊助金／妹妹共用錢包的贊助收入）；進自己帳戶的贊助收入不算
-function isSponsorFlow_(t){
-  if(!t || !isSponsorCat_(t.category)) return false;
-  if(t.type === 'expense') return true;
-  return t.type === 'income' && sponsorIncomeKind_(t) !== 'own';
-}
+// 舊版（已移除的贊助金／妹妹往來功能）留下的紀錄：這些類別仍不計入月預算與支出統計，
+// 避免舊資料突然混進統計。新的爸媽專款一律用「專案」管理，不再使用這些類別。
+const LEGACY_OFF_BUDGET_CATS = ['贊助金','爸爸贊助','媽媽贊助','還妹妹','妹妹還款'];
 function isOffBudgetTx_(t){
   const c = t.category;
-  if(c === ADVANCE_CATEGORY_NAME || isSponsorCat_(c) || c === SIS_REPAY_OUT || c === SIS_REPAY_IN) return true;
-  return c === SIS_CATEGORY_NAME && t.subcategory === SIS_OUT;
+  if(c === ADVANCE_CATEGORY_NAME || LEGACY_OFF_BUDGET_CATS.includes(c)) return true;
+  return c === '代購' && t.subcategory === '我幫妹妹買';
 }
 // 共同帳本的支出，不管誰付款，統計「我的花費」時都只該算我實際要負擔的那一份：
 //   personal 個人：全額都是我的
@@ -3543,10 +3465,6 @@ function setTrType(type, selectedCategory, selectedSub){
   const isTransfer = type === 'transfer';
   $('#trCatRow').style.display = isTransfer ? 'none' : '';
   $('#trSharedRow').style.display = isTransfer ? 'none' : '';
-  if($('#trSisterRow')){
-    $('#trSisterRow').style.display = type === 'expense' ? '' : 'none';
-    if(type !== 'expense'){ $('#trSisterPaid').checked = false; $('#trAccount').disabled = false; }
-  }
   $('#trTransferToWrap').style.display = isTransfer ? '' : 'none';
   $('#trAccountLabel').textContent = isTransfer ? '從（轉出帳戶）' : '帳戶（選填，會自動增減餘額）';
   $('#trAccount').required = isTransfer;
@@ -3567,21 +3485,7 @@ function setTrType(type, selectedCategory, selectedSub){
   if(type !== 'expense') $('#trRecurringId').value = ''; // 收入／轉帳不會是固定支出
   syncCatRowVisibility();
   syncTrPendingUI_();
-  syncCashFundedRow_();
 }
-// 「爸爸／媽媽已用現金給我」只在：支出＋主類別「還妹妹」＋子類別標了爸爸／媽媽贊助時出現。
-// 代表我用自己的銀行轉給妹妹，但這筆錢其實是爸／媽已經用現金給我的，
-// 所以不算「我先墊」、不會再被要求從贊助金拿回，也不算我的支出。
-function cashFundedPerson_(){
-  if($('#trType').value !== 'expense' || $('#trCategory').value !== SIS_REPAY_OUT) return null;
-  return SPONSOR_PEOPLE.find(p => p.cat === $('#trSubcategory').value) || null;
-}
-function syncCashFundedRow_(){
-  const p = cashFundedPerson_();
-  $('#trCashFundedRow').style.display = p ? '' : 'none';
-  if(p) $('#trCashFundedWho').textContent = p.name; else $('#trCashFunded').checked = false;
-}
-['#trCategory', '#trSubcategory'].forEach(sel => $(sel).addEventListener('change', syncCashFundedRow_));
 // 「還沒付款」只在「新增支出」時出現；勾選後不需要選帳戶（待付款不動帳戶餘額），名稱必填
 function syncTrPendingUI_(){
   const canPend = $('#trType').value === 'expense' && !$('#trId').value && !trQuickInterestMode;
@@ -3903,7 +3807,7 @@ function renderStats(){
   // 另外，共同分攤的支出（splitMode === 'split'）不管誰先付，「支出」統計都只算我自己
   // 該負擔的那一份，不是整筆金額，見 myExpenseShare_。
   const isRealExpense_ = t => t.type === 'expense' && !isOffBudgetTx_(t);
-  const incomeTotal = rows.filter(t=>t.type==='income' && !isSponsorFlow_(t) && t.category !== SIS_REPAY_IN).reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const incomeTotal = rows.filter(t=>t.type==='income' && t.category !== '妹妹還款' && !LEGACY_OFF_BUDGET_CATS.includes(t.category)).reduce((s,t)=>s+(Number(t.amount)||0),0);
   const expenseTotal = rows.filter(isRealExpense_).reduce((s,t)=>s+myExpenseShare_(t),0);
   // 「結餘」代表這段期間帳戶裡實際增減的錢，所以只算有指定帳戶的紀錄；
   // 沒有填帳戶的紀錄（多半是舊資料匯入，沒有對應到任何帳戶）只計入上面的收入／支出總額，
@@ -3978,338 +3882,335 @@ function renderStats(){
   // ④ 固定 vs 彈性支出
   renderFixedVsFlexible($('#statsFixedVsFlex'), rows);
 
-  // ④-2 贊助金支出
-  renderSponsorStats_($('#statsSponsor'), rows);
-
   // ⑤ 收入來源
-  const inc = breakdownByCategory(rows.filter(t => !(t.type === 'income' && (isSponsorFlow_(t) || t.category === SIS_REPAY_IN))), 'income');
+  const inc = breakdownByCategory(rows.filter(t => !(t.type === 'income' && LEGACY_OFF_BUDGET_CATS.includes(t.category))), 'income');
   renderBarList($('#statsIncomeBreakdown'), inc.items, inc.total, 'income');
 }
 
 
-// ---------- 贊助金支出：獨立統計（總額、筆數、子類別分佈、專款帳戶餘額、明細） ----------
-function renderSponsorStats_(container, rows){
-  const sponsorAll = rows
-    .filter(t => (t.type === 'expense' || t.type === 'income') && isSponsorFlow_(t))
-    .sort((a,b) => (a.date < b.date ? 1 : -1));
-  const sponsorRows = sponsorAll.filter(t => t.type === 'expense');
-  const sponsorIncomeTotal = sponsorAll.filter(t => t.type === 'income' && isSponsorFundIncome_(t)).reduce((s,t) => s + (Number(t.amount) || 0), 0);
-  const sponsorAccounts = state.accounts.filter(a => String(a.name).includes(SPONSOR_CATEGORY_NAME));
-  if(!sponsorAll.length && !sponsorAccounts.length){
-    container.innerHTML = `<div class="empty">這段期間沒有贊助金支出。</div>`;
+// ---------- 專案（爸爸／媽媽給的專款）----------
+// 進行中：只存在 Projects / ProjectItems，不影響帳戶餘額與記帳統計。
+// 結案：由後端重算並一次整合進記帳（見 Code.gs 的 closeProjectTx_），可以取消結案完整還原。
+const PROJ_PAYERS = {
+  fund: '用專款直接付（從收款帳戶出）',
+  me: '我先用自己的帳戶付（專款補給我）',
+  partner: '另一半先付（結案時用專款還他）',
+  sister: '妹妹先付（結案時用專款還她）'
+};
+const PROJ_PAYER_SHORT = { fund:'專款直接付', me:'我先付', partner:'另一半先付', sister:'妹妹先付' };
+let projOpen_ = new Set();
+let projShowClosed_ = false;
+function projRound_(n){ return Math.round((Number(n) || 0) * 100) / 100; }
+function projItems_(id){ return (state.projectItems || []).filter(i => String(i.projectId) === String(id)); }
+function projAccName_(id){ const a = state.accounts.find(x => x.id === id); return a ? a.name : '（帳戶已刪除）'; }
+function projAccOptions_(selected, blankLabel){
+  const list = sortAccountsForSelect(state.accounts);
+  return (blankLabel ? `<option value="">${blankLabel}</option>` : '') +
+    list.map(a => `<option value="${a.id}" ${a.id === selected ? 'selected' : ''}>${escapeHtml(a.name)}（${escapeHtml(a.type)}）</option>`).join('');
+}
+// 跟後端 computeProjectClose_ 同一套算法，只用來在結案前預覽
+function projCompute_(project, items, opts){
+  const F = projRound_(project.fundAmount);
+  const byAcc = {};
+  const add = (id, d) => { if(!id || !d) return; byAcc[id] = projRound_((byAcc[id] || 0) + d); };
+  const owed = { partner:0, sister:0 };
+  let spent = 0;
+  const fundAcc = project.fundAccountId;
+  add(fundAcc, F);
+  items.forEach(it => {
+    const amt = projRound_(it.amount);
+    spent += amt;
+    if(it.payer === 'me') add(it.accountId || fundAcc, -amt);
+    else if(it.payer === 'partner') owed.partner += amt;
+    else if(it.payer === 'sister') owed.sister += amt;
+    else add(fundAcc, -amt);
+  });
+  const rb = (opts && opts.reimburse) || {};
+  ['partner','sister'].forEach(k => { if(owed[k] > 0) add(rb[k] || fundAcc, -owed[k]); });
+  spent = projRound_(spent);
+  const remaining = projRound_(F - spent);
+  if(remaining > 0.005 && opts && opts.leftoverMode === 'shared' && opts.leftoverAccountId){
+    add(fundAcc, -remaining);
+    add(opts.leftoverAccountId, remaining);
+  }
+  return { F, spent, remaining, byAcc, owed };
+}
+
+function renderProjects_(){
+  const list = $('#projList');
+  if(!list) return;
+  const all = [...(state.projects || [])];
+  const open = all.filter(p => p.status !== 'closed').sort((a,b) => (a.startDate < b.startDate ? 1 : -1));
+  const closed = all.filter(p => p.status === 'closed').sort((a,b) => ((a.closedAt || '') < (b.closedAt || '') ? 1 : -1));
+  $('#projToggleClosed').textContent = projShowClosed_ ? '隱藏已結案' : `顯示已結案（${closed.length}）`;
+  const heldFund = open.reduce((s,p) => s + (Number(p.fundAmount) || 0), 0);
+  const heldSpent = open.reduce((s,p) => s + projItems_(p.id).reduce((x,i) => x + (Number(i.amount) || 0), 0), 0);
+  $('#projSummary').innerHTML = `
+    <div class="summary-card"><div class="label">進行中專案</div><div class="value">${open.length}</div></div>
+    <div class="summary-card"><div class="label">已收專款</div><div class="value">$${fmt(heldFund)}</div></div>
+    <div class="summary-card"><div class="label">已花</div><div class="value" style="color:var(--red)">$${fmt(heldSpent)}</div></div>
+    <div class="summary-card"><div class="label">目前剩餘</div><div class="value" style="color:${heldFund - heldSpent < 0 ? 'var(--red)' : 'var(--green)'}">$${fmt(heldFund - heldSpent)}</div></div>`;
+  const show = projShowClosed_ ? open.concat(closed) : open;
+  if(!show.length){
+    list.innerHTML = `<div class="empty">${all.length ? '目前沒有進行中的專案。' : '還沒有專案，按上面「＋ 新增專案」建立第一個。'}</div>`;
     return;
   }
-  const total = sponsorRows.reduce((s,t) => s + (Number(t.amount) || 0), 0);
-  const subMap = {};
-  sponsorRows.forEach(t => {
-    const sub = (t.subcategory || '').trim() || '未分類';
-    subMap[sub] = (subMap[sub] || 0) + (Number(t.amount) || 0);
-  });
-  const subItems = Object.entries(subMap).sort((a,b) => b[1] - a[1]);
-  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
-  const accHtml = sponsorAccounts.map(a => {
-    const bal = Number(a.balance) || 0;
-    return `<div class="summary-card"><div class="label">${escapeHtml(a.name)} 餘額</div><div class="value" style="color:${bal < 0 ? 'var(--red)' : 'var(--green)'}">$${fmt(bal)}</div>${bal < 0 ? '<div style="font-size:10px;color:var(--red);margin-top:3px;">已超支，動用到自己的錢</div>' : ''}</div>`;
-  }).join('');
-  const barsHtml = subItems.map(([label, val]) => {
-    const pct = total ? Math.round(val / total * 100) : 0;
-    return `<div class="stat-bar-row">
-      <div class="stat-bar-label">${escapeHtml(label)}</div>
-      <div class="stat-bar-track"><div class="stat-bar-fill flexible" style="width:${pct}%"></div></div>
-      <div class="stat-bar-value">$${fmt(val)} (${pct}%)</div>
-    </div>`;
-  }).join('');
-  const detailHtml = sponsorAll.map(t => {
-    const isIn = t.type === 'income';
-    const label = t.note || t.subcategory || SPONSOR_CATEGORY_NAME;
-    const acc = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '未指定帳戶';
-    return `<div class="acc-month-tx">
-      <div class="acc-month-tx-main">
-        <div class="acc-month-tx-cat">${escapeHtml(label)}${t.subcategory && t.note ? '（' + escapeHtml(t.subcategory) + '）' : ''}</div>
-        <div class="acc-month-tx-date">${escapeHtml(t.date)} · ${escapeHtml(acc)}</div>
+  list.innerHTML = show.map(p => {
+    const items = projItems_(p.id).sort((a,b) => (a.date < b.date ? 1 : -1));
+    const isClosed = p.status === 'closed';
+    const F = Number(p.fundAmount) || 0;
+    const spent = items.reduce((s,i) => s + (Number(i.amount) || 0), 0);
+    const rem = projRound_(F - spent);
+    const pct = F > 0 ? Math.min(100, Math.round(spent / F * 100)) : (spent > 0 ? 100 : 0);
+    const expanded = projOpen_.has(p.id);
+    let resultHtml = '';
+    if(isClosed){
+      let mode = '';
+      if(rem > 0.005) mode = p.leftoverMode === 'shared' ? `剩餘 $${fmt(rem)} 已放進「${escapeHtml(projAccName_(p.leftoverAccountId))}」` : `剩餘 $${fmt(rem)} 已轉入自己零用金（計入收入「專案結餘」）`;
+      else if(rem < -0.005) mode = `超支 $${fmt(-rem)}，自己補貼（計入支出「專案補貼」）`;
+      else mode = '剛好用完';
+      resultHtml = `<div class="item-note" style="margin-top:6px;">結案 ${escapeHtml(p.closedAt || '')}：${mode}</div>`;
+    }
+    const itemsHtml = expanded ? `<div class="proj-items">${
+      items.length ? items.map(i => `<div class="proj-item-row">
+        <div><div>${escapeHtml(i.name || i.category || '')}</div>
+        <div class="sub">${escapeHtml(i.date || '')} · ${escapeHtml(i.category || '其他')} · ${PROJ_PAYER_SHORT[i.payer] || '專款直接付'}${i.payer === 'me' && i.accountId ? '（' + escapeHtml(projAccName_(i.accountId)) + '）' : ''}${i.note ? ' · ' + escapeHtml(i.note) : ''}</div></div>
+        <div style="text-align:right;white-space:nowrap;"><b>$${fmt(i.amount)}</b>
+        ${isClosed ? '' : `<div><button class="small" onclick="openProjectItemForm_('${p.id}','${i.id}')">編輯</button> <button class="small danger" onclick="deleteProjectItem_('${i.id}')">刪除</button></div>`}</div>
+      </div>`).join('') : `<div class="empty" style="padding:8px 0;">還沒有支出明細。</div>`
+    }</div>` : '';
+    return `<div class="item-card proj-card">
+      <div class="item-top">
+        <div>
+          <div class="item-name">${escapeHtml(p.name)} <span class="badge project">${escapeHtml(p.source || '專款')}</span> <span class="badge ${isClosed ? 'paid' : 'pending'}">${isClosed ? '已結案' : '進行中'}</span></div>
+          <div class="item-note">收款帳戶：${escapeHtml(projAccName_(p.fundAccountId))} · 開始 ${escapeHtml(p.startDate || '')}${p.note ? ' · ' + escapeHtml(p.note) : ''}</div>
+          ${resultHtml}
+        </div>
+        <div><div class="item-value">$${fmt(F)}</div><div class="item-note" style="text-align:right;">收到專款</div></div>
       </div>
-      <div class="acc-month-tx-amt" style="color:${isIn ? 'var(--sponsor-in)' : 'var(--sponsor)'}">${isIn ? '+' : '-'}$${fmt(t.amount)}</div>
+      <div class="item-meta">
+        <span>已花 <b style="color:var(--red)">$${fmt(spent)}</b></span>
+        <span>${rem < 0 ? '超支' : '剩餘'} <b style="color:${rem < 0 ? 'var(--red)' : 'var(--green)'}">$${fmt(Math.abs(rem))}</b></span>
+        <span>${items.length} 筆</span>
+      </div>
+      <div class="proj-bar"><div class="${rem < 0 ? 'over' : ''}" style="width:${pct}%"></div></div>
+      ${itemsHtml}
+      <div class="item-actions">
+        <button class="small" onclick="toggleProjectItems_('${p.id}')">${expanded ? '收合明細' : '看明細'}</button>
+        ${isClosed
+          ? `<button class="small danger" onclick="reopenProject_('${p.id}')">取消結案</button>`
+          : `<button class="small primary" onclick="openProjectItemForm_('${p.id}')">＋ 記一筆支出</button>
+             <button class="small primary-outline" onclick="openCloseProject_('${p.id}')">結案</button>
+             <button class="small" onclick="openProjectForm_('${p.id}')">編輯</button>`}
+        <button class="small danger" onclick="deleteProject_('${p.id}')">刪除</button>
+      </div>
     </div>`;
   }).join('');
-  container.innerHTML = `
-    <div class="summary-grid">
-      <div class="summary-card sponsor-card-in"><div class="label">本期收到贊助金</div><div class="value" style="color:var(--sponsor-in)">$${fmt(sponsorIncomeTotal)}</div></div>
-      <div class="summary-card"><div class="label">本期贊助金支出</div><div class="value">$${fmt(total)}</div></div>
-      <div class="summary-card"><div class="label">筆數</div><div class="value">${sponsorRows.length}</div></div>
-      ${accHtml}
-    </div>
-    ${barsHtml}
-    ${sponsorAll.length ? `<div class="rank-sub-list" style="margin-top:10px;"><div class="acc-month-tx-list" style="max-height:260px;">${detailHtml}</div></div>` : ''}`;
 }
+window.toggleProjectItems_ = id => { if(projOpen_.has(id)) projOpen_.delete(id); else projOpen_.add(id); renderProjects_(); };
+$('#projToggleClosed').addEventListener('click', () => { projShowClosed_ = !projShowClosed_; renderProjects_(); });
+$('#projAddBtn').addEventListener('click', () => openProjectForm_());
 
+function projOpenModal_(html){
+  $('#projModal').innerHTML = html;
+  $('#projModalBackdrop').classList.add('show');
+}
+function projCloseModal_(){ $('#projModalBackdrop').classList.remove('show'); $('#projModal').innerHTML = ''; }
+$('#projModalBackdrop').addEventListener('click', e => { if(e.target.id === 'projModalBackdrop') projCloseModal_(); });
 
-// ---------- 往來總覽：爸爸／媽媽贊助款剩餘、妹妹、另一半（全部由記帳紀錄自動算，不用手動維護）----------
-// 爸媽：剩餘 ＝ 收到的贊助收入 − 我實際負擔的贊助支出（不管是從哪個帳戶付、誰先墊）
-// 妹妹：正數＝妹妹欠我、負數＝我欠妹妹　　另一半：沿用共同帳本
-function sponsorWallets_(p){
-  return state.accounts.filter(a => String(a.name).includes(SPONSOR_CATEGORY_NAME) && String(a.name).includes(p.name));
-}
-function ensureAccountOption_(id){
-  const acc = state.accounts.find(a => a.id === id);
-  const sel = $('#trAccount');
-  if(acc && ![...sel.options].some(o => o.value === id)){
-    sel.insertAdjacentHTML('beforeend', `<option value="${acc.id}">${escapeHtml(acc.name)}（${escapeHtml(acc.type)}）</option>`);
-  }
-}
-function sponsorStats_(p){
-  const walletIds = new Set(sponsorWallets_(p).map(a => a.id));
-  const month = todayStr_().slice(0,7);
-  const st = { inc:0, spent:0, mIn:0, mOut:0, fronted:{}, sister:0, partner:0 };
-  state.transactions.forEach(t => {
-    const amt = Number(t.amount) || 0;
-    const who = sponsorPersonOf_(t);
-    if(who && who.key === p.key){
-      const inMonth = String(t.date || '').startsWith(month);
-      if(t.type === 'income'){ if(isSponsorFundIncome_(t)){ st.inc += amt; if(inMonth) st.mIn += amt; } } // 進現金／自己帳戶＝自己的收入，進妹妹共用錢包＝共同錢包，都不算代管款
-      else if(t.type === 'expense'){
-        const share = myExpenseShare_(t);
-        st.spent += share; if(inMonth) st.mOut += share;
-        if(t.payer === 'sister') st.sister += share;
-        else if(t.payer === 'partner'){ if(String(t.settled) !== 'true') st.partner += share; }
-        else if(t.accountId && !walletIds.has(t.accountId)) st.fronted[t.accountId] = (st.fronted[t.accountId] || 0) + share;
-      }
-    }
-    // 從這位爸／媽的贊助金帳戶轉給先墊的帳戶＝已補回
-    if(t.type === 'transfer' && walletIds.has(t.accountId) && t.toAccountId && !walletIds.has(t.toAccountId) && !String(t.note || '').startsWith(CLOSE_NOTE)){
-      st.fronted[t.toAccountId] = (st.fronted[t.toAccountId] || 0) - amt;
-    }
-    // 還妹妹：子類別標了這位爸／媽（「還妹妹 › 爸爸贊助」）＝還的是這位的贊助款墊付；
-    //   用贊助金帳戶還 → 直接沖掉；用自己的帳戶還 → 沖掉妹妹先付，同時變成「我先墊」，等贊助款補回來。
-    // 舊紀錄沒標子類別：維持原本規則，只認贊助金帳戶。
-    if(t.type === 'expense' && t.category === SIS_REPAY_OUT){
-      if(t.subcategory === p.cat){
-        st.sister -= amt;
-        if(isCashFunded_(t)){
-          st.inc += amt; // 用爸／媽已經現金給我的錢還：視為這筆贊助款已用掉，不算我先墊
-        } else if(t.accountId && !walletIds.has(t.accountId)) st.fronted[t.accountId] = (st.fronted[t.accountId] || 0) + amt;
-      } else if(walletIds.has(t.accountId)) st.sister -= amt;
-    }
-  });
-  st.remaining = st.inc - st.spent;
-  return st;
-}
-// 妹妹共用錢包：只用在「結清贊助剩餘 → 放進妹妹共同」的轉入，跟妹妹債務完全無關
-function sisterAccount_(){ return state.accounts.find(a => String(a.name).includes('妹妹')); }
-// 妹妹往來每一筆：＋妹妹欠我、－我欠妹妹（只看類別與付款人，不看任何帳戶／轉帳）
-function sisterRows_(){
-  const rows = [];
-  state.transactions.forEach(t => {
-    const amt = Number(t.amount) || 0;
-    if(t.type === 'expense'){
-      if(t.category === SIS_CATEGORY_NAME && t.subcategory === SIS_OUT) rows.push({ t, delta: amt, label: '我幫妹妹買' });
-      else if(isSisterPaid_(t)) rows.push({ t, delta: -amt, label: '妹妹先付' });
-      else if(t.category === SIS_REPAY_OUT) rows.push({ t, delta: amt, label: '我已還妹妹' });
-    } else if(t.type === 'income' && t.category === SIS_REPAY_IN){
-      rows.push({ t, delta: -amt, label: '妹妹已還我' });
-    }
-  });
-  return rows.sort((a,b) => (a.t.date < b.t.date ? 1 : -1));
-}
-let sisterLedgerOpen_ = false;
-window.toggleSisterLedger_ = () => { sisterLedgerOpen_ = !sisterLedgerOpen_; renderSponsorOwed_($('#sponsorOwedModal')); };
-function arrow_(up, down){ return `本月 <span style="color:var(--green)">▲$${fmt(up)}</span> <span style="color:var(--red)">▼$${fmt(down)}</span>`; }
-// 沒標子類別、用「自己的帳戶」記的「還妹妹」：不用再逐筆標記，系統自動當成「先還了爸／媽那筆妹妹墊付」，
-// 依序（爸爸→媽媽）沖掉妹妹先付，並轉成「我先墊、要從贊助金拿回」。
-function sponsorStatsAll_(){
-  const allWallets = new Set();
-  SPONSOR_PEOPLE.forEach(p => sponsorWallets_(p).forEach(a => allWallets.add(a.id)));
-  const pool = state.transactions
-    .filter(t => t.type === 'expense' && t.category === SIS_REPAY_OUT && t.accountId && !allWallets.has(t.accountId) && !SPONSOR_PEOPLE.some(p => p.cat === t.subcategory))
-    .sort((a,b) => (a.date < b.date ? -1 : 1))
-    .map(t => ({ acc: t.accountId, amt: Number(t.amount) || 0 }));
-  const out = {};
-  SPONSOR_PEOPLE.forEach(p => {
-    const st = sponsorStats_(p);
-    for(const e of pool){
-      if(st.sister <= 0.005) break;
-      if(e.amt <= 0.005) continue;
-      const take = Math.min(st.sister, e.amt);
-      st.sister -= take; e.amt -= take;
-      st.fronted[e.acc] = (st.fronted[e.acc] || 0) + take;
-    }
-    // 補回的錢若轉到別的自己帳戶（例如先墊的是銀行、補回轉進現金），錢已經回到你手上，
-    // 用負數抵掉其他帳戶的待拿回，避免出現假的「要拿回」而重複扣贊助金
-    let neg = 0;
-    Object.keys(st.fronted).forEach(id => { if(st.fronted[id] < -0.005){ neg += -st.fronted[id]; st.fronted[id] = 0; } });
-    Object.keys(st.fronted).forEach(id => {
-      const v = st.fronted[id];
-      if(neg > 0.005 && v > 0.005){ const take = Math.min(v, neg); st.fronted[id] = v - take; neg -= take; }
+// ----- 新增／編輯專案 -----
+window.openProjectForm_ = id => {
+  const p = id ? state.projects.find(x => x.id === id) : null;
+  const src = p ? p.source : '爸爸';
+  projOpenModal_(`<h3>${p ? '編輯專案' : '新增專案'}</h3>
+    <p class="pay-sub">收到爸爸／媽媽給的錢就建一個專案，之後只要記花了多少。</p>
+    <form class="entry" id="projForm">
+      <label class="full">專案名稱<input type="text" id="pjName" required placeholder="例如：爸爸買手機、媽媽旅費" value="${p ? escapeHtml(p.name) : ''}"></label>
+      <label>誰給的<select id="pjSource">${['爸爸','媽媽','其他'].map(x => `<option ${x === src ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+      <label>收到金額<input type="number" id="pjFund" step="0.01" min="0" required value="${p ? p.fundAmount : ''}"></label>
+      <label class="full">收到的錢放在哪個帳戶（例如現金）<select id="pjAcc" required>${projAccOptions_(p ? p.fundAccountId : defaultCashAccountId())}</select></label>
+      <label>開始日期<input type="date" id="pjDate" required value="${p ? p.startDate : todayStr_()}"></label>
+      <label class="full">備註<input type="text" id="pjNote" placeholder="選填" value="${p ? escapeHtml(p.note || '') : ''}"></label>
+      <div class="form-actions"><button type="submit" class="primary">儲存</button><button type="button" id="pjCancel">取消</button></div>
+    </form>`);
+  $('#pjCancel').onclick = projCloseModal_;
+  $('#projForm').onsubmit = async e => {
+    e.preventDefault();
+    const fund = parseFloat($('#pjFund').value);
+    if(!(fund >= 0) || isNaN(fund)){ alert('請輸入收到的金額。'); return; }
+    if(!$('#pjAcc').value){ alert('請選擇收款帳戶。'); return; }
+    const data = Object.assign({}, p || {}, {
+      name: $('#pjName').value.trim(), source: $('#pjSource').value, fundAmount: fund,
+      fundAccountId: $('#pjAcc').value, startDate: $('#pjDate').value, note: $('#pjNote').value.trim(),
+      status: p ? p.status : 'open'
     });
-    out[p.key] = st;
-  });
-  return out;
-}
-function renderSponsorOwed_(container){
-  const byId = Object.fromEntries(state.accounts.map(a => [a.id, a.name]));
-  const month = todayStr_().slice(0,7);
-  let attention = 0;
-  const cards = [];
-  const allStats = sponsorStatsAll_();
-  SPONSOR_PEOPLE.forEach(p => {
-    const st = allStats[p.key];
-    if(!st.inc && !st.spent) return;
-    const lines = [];
-    const line = (txt, btn) => lines.push(`<div class="item-note" style="margin-top:6px;display:flex;justify-content:space-between;gap:8px;align-items:center;"><span>${txt}</span>${btn || ''}</div>`);
-    Object.entries(st.fronted).forEach(([id, v]) => {
-      if(v > 0.005 && byId[id]) line(`${escapeHtml(byId[id])} 先墊了，要從${p.name}贊助金拿回 <b>$${fmt(v)}</b>`, `<button class="small" onclick="reimburseSponsor_('${p.key}','${id}',${v})">拿回 $${fmt(v)}</button>`);
+    try{
+      await runBusy(async () => {
+        let saved;
+        if(p) saved = await apiPost('update','projects',data);
+        else { delete data.id; saved = await apiPost('add','projects',data); }
+        upsertLocal('projects', saved);
+        projOpen_.add(saved.id);
+        projCloseModal_();
+        renderAll();
+      }, '儲存中…');
+    }catch(err){ alert('儲存失敗：' + err.message + '\n（第一次使用請確認 Apps Script 已貼上新版並重新部署新版本。）'); }
+  };
+};
+
+// ----- 新增／編輯支出明細 -----
+window.openProjectItemForm_ = (projectId, itemId) => {
+  const it = itemId ? (state.projectItems || []).find(x => x.id === itemId) : null;
+  const cats = getCategoryNames('expense');
+  const curCat = it ? it.category : (cats.includes('其他') ? '其他' : (cats[0] || ''));
+  const payer = it ? it.payer : 'fund';
+  projOpenModal_(`<h3>${it ? '編輯支出' : '記一筆專案支出'}</h3>
+    <p class="pay-sub">${escapeHtml((state.projects.find(x => x.id === projectId) || {}).name || '')}（不會動到帳戶餘額）</p>
+    <form class="entry" id="projItemForm">
+      <label class="full">名稱<input type="text" id="piName" required placeholder="例如：手機、午餐、計程車" value="${it ? escapeHtml(it.name || '') : ''}"></label>
+      <label>金額<input type="number" id="piAmount" step="0.01" min="0" required value="${it ? it.amount : ''}"></label>
+      <label>日期<input type="date" id="piDate" required value="${it ? it.date : todayStr_()}"></label>
+      <label>類別<select id="piCat">${cats.map(c => `<option value="${escapeHtml(c)}" ${c === curCat ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select></label>
+      <label>誰付的<select id="piPayer">${Object.keys(PROJ_PAYERS).map(k => `<option value="${k}" ${k === payer ? 'selected' : ''}>${PROJ_PAYERS[k]}</option>`).join('')}</select></label>
+      <label class="full" id="piAccWrap" style="display:${payer === 'me' ? '' : 'none'};">用哪個自己的帳戶付的<select id="piAcc">${projAccOptions_(it ? it.accountId : '', '請選擇')}</select></label>
+      <label class="full">備註<input type="text" id="piNote" placeholder="選填" value="${it ? escapeHtml(it.note || '') : ''}"></label>
+      <div class="form-actions"><button type="submit" class="primary">儲存</button><button type="button" id="piSaveNext" style="display:${it ? 'none' : ''};">儲存並記下一筆</button><button type="button" id="piCancel">取消</button></div>
+    </form>`);
+  $('#piPayer').onchange = () => { $('#piAccWrap').style.display = $('#piPayer').value === 'me' ? '' : 'none'; };
+  $('#piCancel').onclick = projCloseModal_;
+  const save = async keepOpen => {
+    const amount = parseFloat($('#piAmount').value) || 0;
+    if(amount <= 0){ alert('請輸入大於 0 的金額。'); return; }
+    if(!$('#piName').value.trim()){ alert('請輸入名稱。'); return; }
+    const pay = $('#piPayer').value;
+    if(pay === 'me' && !$('#piAcc').value){ alert('請選擇你用哪個帳戶付的。'); return; }
+    const data = Object.assign({}, it || {}, {
+      projectId, name: $('#piName').value.trim(), amount, date: $('#piDate').value,
+      category: $('#piCat').value || '其他', payer: pay, accountId: pay === 'me' ? $('#piAcc').value : '',
+      note: $('#piNote').value.trim()
     });
-    if(st.sister > 0.005) line(`妹妹先付 $${fmt(st.sister)}，還沒還她`, `<button class="small" onclick="repaySisterFromSponsor_('${p.key}',${st.sister})">記錄還妹妹</button>`);
-    if(st.partner > 0.005) line(`另一半先付 $${fmt(st.partner)}（共同帳本結算時，用${p.name}的錢付）`);
-    if(lines.length) attention++;
-    const rem = st.remaining;
-    if(rem < -0.005){ line(`已超支 $${fmt(-rem)}：你先墊了自己的錢，等${p.name}補給你（再記一筆「${p.cat}」收入就會自動抵掉）`); attention++; }
-    if(rem > 0.005) line(`剩餘 $${fmt(rem)} 要不要結清？`, `<button class="small" onclick="closeSponsor_('${p.key}')">結清剩餘</button>`);
-    cards.push(`<div class="item-card sponsor-item" style="margin-bottom:8px;">
-      <div class="item-top"><div>
-        <div class="item-name">${p.name}贊助款 <span style="font-size:11px;color:var(--ink-soft);">${rem < -0.005 ? '你先墊' : '剩餘'}</span></div>
-        <div class="item-note">${arrow_(st.mIn, st.mOut)}</div>
-      </div><div class="item-value">$${fmt(Math.abs(rem))}</div></div>${lines.join('')}</div>`);
-  });
-  // 妹妹
-  const sRows = sisterRows_();
-  if(sRows.length){
-    const net = sRows.reduce((s,r) => s + r.delta, 0);
-    const settled = Math.abs(net) < 0.005;
-    const up = sRows.filter(r => r.delta > 0 && String(r.t.date || '').startsWith(month)).reduce((s,r) => s + r.delta, 0);
-    const down = sRows.filter(r => r.delta < 0 && String(r.t.date || '').startsWith(month)).reduce((s,r) => s - r.delta, 0);
-    const detail = sisterLedgerOpen_ ? `<div class="rank-sub-list" style="margin-top:8px;" onclick="event.stopPropagation()"><div class="acc-month-tx-list" style="max-height:260px;">${sRows.map(r => `<div class="acc-month-tx">
-      <div class="acc-month-tx-main"><div class="acc-month-tx-cat">${escapeHtml(r.t.note || r.label)}</div><div class="acc-month-tx-date">${escapeHtml(r.t.date)} · ${r.label}</div></div>
-      <div class="acc-month-tx-amt" style="color:${r.delta > 0 ? 'var(--sis)' : 'var(--green)'}">${r.delta > 0 ? '+' : '-'}$${fmt(Math.abs(r.delta))}</div></div>`).join('')}</div><div class="item-note" style="margin-top:6px;">＋＝妹妹欠我，－＝我欠妹妹（或已還）</div></div>` : '';
-    if(!settled) attention++;
-    cards.push(`<div class="item-card sis-item" style="margin-bottom:8px;cursor:pointer;" onclick="toggleSisterLedger_()">
-      <div class="item-top"><div>
-        <div class="item-name">${settled ? '妹妹：已結清' : (net > 0 ? '妹妹欠你' : '你欠妹妹')} <span style="font-size:11px;color:var(--ink-soft);">${sisterLedgerOpen_ ? '▼ 收合明細' : '▶ 點擊看明細'}</span></div>
-        <div class="item-note">${arrow_(up, down)}（▲妹妹欠我增加　▼我欠她增加／已還）</div>
-      </div><div class="item-value">$${fmt(Math.abs(net))}</div></div>${detail}
-      ${settled ? '' : `<div class="item-actions"><button class="small" onclick="event.stopPropagation(); settleSister_(${net})">${net > 0 ? '妹妹還我（記帳）' : '我還妹妹（記帳）'}</button></div>`}
-    </div>`);
-  }
-  // 另一半（共同帳本）
-  const pItems = ledgerUnsettledItems();
-  if(pItems.length){
-    const pNet = ledgerBalance(pItems);
-    if(Math.abs(pNet) >= 0.005){ attention++; }
-    cards.push(`<div class="item-card" style="margin-bottom:8px;">
-      <div class="item-top"><div>
-        <div class="item-name">${Math.abs(pNet) < 0.005 ? '另一半：打平' : (pNet > 0 ? '另一半欠你' : '你欠另一半')}</div>
-        <div class="item-note">共 ${pItems.length} 筆未結算，到「記帳 › 共同帳本」結算</div>
-      </div><div class="item-value">$${fmt(Math.abs(pNet))}</div></div></div>`);
-  }
-  if(!cards.length){ container.innerHTML = ''; return 0; }
-  container.innerHTML = `<div class="orders-head"><span style="color:var(--sponsor);">往來總覽</span><small>爸媽贊助款剩餘・妹妹・另一半</small></div>${cards.join('')}`;
-  return attention;
-}
-function renderSisterLedger_(container){ if(container) container.innerHTML = ''; return 0; } // 已併入 renderSponsorOwed_ 的往來總覽
-
-// 補回先墊的錢：開啟轉帳表單，「這位爸／媽的贊助金帳戶 → 先墊的帳戶」，確認後儲存
-window.reimburseSponsor_ = (key, toId, amount) => {
-  const p = SPONSOR_PEOPLE.find(x => x.key === key);
-  const w = p && sponsorWallets_(p)[0];
-  if(!w){ alert(`找不到名稱含「${p ? p.name : ''}」與「贊助金」的帳戶，請先到帳戶管理建立（例如「${p ? p.name : ''}贊助金」）。`); return; }
-  if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
-  resetTransactionForm();
-  $('#trDetails').open = true;
-  setTrType('transfer');
-  $('#trAccount').value = w.id;
-  $('#trToAccount').value = toId;
-  $('#trAmount').value = Number(amount).toFixed(2).replace(/\.00$/, '');
-  $('#trNote').value = `${p.name}贊助款補回`;
+    try{
+      await runBusy(async () => {
+        let saved;
+        if(it) saved = await apiPost('update','projectItems',data);
+        else { delete data.id; saved = await apiPost('add','projectItems',data); }
+        upsertLocal('projectItems', saved);
+        projOpen_.add(projectId);
+        renderAll();
+      }, '儲存中…');
+      if(keepOpen){ $('#piName').value = ''; $('#piAmount').value = ''; $('#piNote').value = ''; $('#piName').focus(); }
+      else projCloseModal_();
+    }catch(err){ alert('儲存失敗：' + err.message); }
+  };
+  $('#projItemForm').onsubmit = e => { e.preventDefault(); save(false); };
+  $('#piSaveNext').onclick = () => save(true);
 };
-// 用贊助款還妹妹：開啟「還妹妹」支出表單，帳戶帶入該爸／媽的贊助金帳戶
-window.repaySisterFromSponsor_ = (key, amount) => {
-  const p = SPONSOR_PEOPLE.find(x => x.key === key);
-  const w = p && sponsorWallets_(p)[0];
-  if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
-  resetTransactionForm();
-  $('#trDetails').open = true;
-  setTrType('expense', SIS_REPAY_OUT, p.cat); // 子類別標記是還哪位的贊助款墊付
-  // 預設帶贊助金帳戶；如果是你自己的銀行先轉給妹妹，直接改選那個帳戶即可，儲存後會自動變成「要從贊助金拿回」
-  if(w){ ensureAccountOption_(w.id); $('#trAccount').value = w.id; }
-  $('#trAmount').value = Number(amount).toFixed(2).replace(/\.00$/, '');
-  $('#trNote').value = `還妹妹（${p.name}贊助款）`;
-};
-window.settleSister_ = net => {
-  if($('#ordersModalBackdrop').classList.contains('show')) closeOrdersModal_();
-  resetTransactionForm();
-  $('#trDetails').open = true;
-  if(net > 0) setTrType('income', SIS_REPAY_IN); else setTrType('expense', SIS_REPAY_OUT);
-  $('#trAmount').value = Math.abs(net).toFixed(2).replace(/\.00$/, '');
-  $('#trNote').value = net > 0 ? '妹妹還款' : '還妹妹';
-};
-// 直接新增一筆記帳（本機立即更新＋背景同步），結清用
-function addTxQuick_(data){
-  const tx = Object.assign({ subcategory:'', accountId:'', toAccountId:'', payer:'me', splitMode:'personal', settled:false, recurringId:'' }, data, { id: newClientId_(), updatedAt: new Date().toISOString() });
-  const deltas = {};
-  accumulateLocalDelta_(tx, 1, deltas);
-  upsertLocal('transactions', tx);
-  applyLocalDeltas_(deltas);
-  enqueueOp_('addTransactionTx', Object.assign({ force:true }, tx));
-  return tx;
-}
-// 結清剩餘：三選一，產生的「【結清】」紀錄都不影響收入／支出以外的統計
-//   1 歸自己：贊助支出沖銷（不填帳戶）＋ 額外收入（不填帳戶，錢本來就在你的帳戶裡）
-//   2 放進妹妹共同：贊助金帳戶 → 妹妹共用錢包 轉帳，並沖銷贊助餘額
-//   3 保留：什麼都不做，下次繼續用
-window.closeSponsor_ = key => {
-  const p = SPONSOR_PEOPLE.find(x => x.key === key);
-  if(!p) return;
-  const R = Math.round(sponsorStats_(p).remaining * 100) / 100;
-  if(R <= 0.005) return;
-  const ans = prompt(`${p.name}贊助款剩餘 $${fmt(R)}，要怎麼處理？\n\n1 = 歸自己（轉成額外收入）\n2 = 放進妹妹共同\n3 = 保留不動，下次繼續用`, '3');
-  if(ans !== '1' && ans !== '2') return;
-  const date = todayStr_();
-  const closing = { date, type:'expense', category:p.cat, amount:R, note:CLOSE_NOTE + (ans === '1' ? '剩餘歸自己' : '剩餘放進妹妹共同') };
-  if(ans === '2'){
-    const sis = sisterAccount_();
-    const w = sponsorWallets_(p)[0];
-    if(!sis || !w){ alert('需要有「妹妹共用錢包」與「' + p.name + '贊助金」兩個帳戶才能轉入，請先建立，或改選「歸自己」。'); return; }
-    addTxQuick_({ date, type:'transfer', category:'轉帳', amount:R, accountId:w.id, toAccountId:sis.id, note:CLOSE_NOTE + p.name + '贊助剩餘放進妹妹共同' });
-  } else {
-    addTxQuick_({ date, type:'income', category:'額外收入', subcategory:p.name, amount:R, note:CLOSE_NOTE + p.name + '贊助剩餘歸自己' });
-    // 錢實際還放在贊助金帳戶裡，一併轉到「現金」，之後贊助金帳戶只剩真正代管的錢（【結清】備註不會被當成補回）
-    const w1 = sponsorWallets_(p)[0];
-    const cash = state.accounts.find(a => a.name === '現金') || state.accounts.find(a => a.type === '現金' && !String(a.name).includes(SPONSOR_CATEGORY_NAME) && !String(a.name).includes('妹妹'));
-    const mv = w1 ? Math.min(R, Math.max(0, Math.round((Number(w1.balance) || 0) * 100) / 100)) : 0;
-    if(w1 && cash && mv > 0.005) addTxQuick_({ date, type:'transfer', category:'轉帳', amount:mv, accountId:w1.id, toAccountId:cash.id, note:CLOSE_NOTE + p.name + '贊助剩餘歸自己（轉入' + cash.name + '）' });
-  }
-  addTxQuick_(closing);
-  renderAll();
-};
-
-// 贊助金類別：第一次連線後自動在「支出類別」建立主類別與預設子類別（只做一次；之後刪掉不會再自動長回來）
-const SPONSOR_SEEDED_FLAG = 'mybook_sponsor_category_seeded_v6';
-async function ensureSponsorCategory_(){
-  if(localStorage.getItem(SPONSOR_SEEDED_FLAG) || !state.dataLoaded_) return;
+window.deleteProjectItem_ = async id => {
+  if(!confirm('確定刪除這筆支出？')) return;
   try{
-    const seeds = [
-      { type:'expense', name:'爸爸贊助', subs:[] },
-      { type:'expense', name:'媽媽贊助', subs:[] },
-      { type:'income', name:'爸爸贊助', subs:[] },
-      { type:'income', name:'媽媽贊助', subs:[] },
-      { type:'expense', name:SIS_REPAY_OUT, subs:SPONSOR_PEOPLE.map(p => p.cat) },
-      { type:'income', name:SIS_REPAY_IN, subs:[] },
-      { type:'expense', name:'購物', subs:['防曬','保養品','化妝品'] },
-      { type:'expense', name:SIS_CATEGORY_NAME, subs:[SIS_OUT] }
-    ];
-    for(const seed of seeds){
-      if(!getCategoryNames(seed.type).includes(seed.name)) await addMainCategory(seed.type, seed.name);
-      for(const sub of seed.subs){
-        if(!getSubcategories(seed.type, seed.name).includes(sub)) await addSubCategory(seed.type, seed.name, sub);
-      }
-    }
-    localStorage.setItem(SPONSOR_SEEDED_FLAG, '1');
-    dirty.categories = true;
-    refreshCategoryDependents();
-    renderVisibleSection();
-  }catch(err){
-    console.warn('自動建立「贊助金／代購」類別失敗，可到「類別設定」手動新增：', err);
-  }
-}
+    await runBusy(async () => {
+      await apiPost('delete','projectItems',{ id });
+      removeLocal('projectItems', id);
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
+
+// ----- 結案 -----
+window.openCloseProject_ = id => {
+  const p = state.projects.find(x => x.id === id);
+  if(!p) return;
+  const items = projItems_(id);
+  const owed0 = projCompute_(p, items, {}).owed;
+  const wallet = state.accounts.find(a => /妹妹|共用|共同/.test(String(a.name)));
+  const reimbHtml = ['partner','sister'].filter(k => owed0[k] > 0).map(k =>
+    `<label class="full">${k === 'partner' ? '另一半' : '妹妹'}先付了 $${fmt(owed0[k])}，從哪個帳戶還給${k === 'partner' ? '他' : '她'}？<select data-reimb="${k}">${projAccOptions_(p.fundAccountId)}</select></label>`).join('');
+  projOpenModal_(`<h3>結案：${escapeHtml(p.name)}</h3>
+    <p class="pay-sub">確認後會一次整合進記帳與帳戶餘額；之後發現不對可以「取消結案」完整還原。</p>
+    <form class="entry" id="projCloseForm">
+      <label class="full">結案日期<input type="date" id="pcDate" required value="${todayStr_()}"></label>
+      ${reimbHtml}
+      <div class="full" id="pcLeftoverWrap">
+        <div class="map-grid">
+          <label>剩餘怎麼處理
+            <select id="pcMode"><option value="pocket">轉入自己零用金</option><option value="shared" ${wallet ? 'selected' : ''}>放進跟妹妹共用的錢包</option></select></label>
+          <label id="pcWalletWrap">放進哪個錢包帳戶<select id="pcWallet">${projAccOptions_(wallet ? wallet.id : '', '請選擇')}</select></label>
+        </div>
+      </div>
+      <div class="full proj-preview" id="pcPreview"></div>
+      <div class="form-actions"><button type="submit" class="primary">確認結案</button><button type="button" id="pcCancel">取消</button></div>
+    </form>`);
+  const gather = () => {
+    const reimburse = {};
+    $$('#projCloseForm select[data-reimb]').forEach(sel => { reimburse[sel.dataset.reimb] = sel.value; });
+    return { reimburse, leftoverMode: $('#pcMode').value, leftoverAccountId: $('#pcWallet').value };
+  };
+  const refresh = () => {
+    const opts = gather();
+    const c = projCompute_(p, items, opts);
+    $('#pcLeftoverWrap').style.display = c.remaining > 0.005 ? '' : 'none';
+    $('#pcWalletWrap').style.display = (c.remaining > 0.005 && opts.leftoverMode === 'shared') ? '' : 'none';
+    const lines = Object.keys(c.byAcc).filter(k => Math.abs(c.byAcc[k]) > 0.005).map(k =>
+      `<div>${escapeHtml(projAccName_(k))}：<b style="color:${c.byAcc[k] > 0 ? 'var(--green)' : 'var(--red)'}">${c.byAcc[k] > 0 ? '+' : '-'}$${fmt(Math.abs(c.byAcc[k]))}</b></div>`).join('');
+    let result;
+    if(c.remaining > 0.005) result = opts.leftoverMode === 'shared'
+      ? `剩餘 <b>$${fmt(c.remaining)}</b> → 放進共用錢包（不算你的收入）`
+      : `剩餘 <b>$${fmt(c.remaining)}</b> → 歸自己，記一筆收入「專案結餘」`;
+    else if(c.remaining < -0.005) result = `超支 <b style="color:var(--red)">$${fmt(-c.remaining)}</b> → 你自己補貼，記一筆支出「專案補貼」（錢已經在上面的帳戶扣掉了）`;
+    else result = '剛好用完，沒有剩餘。';
+    $('#pcPreview').innerHTML = `收到專款 <b>$${fmt(c.F)}</b>，已花 <b>$${fmt(c.spent)}</b><br>${result}<br><div style="margin-top:6px;color:var(--ink-soft);">各帳戶最後增減：</div>${lines || '<div>（沒有帳戶增減）</div>'}`;
+  };
+  $$('#projCloseForm select').forEach(sel => sel.addEventListener('change', refresh));
+  refresh();
+  $('#pcCancel').onclick = projCloseModal_;
+  $('#projCloseForm').onsubmit = async e => {
+    e.preventDefault();
+    const opts = gather();
+    const c = projCompute_(p, items, opts);
+    if(c.remaining > 0.005 && opts.leftoverMode === 'shared' && !opts.leftoverAccountId){ alert('請選擇要放進哪個共用錢包帳戶。'); return; }
+    if(!confirm(`確定結案「${p.name}」嗎？`)) return;
+    try{
+      await runBusy(async () => {
+        const result = await apiPost('closeProjectTx','transactions',{ id, closedAt: $('#pcDate').value, ...opts });
+        if(result.project) upsertLocal('projects', result.project);
+        (result.rows || []).forEach(r => upsertLocal('transactions', r));
+        (result.accounts || []).forEach(a => upsertLocal('accounts', a));
+        projCloseModal_();
+        renderAll();
+      }, '結案中…');
+    }catch(err){ alert('結案失敗：' + err.message + '\n（請確認 Apps Script 已更新並重新部署新版本。）'); }
+  };
+};
+
+window.reopenProject_ = async id => {
+  const p = state.projects.find(x => x.id === id);
+  if(!p || !confirm(`取消結案「${p.name}」？\n結案時產生的記帳會全部移除、帳戶餘額還原，專案回到進行中。`)) return;
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('reopenProjectTx','transactions',{ id });
+      (result.removedIds || []).forEach(rid => removeLocal('transactions', rid));
+      if(result.project) upsertLocal('projects', result.project);
+      (result.accounts || []).forEach(a => upsertLocal('accounts', a));
+      renderAll();
+    }, '還原中…');
+  }catch(err){ alert('取消結案失敗：' + err.message); }
+};
+window.deleteProject_ = async id => {
+  const p = state.projects.find(x => x.id === id);
+  if(!p) return;
+  const extra = p.status === 'closed' ? '\n這個專案已結案，結案產生的記帳也會一併移除並還原帳戶餘額。' : '';
+  if(!confirm(`確定刪除專案「${p.name}」與它所有支出明細？${extra}`)) return;
+  try{
+    await runBusy(async () => {
+      const result = await apiPost('deleteProjectTx','transactions',{ id });
+      (result.removedIds || []).forEach(rid => removeLocal('transactions', rid));
+      removeLocal('projects', id);
+      state.projectItems = (state.projectItems || []).filter(i => String(i.projectId) !== String(id));
+      (result.accounts || []).forEach(a => upsertLocal('accounts', a));
+      renderAll();
+    }, '刪除中…');
+  }catch(err){ alert('刪除失敗：' + err.message); }
+};
 
 // 這個月每一天的支出金額陣列（index 0 = 1 號），全額代墊款項不算支出，
 // 共同分攤的支出只算自己該負擔的份額，邏輯跟其他統計數字一致。
@@ -4869,89 +4770,27 @@ $('#trPayer').addEventListener('change', syncCatRowVisibility);
 // 原則：會讓「款項、帳戶餘額、妹妹／爸媽往來」算錯的，一律擋下或要求再確認一次。
 function validateTxBeforeSave_(d, editId, quickMode){
   if(d.type === 'transfer') return true; // 轉帳的必填已在前面檢查
-  const acc = state.accounts.find(a => a.id === d.accountId);
-  const isWallet = !!(acc && String(acc.name).includes(SPONSOR_CATEGORY_NAME));
   const label = d.category + (d.subcategory ? '／' + d.subcategory : '');
   const advance = d.splitMode === 'advance' && d.payer !== 'partner';
 
-  // 1. 類別
-  if(!advance && !quickMode && !d.category){ alert('請選擇主類別，不然統計和往來會算不到這筆。'); return false; }
+  if(!advance && !quickMode && !d.category){ alert('請選擇主類別，不然統計會算不到這筆。'); return false; }
 
-  // 2. 日期離今天太遠（常見是年份打錯）
+  // 日期離今天太遠（常見是年份打錯）
   const days = Math.abs((new Date(d.date) - new Date(todayStr_())) / 86400000);
   if(days > 62 && !confirm(`日期是 ${d.date}，離今天超過兩個月。\n\n日期沒打錯嗎？`)) return false;
 
-  // 3. 金額特別大
+  // 金額特別大
   if(d.amount >= 100000 && !confirm(`金額是 $${fmt(d.amount)}，確定沒多打一個 0 嗎？`)) return false;
 
-  // 「還沒付款」的待付款不動帳戶，不需要帳戶／付款人相關檢查
+  // 「還沒付款」的待付款不動帳戶，不需要帳戶檢查
   if(!editId && $('#trPending').checked) return true;
   const oldTx = editId ? state.transactions.find(x => x.id === editId) : null;
 
-  // 4. 還妹妹：這是我實際付出去的錢，一定要知道從哪裡出
-  if(d.type === 'expense' && d.category === SIS_REPAY_OUT){
-    if(d.payer === 'sister' || d.payer === 'partner'){
-      alert('「還妹妹」是我自己付錢還她，不能同時勾「妹妹先付／對方先付」，請取消勾選。');
-      return false;
-    }
-    if(!d.accountId){
-      alert('「還妹妹」請選擇你用哪個帳戶付的（現金或銀行），不然帳戶餘額不會扣，錢會對不上。');
-      return false;
-    }
-    const who = SPONSOR_PEOPLE.find(p => p.cat === d.subcategory);
-    if(!d.subcategory){
-      if(!confirm('子類別沒選：系統會當成「用我自己的錢還妹妹」，並自動沖掉爸爸／媽媽那邊妹妹先付的款項。\n\n這樣可以嗎？\n（如果是還爸爸／媽媽的贊助款墊付，請按取消，子類別選「爸爸贊助／媽媽贊助」。）')) return false;
-    } else if(who && !isWallet && !isCashFunded_(d)){
-      if(!confirm(`這筆會變成「你先墊了 $${fmt(d.amount)}，要從${who.name}贊助金拿回」。\n\n如果${who.name}其實已經用現金給你了，請按「取消」，勾選「${who.name}已經現金給我」，這樣就不會算成你先墊或你的支出。\n\n確定要當成你先墊嗎？`)) return false;
-    }
-    if(isCashFunded_(d) && who){
-      if(isWallet){ alert(`你選的是「${who.name}贊助金」帳戶，這代表錢本來就是${who.name}的，不需要勾「已經現金給我」。請取消勾選，或改選你實際轉帳的銀行帳戶。`); return false; }
-      // 對帳：爸／媽有沒有真的記過「現金收入」，而且還沒被別筆用掉
-      const cashIn = state.transactions
-        .filter(t => t.type === 'income' && t.category === who.cat && sponsorIncomeKind_(t) === 'own')
-        .reduce((s, t) => s + (Number(t.amount) || 0), 0);
-      const used = state.transactions
-        .filter(t => t.id !== editId && t.type === 'expense' && t.category === SIS_REPAY_OUT && t.subcategory === who.cat && isCashFunded_(t))
-        .reduce((s, t) => s + (Number(t.amount) || 0), 0);
-      if(cashIn - used + 0.005 < d.amount){
-        if(!confirm(`找不到足夠的「${who.name}給的現金」收入紀錄（已記收入 $${fmt(cashIn)}，已被其他還款用掉 $${fmt(used)}）。\n\n請先記一筆：收入／${who.cat}／帳戶選「現金」，才會對得起來。\n\n還是要先存這筆嗎？`)) return false;
-      }
-    }
-  }
-
-  // 5. 妹妹還款（收入）：錢要進哪個帳戶
-  if(d.type === 'income' && d.category === SIS_REPAY_IN && !d.accountId){
-    alert('「妹妹還款」請選擇收到錢的帳戶，不然帳戶餘額不會增加。');
-    return false;
-  }
-
-  // 6. 贊助收入（新增時）：帳戶決定是代管款、共同錢包還是我自己的收入，不能不選
-  if(d.type === 'income' && isSponsorCat_(d.category) && !d.accountId && !editId){
-    alert(`「${d.category}」收入請選擇收到錢的帳戶：\n・進「贊助金」帳戶＝代管款（不算我的收入）\n・進現金／我的帳戶＝算我的收入\n・進妹妹共用錢包＝共同錢包\n\n沒選的話，系統無法判斷這筆錢算誰的。`);
-    return false;
-  }
-
-  // 7. 一般支出／收入沒選帳戶：不會動任何餘額
-  const noAccountOk = d.type === 'expense' && (d.payer === 'sister' || d.payer === 'partner');
-  if(!d.accountId && !noAccountOk && !quickMode && !(oldTx && !oldTx.accountId)){ // 編輯本來就沒帳戶的舊紀錄不重複提醒
+  // 沒選帳戶：不會動任何餘額
+  const noAccountOk = d.type === 'expense' && d.payer === 'partner';
+  if(!d.accountId && !noAccountOk && !quickMode && !(oldTx && !oldTx.accountId)){
     const what = d.type === 'income' ? '收到的錢不會加到任何帳戶' : '不會從任何帳戶扣款';
     if(!confirm(`「${label}」$${fmt(d.amount)} 沒有選帳戶，${what}，帳戶餘額會跟實際不一樣。\n\n確定不選帳戶就儲存嗎？\n（按取消可回去選帳戶）`)) return false;
-  }
-
-  // 8. 我幫妹妹買（我先墊，妹妹欠我）：要知道錢從哪裡付出去
-  if(d.type === 'expense' && d.category === SIS_CATEGORY_NAME && d.subcategory === SIS_OUT && !d.accountId){
-    if(!confirm('「我幫妹妹買」沒選帳戶：你付出去的錢不會從任何帳戶扣掉。\n\n確定嗎？')) return false;
-  }
-
-  // 9. 妹妹先付／另一半先付時，若還選了「我的帳戶」會被清掉，先提醒避免以為有扣
-  if(d.type === 'expense' && (d.payer === 'sister' || d.payer === 'partner') && !d.accountId && !editId){
-    const who = d.payer === 'sister' ? '妹妹' : '另一半';
-    if(!confirm(`這筆是${who}先付的，不會扣你的任何帳戶，之後要還給${who} $${fmt(d.amount)}。\n\n正確嗎？`)) return false;
-  }
-
-  // 10. 贊助／往來類別沒填名稱，之後很難對帳
-  if((isSponsorCat_(d.category) || d.category === SIS_REPAY_OUT || d.category === SIS_REPAY_IN || d.category === SIS_CATEGORY_NAME) && !String(d.note || '').trim()){
-    if(confirm('這是爸媽贊助／妹妹往來的紀錄，名稱沒填，之後對帳會很難找。\n\n要先回去補名稱嗎？\n（按「確定」＝回去補；按「取消」＝直接儲存）')) return false;
   }
   return true;
 }
@@ -4992,9 +4831,8 @@ $('#trForm').addEventListener('submit', async e => {
     };
   } else {
     const shared = $('#trShared').checked;
-    const sisterPaid = type === 'expense' && !shared && $('#trSisterPaid').checked;
     const splitMode = shared ? $('#trSplitMode').value : 'personal';
-    const payer = shared ? $('#trPayer').value : (sisterPaid ? 'sister' : 'me');
+    const payer = shared ? $('#trPayer').value : 'me';
     // 全額代墊只有在「我先付」時才代表整筆是對方的花費，才統一存成「代墊」；
     // 「對方先付」代表整筆其實是我的花費，要保留使用者自己選的類別。
     const isAdvance = splitMode === 'advance' && payer !== 'partner';
@@ -5016,17 +4854,13 @@ $('#trForm').addEventListener('submit', async e => {
       payer,
       splitMode,
       settled: false,
-      recurringId: $('#trRecurringId').value || '',
-      cashFunded: (type === 'expense' && category === SIS_REPAY_OUT && cashFundedPerson_() && $('#trCashFunded').checked) ? true : ''
+      recurringId: $('#trRecurringId').value || ''
     };
   }
   // ===== 防呆檢查：少填或可能造成款項錯誤時，在儲存前擋下或提醒 =====
   if(!validateTxBeforeSave_(data, id, trQuickInterestMode)) return;
-  // 別人先付的錢（另一半／妹妹）不是從我的帳戶出的：帳戶一律清空，不扣我的餘額
-  if(data.type === 'expense' && (data.payer === 'partner' || data.payer === 'sister' || isSisterPaid_(data))){
-    data.accountId = '';
-    if(data.payer === 'me') data.payer = 'sister';
-  }
+  // 另一半先付的錢不是從我的帳戶出的：帳戶一律清空，不扣我的餘額
+  if(data.type === 'expense' && data.payer === 'partner') data.accountId = '';
   // 編輯既有記帳時保留原本的「已結算」狀態，不能因為改名稱／金額就又變成未結算、重新出現在共同款項
   if(id){
     const oldTx = state.transactions.find(x => x.id === id);
@@ -5160,8 +4994,6 @@ function resetTransactionForm(){
   $('#trToAccount').value = '';
   $('#trNote').value = '';
   $('#trShared').checked = false;
-  $('#trSisterPaid').checked = false;
-  $('#trCashFunded').checked = false;
   $('#trAccount').disabled = false;
   $('#trLedgerFields').style.display = 'none';
   $('#trPayer').value = 'partner'; // 新增記帳勾選共同帳本時，預設「對方先付」
@@ -5190,15 +5022,12 @@ window.editTransaction = id => {
     setTrType(t.type === 'income' ? 'income' : 'expense', t.category, t.subcategory);
     $('#trAccount').value = t.accountId || '';
     const shared = t.splitMode && t.splitMode !== 'personal';
-    $('#trSisterPaid').checked = t.payer === 'sister';
     $('#trShared').checked = shared;
     $('#trLedgerFields').style.display = shared ? '' : 'none';
     $('#trPayer').value = t.payer === 'partner' ? 'partner' : 'me';
     $('#trSplitMode').value = t.splitMode === 'advance' ? 'advance' : 'split';
     syncCatRowVisibility();
     syncPayerAccount_();
-    syncCashFundedRow_();
-    if(cashFundedPerson_()) $('#trCashFunded').checked = isCashFunded_(t);
   }
   $('#trNote').value = t.note || '';
   $('#trRecurringId').value = t.recurringId || ''; // 保留固定支出標記
@@ -5212,6 +5041,8 @@ window.editTransaction = id => {
   $('#trDetails').open = true;
 };
 window.deleteTransaction = id => {
+  const tx0 = state.transactions.find(x => x.id === id);
+  if(tx0 && (tx0.projectId || tx0.type === 'project')){ alert('這筆是專案結案產生的，請到「專案」頁按「取消結案」。'); return; }
   if(!confirm('確定刪除這筆記帳？若有連結帳戶（含轉帳的兩個帳戶），餘額會自動還原。')) return;
   const old = state.transactions.find(x => x.id === id);
   if(old){
