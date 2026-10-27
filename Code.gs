@@ -1,4 +1,4 @@
-const BACKEND_VERSION_ = '2026-10-27-projects-v2';
+const BACKEND_VERSION_ = '2026-10-27-projects-v3';
 
 const ADVANCE_CATEGORY_NAME_ = '代墊';
 
@@ -1201,7 +1201,7 @@ function rebuildAllTransactionValidations() {
 // 支出明細的 payer：
 //   fund    直接用收到的錢付（從收款帳戶扣）
 //   me      我先用自己的帳戶付（accountId；錢由專款補回，所以我保留收款帳戶裡的錢）
-//   partner 另一半先付 → 結案時用專款還他（從 reimburse.partner 帳戶出）
+//   partner 另一半先付 → 結案時記入共同帳本（未結算，之後在共同帳本結算）
 //   sister  妹妹先付   → 結案時用專款還她（從 reimburse.sister 帳戶出）
 // ============================================================
 function round2_(n) { return Math.round((Number(n) || 0) * 100) / 100; }
@@ -1226,8 +1226,9 @@ function computeProjectClose_(project, items, opts) {
     else if (it.payer === 'sister') owed.sister += amt;
     else add(fundAcc, -amt); // fund
   });
+  // 另一半先付的不在這裡付款，結案時記入共同帳本（見 closeProjectTx_），之後在共同帳本結算
   const rb = opts.reimburse || {};
-  ['partner', 'sister'].forEach(k => { if (owed[k] > 0) add(rb[k] || fundAcc, -owed[k]); });
+  if (owed.sister > 0) add(rb.sister || fundAcc, -owed.sister);
   spent = round2_(spent);
   const remaining = round2_(F - spent);
   const mode = opts.leftoverMode;
@@ -1271,6 +1272,11 @@ function closeProjectTx_(data) {
     const d = calc.byAcc[accId];
     if (!d) return;
     rows.push(makeTx({ type: 'project', category: '專案', amount: Math.abs(d), accountId: accId, payer: d > 0 ? 'in' : 'out', note: '專案「' + project.name + '」結案' }));
+  });
+  // 另一半先付的明細：記成共同帳本「全額代墊、對方先付」的未結算項目（類別「代墊」不計入我的支出與預算，
+  // 不動帳戶），之後到「共同帳本」跟其他款項一起結算
+  items.filter(it => it.payer === 'partner').forEach(it => {
+    rows.push(makeTx({ type: 'expense', category: '代墊', amount: round2_(it.amount), accountId: '', payer: 'partner', splitMode: 'advance', settled: false, date: it.date || closedAt, note: '專案「' + project.name + '」' + (it.name || '') }));
   });
   if (calc.incomeRow) rows.push(makeTx({ type: 'income', category: '專案結餘', amount: calc.incomeRow, accountId: '', note: '專案「' + project.name + '」剩餘歸自己' }));
   if (calc.expenseRow) rows.push(makeTx({ type: 'expense', category: '專案補貼', amount: calc.expenseRow, accountId: '', note: '專案「' + project.name + '」超支自己補貼' }));

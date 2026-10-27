@@ -1550,7 +1550,7 @@ try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persis
 // 目前開啟的網頁是不是最新版本、跟後端 Apps Script 版本是否一致。
 // 2026-09-15-2：移除獨立的「利息紀錄」分頁，整合進「記帳」——利息／股息現在
 // 就是一筆收入記帳（見 #trQuickInterestBtn），不再有專屬的 InterestRecords 表。
-const FRONTEND_VERSION = '2026-10-27-projects-v2';
+const FRONTEND_VERSION = '2026-10-27-projects-v3';
 $('#verFrontend').textContent = FRONTEND_VERSION;
 // 記住最近一次從後端拿到的版本號，用來跟前端版本比對，
 // 提醒「忘記在 Apps Script 部署新版本」這種最常見的連線失敗原因。
@@ -3275,7 +3275,7 @@ function renderTransactions(){
       const isProjAcc = t.type === 'project';
       const isIn = isProjAcc ? t.payer === 'in' : t.type === 'income';
       const accN = t.accountId ? (byId[t.accountId] || '（帳戶已刪除）') : '';
-      const kindText = isProjAcc ? '帳戶增減（不計收支）' : (t.type === 'income' ? '計入收入' : '計入支出');
+      const kindText = isProjAcc ? '帳戶增減（不計收支）' : (t.category === ADVANCE_CATEGORY_NAME ? '已記入共同帳本，到共同帳本結算（不計我的支出）' : (t.type === 'income' ? '計入收入' : '計入支出'));
       return `<div class="item-card project-item">
         ${trBatchCheckboxHtml_(t.id)}
         <div class="item-top">
@@ -3896,7 +3896,7 @@ function renderStats(){
 const PROJ_PAYERS = {
   fund: '用專款直接付（從收款帳戶出）',
   me: '我先用自己的帳戶付（專款補給我）',
-  partner: '另一半先付（結案時用專款還他）',
+  partner: '另一半先付（結案時記入共同帳本）',
   sister: '妹妹先付（結案時用專款還她）'
 };
 const PROJ_PAYER_SHORT = { fund:'專款直接付', me:'我先付', partner:'另一半先付', sister:'妹妹先付' };
@@ -3928,7 +3928,7 @@ function projCompute_(project, items, opts){
     else add(fundAcc, -amt);
   });
   const rb = (opts && opts.reimburse) || {};
-  ['partner','sister'].forEach(k => { if(owed[k] > 0) add(rb[k] || fundAcc, -owed[k]); });
+  if(owed.sister > 0) add(rb.sister || fundAcc, -owed.sister); // 另一半先付的記入共同帳本，不在這裡扣帳戶
   spent = projRound_(spent);
   const remaining = projRound_(F - spent);
   if(remaining > 0.005 && opts && opts.leftoverMode === 'shared' && opts.leftoverAccountId){
@@ -4122,8 +4122,8 @@ window.openCloseProject_ = id => {
   const items = projItems_(id);
   const owed0 = projCompute_(p, items, {}).owed;
   const wallet = state.accounts.find(a => /妹妹|共用|共同/.test(String(a.name)));
-  const reimbHtml = ['partner','sister'].filter(k => owed0[k] > 0).map(k =>
-    `<label class="full">${k === 'partner' ? '另一半' : '妹妹'}先付了 $${fmt(owed0[k])}，從哪個帳戶還給${k === 'partner' ? '他' : '她'}？<select data-reimb="${k}">${projAccOptions_(p.fundAccountId)}</select></label>`).join('');
+  const reimbHtml = (owed0.sister > 0 ? `<label class="full">妹妹先付了 $${fmt(owed0.sister)}，從哪個帳戶還給她？<select data-reimb="sister">${projAccOptions_(p.fundAccountId)}</select></label>` : '') +
+    (owed0.partner > 0 ? `<div class="full hint" style="margin:0;">另一半先付了 $${fmt(owed0.partner)}：不用現在付款，結案後會記入「共同帳本」，之後跟其他款項一起結算。</div>` : '');
   projOpenModal_(`<h3>結案：${escapeHtml(p.name)}</h3>
     <p class="pay-sub">確認後會一次整合進記帳與帳戶餘額；之後發現不對可以「取消結案」完整還原。</p>
     <form class="entry" id="projCloseForm">
@@ -4157,7 +4157,8 @@ window.openCloseProject_ = id => {
       : `剩餘 <b>$${fmt(c.remaining)}</b> → 歸自己，記一筆收入「專案結餘」`;
     else if(c.remaining < -0.005) result = `超支 <b style="color:var(--red)">$${fmt(-c.remaining)}</b> → 你自己補貼，記一筆支出「專案補貼」（錢已經在上面的帳戶扣掉了）`;
     else result = '剛好用完，沒有剩餘。';
-    $('#pcPreview').innerHTML = `收到專款 <b>$${fmt(c.F)}</b>，已花 <b>$${fmt(c.spent)}</b><br>${result}<br><div style="margin-top:6px;color:var(--ink-soft);">各帳戶最後增減：</div>${lines || '<div>（沒有帳戶增減）</div>'}`;
+    const partnerNote = c.owed.partner > 0 ? `<br>另一半先付 <b>$${fmt(c.owed.partner)}</b> → 記入共同帳本（你欠對方，不計你的支出）` : '';
+    $('#pcPreview').innerHTML = `收到專款 <b>$${fmt(c.F)}</b>，已花 <b>$${fmt(c.spent)}</b><br>${result}${partnerNote}<br><div style="margin-top:6px;color:var(--ink-soft);">各帳戶最後增減：</div>${lines || '<div>（沒有帳戶增減）</div>'}`;
   };
   $$('#projCloseForm select').forEach(sel => sel.addEventListener('change', refresh));
   refresh();
